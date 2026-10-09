@@ -28,6 +28,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -69,27 +70,40 @@ fun HomeSectionHeader(
 fun RecentlyPlayedCard(
     track: Track,
     onClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    tagPrefix: String = "recent"
 ) {
+    val displayTitle = if (track.title.isBlank() || track.title.equals("<unknown>", ignoreCase = true)) {
+        stringResource(R.string.unknown_title)
+    } else track.title
+    val displayArtist = if (track.artist.isBlank() || track.artist.equals("<unknown>", ignoreCase = true)) {
+        stringResource(R.string.unknown_artist)
+    } else track.artist
+
     Card(
         modifier = modifier
             .width(136.dp)
             .clickable(onClick = onClick)
-            .testTag("recent_card_${track.id}"),
+            .testTag("${tagPrefix}_card_${track.id}"),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceContainerLow
         )
     ) {
         Column(modifier = Modifier.padding(10.dp)) {
-            if (track.artworkUri != null) {
+            if (!track.artworkUri.isNullOrBlank()) {
                 AsyncImage(
                     model = track.artworkUri,
-                    contentDescription = stringResource(R.string.cd_artwork, track.title),
+                    contentDescription = stringResource(
+                        R.string.cd_artwork,
+                        displayTitle
+                    ),
                     modifier = Modifier
                         .size(116.dp)
                         .clip(RoundedCornerShape(12.dp)),
-                    contentScale = ContentScale.Crop
+                    contentScale = ContentScale.Crop,
+                    placeholder = painterResource(R.drawable.ic_music_placeholder),
+                    error = painterResource(R.drawable.ic_music_placeholder)
                 )
             } else {
                 Surface(
@@ -111,7 +125,7 @@ fun RecentlyPlayedCard(
             Spacer(modifier = Modifier.height(8.dp))
 
             Text(
-                text = track.title,
+                text = displayTitle,
                 style = MaterialTheme.typography.bodyMedium,
                 fontWeight = FontWeight.SemiBold,
                 maxLines = 1,
@@ -119,7 +133,7 @@ fun RecentlyPlayedCard(
             )
 
             Text(
-                text = track.artist,
+                text = displayArtist,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,

@@ -64,6 +64,7 @@ class LocalMusicSource @Inject constructor(
                 MediaStore.Audio.Media.ALBUM,
                 MediaStore.Audio.Media.DURATION,
                 MediaStore.Audio.Media.DATE_MODIFIED,
+                MediaStore.Audio.Media.DATE_ADDED,
                 MediaStore.Audio.Media.DATA,
                 MediaStore.Audio.Media.GENRE
             )
@@ -75,6 +76,7 @@ class LocalMusicSource @Inject constructor(
                 MediaStore.Audio.Media.ALBUM,
                 MediaStore.Audio.Media.DURATION,
                 MediaStore.Audio.Media.DATE_MODIFIED,
+                MediaStore.Audio.Media.DATE_ADDED,
                 MediaStore.Audio.Media.DATA
             )
         }
@@ -83,77 +85,83 @@ class LocalMusicSource @Inject constructor(
         val selectionArgs = arrayOf(minDurationMs.toString())
         val sortOrder = "${MediaStore.Audio.Media.TITLE} COLLATE NOCASE ASC"
 
-        try {
+        val cursor = try {
             context.contentResolver.query(
                 collection,
                 projection,
                 selection,
                 selectionArgs,
                 sortOrder
-            )?.use { cursor ->
-                val idCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media._ID)
-                val titleCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.TITLE)
-                val artistCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ARTIST)
-                val albumCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM)
-                val durationCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DURATION)
-                val dateModifiedCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DATE_MODIFIED)
-                val dataCol = cursor.getColumnIndex(MediaStore.Audio.Media.DATA)
-                val genreCol = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                    cursor.getColumnIndex(MediaStore.Audio.Media.GENRE)
-                } else -1
+            ) ?: throw IllegalStateException("MediaStore returned no cursor for the audio library")
+        } catch (exception: SecurityException) {
+            // Propagate permission loss so a refresh cannot mistake it for an empty library.
+            throw exception
+        } catch (exception: Exception) {
+            throw IllegalStateException("Unable to read the audio library", exception)
+        }
 
-                while (cursor.moveToNext()) {
-                    val mediaStoreId = cursor.getLong(idCol)
-                    val rawTitle = cursor.getString(titleCol) ?: ""
-                    val rawArtist = cursor.getString(artistCol) ?: ""
-                    val rawAlbum = cursor.getString(albumCol) ?: ""
-                    val duration = cursor.getLong(durationCol)
-                    val dateModified = cursor.getLong(dateModifiedCol)
-                    val filePath = if (dataCol != -1) cursor.getString(dataCol) else null
-                    val genreRaw = if (genreCol != -1) cursor.getString(genreCol) else null
-                    val genre = genreRaw?.trim()?.ifBlank { "Unknown Genre" } ?: "Unknown Genre"
+        cursor.use { cursor ->
+            val idCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media._ID)
+            val titleCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.TITLE)
+            val artistCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ARTIST)
+            val albumCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM)
+            val durationCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DURATION)
+            val dateModifiedCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DATE_MODIFIED)
+            val dateAddedCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DATE_ADDED)
+            val dataCol = cursor.getColumnIndex(MediaStore.Audio.Media.DATA)
+            val genreCol = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                cursor.getColumnIndex(MediaStore.Audio.Media.GENRE)
+            } else -1
 
-                    val folderName = when {
-                        !filePath.isNullOrBlank() -> {
-                            File(filePath).parentFile?.name ?: "Music"
-                        }
-                        else -> "Music"
+            while (cursor.moveToNext()) {
+                val mediaStoreId = cursor.getLong(idCol)
+                val rawTitle = cursor.getString(titleCol) ?: ""
+                val rawArtist = cursor.getString(artistCol) ?: ""
+                val rawAlbum = cursor.getString(albumCol) ?: ""
+                val duration = cursor.getLong(durationCol)
+                val dateModified = cursor.getLong(dateModifiedCol)
+                val dateAdded = cursor.getLong(dateAddedCol)
+                val filePath = if (dataCol != -1) cursor.getString(dataCol) else null
+                val genreRaw = if (genreCol != -1) cursor.getString(genreCol) else null
+                val genre = genreRaw?.trim()?.ifBlank { "Unknown Genre" } ?: "Unknown Genre"
+
+                val folderName = when {
+                    !filePath.isNullOrBlank() -> {
+                        File(filePath).parentFile?.name ?: "Music"
                     }
-
-                    if (effectiveExcludedFolders.any { excluded -> folderName.equals(excluded, ignoreCase = true) }) {
-                        continue
-                    }
-
-                    val title = cleanTitle(rawTitle, filePath)
-                    val artist = cleanMetadataField(rawArtist, "Unknown Artist")
-                    val album = cleanMetadataField(rawAlbum, "Unknown Album")
-
-                    val contentUri = ContentUris.withAppendedId(
-                        MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
-                        mediaStoreId
-                    ).toString()
-
-                    tracks.add(
-                        Track(
-                            id = "local:$mediaStoreId",
-                            title = title,
-                            artist = artist,
-                            album = album,
-                            durationMs = duration,
-                            artworkUri = contentUri,
-                            sourceType = SourceType.LOCAL,
-                            uri = contentUri,
-                            dateModified = dateModified,
-                            folder = folderName,
-                            genre = genre
-                        )
-                    )
+                    else -> "Music"
                 }
+
+                if (effectiveExcludedFolders.any { excluded -> folderName.equals(excluded, ignoreCase = true) }) {
+                    continue
+                }
+
+                val title = cleanTitle(rawTitle, filePath)
+                val artist = cleanMetadataField(rawArtist, "Unknown Artist")
+                val album = cleanMetadataField(rawAlbum, "Unknown Album")
+
+                val contentUri = ContentUris.withAppendedId(
+                    MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
+                    mediaStoreId
+                ).toString()
+
+                tracks.add(
+                    Track(
+                        id = "local:$mediaStoreId",
+                        title = title,
+                        artist = artist,
+                        album = album,
+                        durationMs = duration,
+                        artworkUri = contentUri,
+                        sourceType = SourceType.LOCAL,
+                        uri = contentUri,
+                        dateModified = dateModified,
+                        dateAdded = dateAdded,
+                        folder = folderName,
+                        genre = genre
+                    )
+                )
             }
-        } catch (_: SecurityException) {
-            // Permission denied or revoked
-        } catch (_: Exception) {
-            // MediaStore query error fallback
         }
 
         tracks

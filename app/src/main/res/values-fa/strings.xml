@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">پخش‌کننده موسیقی</string>
+    <string name="app_name">LogaRhythm</string>
     <string name="nav_home">خانه</string>
     <string name="nav_search">جستجو</string>
     <string name="nav_library">کتابخانه</string>
@@ -19,13 +19,14 @@
 
     <!-- Phase 1: Local Library & Permissions -->
     <string name="permission_audio_title">دسترسی به فایل‌های صوتی لازم است</string>
-    <string name="permission_audio_desc">پخش‌کننده موسیقی برای یافتن و نمایش آهنگ‌های دستگاه به دسترسی فایل‌های صوتی نیاز دارد.</string>
+    <string name="permission_audio_desc">LogaRhythm برای مرتب‌سازی و پخش موسیقی‌های دستگاه به دسترسی فایل‌های صوتی نیاز دارد.</string>
     <string name="permission_grant_button">اعطای دسترسی</string>
     <string name="permission_open_settings">باز کردن تنظیمات</string>
     <string name="library_empty_title">هیچ آهنگی یافت نشد</string>
     <string name="library_empty_desc">فایل‌های صوتی به دستگاه خود اضافه کنید یا برای بازخوانی روی اسکن مجدد ضربه بزنید.</string>
     <string name="library_rescan">اسکن مجدد کتابخانه</string>
     <string name="library_scanning">در حال اسکن کتابخانه…</string>
+    <string name="library_scan_failed">به‌روزرسانی موسیقی‌ها ناموفق بود، کتابخانهٔ فعلی حفظ شده است، دوباره تلاش کن</string>
     <string name="library_track_count">%1$d آهنگ</string>
     <string name="cd_artwork">تصویر آلبوم برای %1$s</string>
     <string name="cd_rescan">اسکن مجدد کتابخانه موسیقی</string>
@@ -185,7 +186,21 @@
     <string name="cd_equalizer_band">باند %1$s</string>
 
     <!-- Phase 8: Smart Mixes & Personalization -->
+    <string name="daily_mix_title_rotation">حال‌وهوای همیشگی</string>
+    <string name="daily_mix_title_rediscover">وقت مرور دوباره</string>
+    <string name="daily_mix_title_discovery">کشف‌های تازه</string>
+    <string name="daily_mix_desc_rotation">آهنگ‌های آشنا و محبوبت</string>
+    <string name="daily_mix_desc_rediscover">موسیقی‌هایی که دوباره ارزش شنیدن دارن</string>
+    <string name="daily_mix_desc_discovery">گوشه‌های کمتر شنیده‌شدهٔ کتابخانه‌ات</string>
     <string name="home_daily_mixes">میکس‌های روزانه</string>
+    <string name="home_shuffle_all_title">یه چیز غیرمنتظره پخش کن</string>
+    <string name="home_shuffle_all_desc">%1$d آهنگ در کتابخانهٔ تو</string>
+    <string name="home_shuffle_all_action">پخش تصادفی</string>
+    <string name="home_session_title">ریتم مناسب همین لحظه</string>
+    <string name="home_session_desc">صفی از موسیقی متناسب با وقتت</string>
+    <string name="home_session_minutes">%1$d دقیقه</string>
+    <string name="home_session_unavailable">آهنگ قابل‌پخشی برای ساخت این بازه پیدا نشد</string>
+    <string name="home_recently_added">تازه‌های کتابخانه</string>
     <string name="daily_mix_play">پخش %1$s</string>
     <string name="settings_category_appearance">ظاهر و پوسته</string>
     <string name="settings_category_library">کتابخانه و اسکن</string>
@@ -216,14 +231,14 @@
     <string name="settings_no_folders_found">هیچ پوشه‌ای در کتابخانه یافت نشد</string>
 
     <!-- Phase 9: Widget & Onboarding -->
-    <string name="widget_name">پخش‌کننده موسیقی</string>
+    <string name="widget_name">LogaRhythm</string>
     <string name="widget_description">کنترل سریع پخش و آهنگ در حال پخش</string>
     <string name="no_track_playing">در حال پخش نیست</string>
     <string name="cd_widget_play_pause">پخش یا توقف</string>
     <string name="cd_widget_next">آهنگ بعدی</string>
     <string name="cd_widget_prev">آهنگ قبلی</string>
 
-    <string name="onboarding_welcome_title">به پخش‌کننده موسیقی خوش آمدید</string>
+    <string name="onboarding_welcome_title">به LogaRhythm خوش آمدید</string>
     <string name="onboarding_welcome_subtitle">تجربه‌ای مدرن و آفلاین که برای مجموعه موسیقی شخصی شما طراحی شده است.</string>
     <string name="onboarding_feature_offline_title">۱۰۰٪ آفلاین و خصوصی</string>
     <string name="onboarding_feature_offline_desc">موسیقی‌های شما کاملاً بر روی دستگاه شما باقی می‌ماند بدون هیچ ردیابی.</string>
@@ -267,6 +282,12 @@
     <string name="lyrics_edit_action">ویرایش متن</string>
     <string name="save_lyrics">ذخیره متن</string>
     <string name="home_ai_mood_title">میکس‌ها و حال‌وهوا</string>
+    <string name="ai_mood_late_night_chill">آرامش شبانه</string>
+    <string name="ai_mood_deep_focus">تمرکز عمیق</string>
+    <string name="ai_mood_energy_boost">افزایش انرژی</string>
+    <string name="ai_mood_melancholy_rain">حال‌وهوای بارانی</string>
+    <string name="ai_mood_acoustic_morning">صبح آکوستیک</string>
+    <string name="ai_mood_empty">هنوز آهنگی برای این میکس در دسترس نیست، چند آهنگ به کتابخانه اضافه کنید و دوباره امتحان کنید</string>
 
     <!-- Enhanced Menus & Lyrics Actions -->
     <string name="action_view_lyrics">مشاهده و ویرایش متن آهنگ</string>
@@ -299,4 +320,10 @@
     <string name="btn_close">بستن</string>
     <string name="player_more_options">گزینه‌های بیشتر</string>
     <string name="player_menu_equalizer">اکولایزر</string>
+    <string name="player_menu_start_radio">ساخت رادیو از این آهنگ</string>
+    <string name="player_radio_started">رادیو با %1$d آهنگ مشابه شروع شد، صف قبلی پخش جایگزین شد</string>
+    <string name="player_radio_empty">فعلاً آهنگ مشابه کافی برای ساخت رادیو وجود ندارد</string>
+    <string name="search_no_results_hint">عنوان کوتاه‌تر، نام خواننده یا نام آلبوم را امتحان کن</string>
+    <string name="search_clear_query_action">پاک کردن جستجو</string>
+    <string name="search_album_metadata">%1$s • %2$d آهنگ</string>
 </resources>

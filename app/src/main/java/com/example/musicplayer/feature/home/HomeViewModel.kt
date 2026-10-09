@@ -10,11 +10,13 @@ import com.example.musicplayer.domain.model.Track
 import com.example.musicplayer.domain.repository.PlaylistRepository
 import com.example.musicplayer.domain.repository.StatsRepository
 import com.example.musicplayer.domain.repository.TrackRepository
+import com.example.musicplayer.domain.session.ListeningSessionPlanner
 import com.example.musicplayer.playback.PlayerController
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -23,12 +25,28 @@ import javax.inject.Inject
 @HiltViewModel
 class HomeViewModel @Inject constructor(
     statsRepository: StatsRepository,
-    trackRepository: TrackRepository,
+    private val trackRepository: TrackRepository,
     private val playlistRepository: PlaylistRepository,
     private val playerController: PlayerController
 ) : ViewModel() {
 
     private val dailyMixGenerator = DailyMixGenerator()
+
+    /** One shared library snapshot for Home discovery and smart-mix actions. */
+    val allTracks: StateFlow<List<Track>> = trackRepository.getAllTracks()
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = emptyList()
+        )
+
+    val recentlyAdded: StateFlow<List<Track>> = allTracks
+        .map { tracks -> HomeTrackCollections.recentlyAdded(tracks) }
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = emptyList()
+        )
 
     val playlists: StateFlow<List<Playlist>> = playlistRepository.getAllPlaylists()
         .stateIn(
@@ -62,7 +80,7 @@ class HomeViewModel @Inject constructor(
         .map { tracks -> tracks.map { it.id }.toSet() }
 
     val dailyMixes: StateFlow<List<DailyMix>> = combine(
-        trackRepository.getAllTracks(),
+        allTracks,
         statsRepository.getAllPlayEvents(),
         favoritesTrackIds
     ) { tracks, events, favIds ->
@@ -77,10 +95,36 @@ class HomeViewModel @Inject constructor(
         initialValue = emptyList()
     )
 
-    private val allTracksFlow = trackRepository.getAllTracks()
-
     fun playTracks(tracks: List<Track>, startIndex: Int = 0) {
         playerController.play(tracks, startIndex)
+    }
+
+    fun shuffleAllTracks() {
+        val tracks = allTracks.value
+        if (tracks.isEmpty()) return
+        playerController.setShuffleEnabled(true)
+        playerController.play(tracks, tracks.indices.random())
+    }
+
+    /** Starts a varied queue that fits the listener's available time. */
+    fun playListeningSession(minutes: Int, onEmpty: () -> Unit = {}) {
+        if (minutes !in setOf(15, 30, 60)) return
+        val tracks = allTracks.value
+        val preferredIds = dailyMixes.value.firstOrNull()?.tracks?.map { it.id }?.toSet().orEmpty()
+        val session = ListeningSessionPlanner.buildSession(
+            tracks = tracks,
+            targetDurationMs = minutes * 60_000L,
+            preferredTrackIds = preferredIds,
+            seed = System.currentTimeMillis()
+        )
+        if (session.isEmpty()) {
+            onEmpty()
+        } else {
+            // A timed session should behave like a finite listening window, not loop forever.
+            playerController.setShuffleEnabled(false)
+            playerController.setRepeatMode(androidx.media3.common.Player.REPEAT_MODE_OFF)
+            playerController.play(session, 0)
+        }
     }
 
     fun playNext(track: Track) {
@@ -105,14 +149,14 @@ class HomeViewModel @Inject constructor(
 
     fun playAiMoodPlaylist(mood: MusicAiEngine.AiMood, onEmpty: () -> Unit = {}) {
         viewModelScope.launch {
-            allTracksFlow.collect { tracks ->
-                val moodTracks = MusicAiEngine.generateMoodPlaylist(mood, tracks)
-                if (moodTracks.isNotEmpty()) {
-                    playerController.play(moodTracks, 0)
-                } else {
-                    onEmpty()
-                }
-                return@collect
+            // A tap should create one playlist from the current library snapshot. Keeping a
+            // collect alive here can unexpectedly restart playback after every library update.
+            val tracks = trackRepository.getAllTracks().first()
+            val moodTracks = MusicAiEngine.generateMoodPlaylist(mood, tracks)
+            if (moodTracks.isNotEmpty()) {
+                playerController.play(moodTracks, 0)
+            } else {
+                onEmpty()
             }
         }
     }

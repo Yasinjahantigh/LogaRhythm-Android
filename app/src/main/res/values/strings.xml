@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">Music Player</string>
+    <string name="app_name">LogaRhythm</string>
     <string name="nav_home">Home</string>
     <string name="nav_search">Search</string>
     <string name="nav_library">Library</string>
@@ -19,13 +19,14 @@
 
     <!-- Phase 1: Local Library & Permissions -->
     <string name="permission_audio_title">Audio Permission Required</string>
-    <string name="permission_audio_desc">Music Player requires permission to read audio files so it can show and organize your local library.</string>
+    <string name="permission_audio_desc">LogaRhythm needs access to audio files to organize and play your local music.</string>
     <string name="permission_grant_button">Grant Permission</string>
     <string name="permission_open_settings">Open Settings</string>
     <string name="library_empty_title">No music found</string>
     <string name="library_empty_desc">Add audio files to your device storage or tap rescan to refresh.</string>
     <string name="library_rescan">Rescan Library</string>
     <string name="library_scanning">Scanning library…</string>
+    <string name="library_scan_failed">Couldn't refresh your music. Your saved library was kept; try again.</string>
     <string name="library_track_count">%1$d tracks</string>
     <string name="cd_artwork">Album artwork for %1$s</string>
     <string name="cd_rescan">Rescan music library</string>
@@ -185,7 +186,21 @@
     <string name="cd_equalizer_band">Band %1$s</string>
 
     <!-- Phase 8: Smart Mixes & Personalization -->
+    <string name="daily_mix_title_rotation">In your rotation</string>
+    <string name="daily_mix_title_rediscover">Time to revisit</string>
+    <string name="daily_mix_title_discovery">Off the beaten track</string>
+    <string name="daily_mix_desc_rotation">Familiar tracks and favorites</string>
+    <string name="daily_mix_desc_rediscover">Music worth hearing again</string>
+    <string name="daily_mix_desc_discovery">Less-played corners of your library</string>
     <string name="home_daily_mixes">Daily Mixes</string>
+    <string name="home_shuffle_all_title">Play something unexpected</string>
+    <string name="home_shuffle_all_desc">%1$d tracks in your library</string>
+    <string name="home_shuffle_all_action">Shuffle all</string>
+    <string name="home_session_title">Find your listening rhythm</string>
+    <string name="home_session_desc">A fresh queue that fits your time</string>
+    <string name="home_session_minutes">%1$d min</string>
+    <string name="home_session_unavailable">Couldn't build a session from playable tracks.</string>
+    <string name="home_recently_added">Recently added</string>
     <string name="daily_mix_play">Play %1$s</string>
     <string name="settings_category_appearance">Appearance</string>
     <string name="settings_category_library">Library &amp; Scanning</string>
@@ -216,14 +231,14 @@
     <string name="settings_no_folders_found">No folders found in library</string>
 
     <!-- Phase 9: Widget & Onboarding -->
-    <string name="widget_name">Music Player</string>
-    <string name="widget_description">Quick controls and current playing song for Music Player</string>
+    <string name="widget_name">LogaRhythm</string>
+    <string name="widget_description">Quick controls and your currently playing track</string>
     <string name="no_track_playing">Not Playing</string>
     <string name="cd_widget_play_pause">Play or pause</string>
     <string name="cd_widget_next">Next track</string>
     <string name="cd_widget_prev">Previous track</string>
 
-    <string name="onboarding_welcome_title">Welcome to Music Player</string>
+    <string name="onboarding_welcome_title">Welcome to LogaRhythm</string>
     <string name="onboarding_welcome_subtitle">A modern, offline music experience designed for your personal collection.</string>
     <string name="onboarding_feature_offline_title">100% Offline &amp; Private</string>
     <string name="onboarding_feature_offline_desc">Your music stays strictly on your device with zero tracking.</string>
@@ -267,6 +282,12 @@
     <string name="lyrics_edit_action">Edit lyrics</string>
     <string name="save_lyrics">Save Lyrics</string>
     <string name="home_ai_mood_title">Mixes &amp; Moods</string>
+    <string name="ai_mood_late_night_chill">Late-night calm</string>
+    <string name="ai_mood_deep_focus">Deep focus</string>
+    <string name="ai_mood_energy_boost">Energy boost</string>
+    <string name="ai_mood_melancholy_rain">Rainy-day mood</string>
+    <string name="ai_mood_acoustic_morning">Acoustic morning</string>
+    <string name="ai_mood_empty">There aren’t any tracks available for this mix yet. Add music to your library and try again.</string>
 
     <!-- Enhanced Menus & Lyrics Actions -->
     <string name="action_view_lyrics">View / Edit Lyrics</string>
@@ -299,4 +320,10 @@
     <string name="btn_close">Close</string>
     <string name="player_more_options">More options</string>
     <string name="player_menu_equalizer">Equalizer</string>
+    <string name="player_menu_start_radio">Start radio from this song</string>
+    <string name="player_radio_started">Radio started with %1$d similar songs. Your previous queue was replaced.</string>
+    <string name="player_radio_empty">Not enough matching songs for a radio yet.</string>
+    <string name="search_no_results_hint">Try a shorter title, artist name, or album.</string>
+    <string name="search_clear_query_action">Clear search</string>
+    <string name="search_album_metadata">%1$s • %2$d songs</string>
 </resources>

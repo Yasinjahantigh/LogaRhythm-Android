@@ -8,21 +8,21 @@ import com.example.musicplayer.domain.repository.TrackRepository
 import com.example.musicplayer.playback.PlayerController
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.debounce
-import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.emitAll
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
-@OptIn(FlowPreview::class, ExperimentalCoroutinesApi::class)
+@OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
 class SearchViewModel @Inject constructor(
     private val trackRepository: TrackRepository,
@@ -47,23 +47,28 @@ class SearchViewModel @Inject constructor(
     fun addToQueue(track: Track) = playerController.addToQueue(track)
 
     val searchResults: StateFlow<SearchResults> = _searchQuery
-        .debounce { query -> if (query.isBlank()) 0L else 300L }
-        .distinctUntilChanged()
         .flatMapLatest { query ->
             val trimmed = query.trim()
             if (trimmed.isEmpty()) {
                 flowOf(SearchResults())
             } else {
-                combine(
-                    trackRepository.searchTracks(trimmed),
-                    trackRepository.searchAlbums(trimmed),
-                    trackRepository.searchArtists(trimmed)
-                ) { songs, albums, artists ->
-                    SearchResults(
-                        songs = songs,
-                        albums = albums,
-                        artists = artists,
-                        isLoading = false
+                flow {
+                    // Invalidate results immediately; debounce only the database work, not the UI state.
+                    emit(SearchResults(isLoading = true))
+                    delay(250L)
+                    emitAll(
+                        combine(
+                            trackRepository.searchTracks(trimmed),
+                            trackRepository.searchAlbums(trimmed),
+                            trackRepository.searchArtists(trimmed)
+                        ) { songs, albums, artists ->
+                            SearchResults(
+                                songs = songs,
+                                albums = albums,
+                                artists = artists,
+                                isLoading = false
+                            )
+                        }
                     )
                 }
             }

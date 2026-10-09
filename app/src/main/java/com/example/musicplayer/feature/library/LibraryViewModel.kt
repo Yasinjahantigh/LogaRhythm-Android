@@ -15,10 +15,14 @@ import com.example.musicplayer.domain.repository.TrackRepository
 import com.example.musicplayer.playback.PlayerController
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -38,6 +42,8 @@ class LibraryViewModel @Inject constructor(
         )
     )
     val uiState: StateFlow<LibraryUiState> = _uiState.asStateFlow()
+    private val scanErrorChannel = Channel<Unit>(Channel.BUFFERED)
+    val scanErrors: Flow<Unit> = scanErrorChannel.receiveAsFlow()
 
     val currentTrack: StateFlow<Track?> = playerController.currentTrack
     val isPlaying: StateFlow<Boolean> = playerController.isPlaying
@@ -106,7 +112,7 @@ class LibraryViewModel @Inject constructor(
             SortField.TITLE -> if (isAsc) rawTracks.sortedBy { it.title.lowercase() } else rawTracks.sortedByDescending { it.title.lowercase() }
             SortField.ARTIST -> if (isAsc) rawTracks.sortedBy { it.artist.lowercase() } else rawTracks.sortedByDescending { it.artist.lowercase() }
             SortField.ALBUM -> if (isAsc) rawTracks.sortedBy { it.album.lowercase() } else rawTracks.sortedByDescending { it.album.lowercase() }
-            SortField.DATE_ADDED -> if (isAsc) rawTracks.sortedBy { it.dateModified } else rawTracks.sortedByDescending { it.dateModified }
+            SortField.DATE_ADDED -> if (isAsc) rawTracks.sortedBy { it.dateAdded } else rawTracks.sortedByDescending { it.dateAdded }
             SortField.DURATION -> if (isAsc) rawTracks.sortedBy { it.durationMs } else rawTracks.sortedByDescending { it.durationMs }
         }
 
@@ -164,6 +170,14 @@ class LibraryViewModel @Inject constructor(
             }
             try {
                 trackRepository.refreshTracks()
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: SecurityException) {
+                _uiState.update { it.copy(hasPermission = false) }
+                scanErrorChannel.trySend(Unit)
+            } catch (_: Exception) {
+                // Keep the last good database snapshot and tell the user the refresh failed.
+                scanErrorChannel.trySend(Unit)
             } finally {
                 _uiState.update { it.copy(isRefreshing = false, isLoading = false) }
             }

@@ -17,11 +17,18 @@ import javax.inject.Singleton
 class PlayScrobbler @Inject constructor(
     private val statsRepository: StatsRepository
 ) {
+    private var currentTrackId: String? = null
     private var currentTrackRecorded = false
     private var currentTrackListenedMs = 0L
     private var lastTickTimestamp = 0L
 
-    fun onTrackChanged() {
+    /**
+     * Avoids resetting listen progress when a queue is rebuilt around the same playing track.
+     * Explicitly replaying a track from the UI passes force=true to begin a new listening session.
+     */
+    fun onTrackChanged(trackId: String? = null, force: Boolean = false) {
+        if (!force && trackId == currentTrackId) return
+        currentTrackId = trackId
         currentTrackRecorded = false
         currentTrackListenedMs = 0L
         lastTickTimestamp = System.currentTimeMillis()

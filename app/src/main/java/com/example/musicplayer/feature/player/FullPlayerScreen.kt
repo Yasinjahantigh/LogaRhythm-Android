@@ -241,6 +241,16 @@ fun FullPlayerScreen(
                 onOpenSpeedDialog = { showSpeedDialog = true },
                 onOpenSleepTimerDialog = { showSleepTimerDialog = true },
                 onOpenQueue = viewModel::openQueue,
+                onStartRadio = {
+                    viewModel.startTrackRadio { count ->
+                        val message = if (count > 0) {
+                            context.getString(R.string.player_radio_started, count)
+                        } else {
+                            context.getString(R.string.player_radio_empty)
+                        }
+                        Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+                    }
+                },
                 onOpenEqualizer = { showEqualizerSheet = true },
                 onAddToPlaylist = { showAddToPlaylistDialog = true },
                 onSearchGoogleLyrics = {

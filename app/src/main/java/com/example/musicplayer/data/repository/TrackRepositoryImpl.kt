@@ -228,14 +228,6 @@ class TrackRepositoryImpl @Inject constructor(
 
         val toDeleteIds = existing.map { it.id }.filter { it !in seenIds }
 
-        if (toInsert.isNotEmpty()) {
-            musicDao.insertTracks(toInsert)
-        }
-        if (toUpdate.isNotEmpty()) {
-            musicDao.updateTracks(toUpdate)
-        }
-        if (toDeleteIds.isNotEmpty()) {
-            musicDao.deleteTracksByIds(toDeleteIds)
-        }
+        musicDao.syncLocalTracks(toInsert, toUpdate, toDeleteIds)
     }
 }

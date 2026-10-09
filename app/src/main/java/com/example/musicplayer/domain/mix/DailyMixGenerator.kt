@@ -6,112 +6,118 @@ import com.example.musicplayer.domain.model.Track
 import kotlin.random.Random
 
 /**
- * Pure Kotlin offline generator for personalized Daily Mixes.
- * Uses PlayEvent history, metadata relationships, and a date-based seed for stability.
+ * Offline, stable-for-the-day personalized mixes. Each mix has a distinct intent:
+ * familiar favorites, rediscovery, and lower-played discoveries.
  */
 class DailyMixGenerator {
-
     companion object {
         const val MIX_SIZE = 15
         const val NUM_MIXES = 3
-        private const val SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000L
+        private const val DAY_MS = 24 * 60 * 60 * 1000L
+        private const val MAX_STALE_DAYS = 120L
     }
 
     fun generateMixes(
         allTracks: List<Track>,
         playEvents: List<PlayEvent>,
         favoriteTrackIds: Set<String> = emptySet(),
-        seedDate: Long = System.currentTimeMillis() / (24 * 60 * 60 * 1000L)
+        seedDate: Long = System.currentTimeMillis() / DAY_MS
     ): List<DailyMix> {
-        if (allTracks.isEmpty()) return emptyList()
+        val library = allTracks.distinctBy { it.id }
+        if (library.isEmpty()) return emptyList()
 
-        val trackById = allTracks.associateBy { it.id }
         val playCounts = playEvents.groupingBy { it.trackId }.eachCount()
         val lastPlayed = playEvents.groupBy { it.trackId }
             .mapValues { (_, events) -> events.maxOfOrNull { it.timestamp } ?: 0L }
+        // Anchor time-based scoring to the supplied day so a mix cannot reshuffle mid-day.
+        val snapshotTimeMs = seedDate * DAY_MS + DAY_MS / 2
 
-        val currentTimeMs = System.currentTimeMillis()
-        val sevenDaysAgo = currentTimeMs - SEVEN_DAYS_MS
-
-        val frequentTracks = allTracks
-            .filter { (playCounts[it.id] ?: 0) >= 1 }
-            .sortedByDescending { playCounts[it.id] ?: 0 }
-
-        val forgottenLikedTracks = allTracks.filter { track ->
-            val isFavorite = track.id in favoriteTrackIds
-            val hadPlayed = (playCounts[track.id] ?: 0) > 0
-            val lastPlayTime = lastPlayed[track.id] ?: 0L
-            (isFavorite || hadPlayed) && (lastPlayTime == 0L || lastPlayTime < sevenDaysAgo)
+        // Mix 1: familiar music, with favorites boosted and random tie ordering for daily variation.
+        val familiarRanked = library.shuffled(Random(seedDate * 31L + 1L)).sortedByDescending { track ->
+            (playCounts[track.id] ?: 0) * 2.0 + if (track.id in favoriteTrackIds) 6.0 else 0.0
         }
+        val familiar = diversifyByArtist(familiarRanked.take(MIX_SIZE), Random(seedDate * 31L + 11L))
 
-        val topArtists = allTracks
-            .map { it.artist }
-            .filter { it.isNotBlank() && !it.equals("Unknown Artist", ignoreCase = true) }
-            .distinct()
-            .sortedByDescending { artist ->
-                allTracks.filter { it.artist.equals(artist, ignoreCase = true) }
-                    .sumOf { playCounts[it.id] ?: 0 }
-            }
+        // Mix 2: favorites that have gone quiet, forgotten tracks, and music not heard yet.
+        val familiarIds = familiar.mapTo(mutableSetOf()) { it.id }
+        fun rediscoveryScore(track: Track): Double {
+            val count = playCounts[track.id] ?: 0
+            val lastTime = lastPlayed[track.id] ?: 0L
+            val staleDays = if (lastTime <= 0L) MAX_STALE_DAYS else
+                ((snapshotTimeMs - lastTime).coerceAtLeast(0L) / DAY_MS).coerceAtMost(MAX_STALE_DAYS)
+            val neverPlayedBonus = if (count == 0) 8.0 else 0.0
+            return staleDays / 8.0 + neverPlayedBonus +
+                (if (track.id in favoriteTrackIds) 7.0 else 0.0) - count * 1.3
+        }
+        // Prefer tracks not already in the familiar mix; only overlap when the library is small.
+        val rediscoveryUnique = library.filter { it.id !in familiarIds }
+            .shuffled(Random(seedDate * 31L + 2L)).sortedByDescending(::rediscoveryScore)
+        val rediscoveryFill = library.filter { it.id in familiarIds }
+            .shuffled(Random(seedDate * 31L + 22L)).sortedByDescending(::rediscoveryScore)
+        val rediscoveryRanked = rediscoveryUnique + rediscoveryFill
+        val rediscovery = diversifyByArtist(rediscoveryRanked.take(MIX_SIZE), Random(seedDate * 31L + 22L))
 
-        val mixes = mutableListOf<DailyMix>()
+        // Mix 3: a deliberate change of pace, prioritizing tracks absent from the first two mixes.
+        val alreadyFeatured = (familiar + rediscovery).mapTo(mutableSetOf()) { it.id }
+        val lowPlayedRanked = library
+            .filter { it.id !in alreadyFeatured }
+            .shuffled(Random(seedDate * 31L + 3L))
+            .sortedBy { playCounts[it.id] ?: 0 }
+            .toMutableList()
+        if (lowPlayedRanked.size < MIX_SIZE) {
+            val fillIds = lowPlayedRanked.mapTo(mutableSetOf()) { it.id }
+            val additional = library
+                .filter { it.id !in fillIds }
+                .shuffled(Random(seedDate * 31L + 33L))
+                .sortedBy { playCounts[it.id] ?: 0 }
+            lowPlayedRanked.addAll(additional.take(MIX_SIZE - lowPlayedRanked.size))
+        }
+        val discovery = diversifyByArtist(lowPlayedRanked.take(MIX_SIZE), Random(seedDate * 31L + 33L))
 
-        for (mixIndex in 0 until NUM_MIXES) {
-            val mixSeed = seedDate * 1000L + mixIndex * 37L
-            val random = Random(mixSeed)
+        val sets = listOf(familiar, rediscovery, discovery)
+        val titles = listOf("In Your Rotation", "Time to Revisit", "Off the Beaten Track")
+        val descriptions = listOf(
+            "Familiar tracks and favorites",
+            "Music worth hearing again",
+            "Less-played corners of your library"
+        )
 
-            val anchorArtist = topArtists.getOrNull(mixIndex)
-            val selectedTrackIds = LinkedHashSet<String>()
-
-            // 1. Frequently played tracks for this anchor or overall
-            if (anchorArtist != null) {
-                val anchorFrequent = frequentTracks.filter { it.artist.equals(anchorArtist, ignoreCase = true) }
-                anchorFrequent.shuffled(random).take(5).forEach { selectedTrackIds.add(it.id) }
-            }
-            frequentTracks.shuffled(random).take(4).forEach { selectedTrackIds.add(it.id) }
-
-            // 2. Tracks not played recently but liked before
-            forgottenLikedTracks.shuffled(random).take(4).forEach { selectedTrackIds.add(it.id) }
-
-            // 3. Similar artists or same album/folder tracks in library
-            if (anchorArtist != null) {
-                val anchorLibrary = allTracks.filter { it.artist.equals(anchorArtist, ignoreCase = true) }
-                anchorLibrary.shuffled(random).take(4).forEach { selectedTrackIds.add(it.id) }
-            }
-
-            // 4. Fill remaining spots deterministically from library
-            if (selectedTrackIds.size < MIX_SIZE) {
-                val remaining = allTracks.filter { it.id !in selectedTrackIds }.shuffled(random)
-                for (track in remaining) {
-                    selectedTrackIds.add(track.id)
-                    if (selectedTrackIds.size >= MIX_SIZE) break
-                }
-            }
-
-            val finalTracks = selectedTrackIds.mapNotNull { trackById[it] }.shuffled(random)
-
-            val artistsFeatured = finalTracks
-                .map { it.artist }
+        return sets.mapIndexed { index, selected ->
+            val artists = selected.map { it.artist.trim() }
                 .filter { it.isNotBlank() && !it.equals("Unknown Artist", ignoreCase = true) }
                 .distinct()
                 .take(3)
-
-            val description = if (artistsFeatured.isNotEmpty()) {
-                artistsFeatured.joinToString(", ")
-            } else {
-                "Curated mix of your music"
-            }
-
-            mixes.add(
-                DailyMix(
-                    id = "daily_mix_${mixIndex + 1}",
-                    title = "Daily Mix ${mixIndex + 1}",
-                    description = description,
-                    tracks = finalTracks,
-                    seedDate = seedDate
-                )
+            DailyMix(
+                id = "daily_mix_${index + 1}",
+                title = titles[index],
+                description = artists.takeIf { it.isNotEmpty() }?.joinToString(", ") ?: descriptions[index],
+                tracks = selected,
+                seedDate = seedDate
             )
         }
+    }
 
-        return mixes
+    private fun diversifyByArtist(tracks: List<Track>, random: Random): List<Track> {
+        if (tracks.size < 2) return tracks
+        val buckets = tracks.shuffled(random).groupBy { track ->
+            track.artist.trim().lowercase().takeIf { it.isNotBlank() && it != "unknown artist" }
+                ?: "track:${track.id}"
+        }.mapValues { (_, value) -> value.toMutableList() }.toMutableMap()
+        val artists = buckets.keys.shuffled(random).toMutableList()
+        val result = mutableListOf<Track>()
+        while (artists.isNotEmpty()) {
+            val iterator = artists.iterator()
+            while (iterator.hasNext()) {
+                val artist = iterator.next()
+                val bucket = buckets[artist]
+                if (bucket == null || bucket.isEmpty()) {
+                    iterator.remove()
+                } else {
+                    result += bucket.removeAt(0)
+                    if (bucket.isEmpty()) iterator.remove()
+                }
+            }
+        }
+        return result
     }
 }
