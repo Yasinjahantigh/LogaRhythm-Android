@@ -1,11 +1,27 @@
-<div align="center">
+# Music Player
 
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
+An independent, clean, offline-first Android music player built with Jetpack Compose and Material 3 (Material You).
 
-  <h1>Built with AI Studio</h2>
+## Features
+- **Offline-First**: Native local playback with extensible source abstraction.
+- **Material You**: Dynamic color support (Android 12+) with harmonious fallback palette, RTL support, and large rounded shapes.
+- **Modern Architecture**: Clean Architecture with strict layer isolation (`ui -> domain <- data`).
+- **Media3 Ready**: Built on AndroidX Media3 (ExoPlayer + MediaSessionService).
 
-  <p>The fastest path from prompt to production with Gemini.</p>
+## Tech Stack
+- **UI**: Jetpack Compose, Material 3, Navigation Compose
+- **DI**: Hilt with KSP
+- **Data**: Room (KSP), DataStore Preferences
+- **Media**: AndroidX Media3 (ExoPlayer, MediaSession)
+- **Async**: Kotlin Coroutines & Flow
+- **Images**: Coil Compose
 
-  <a href="https://aistudio.google.com/apps">Start building</a>
-
-</div>
+## Getting Started
+Build and install via Gradle:
+```bash
+gradle assembleDebug
+```
+To run local tests:
+```bash
+gradle :app:testDebugUnitTest
+```
