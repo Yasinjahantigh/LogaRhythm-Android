@@ -15,5 +15,7 @@ data class Track(
     val uri: String,
     val dateModified: Long = 0L,
     val folder: String = "",
-    val genre: String = ""
+    val genre: String = "",
+    /** MediaStore's original added timestamp, in seconds since epoch. */
+    val dateAdded: Long = 0L
 )

@@ -219,7 +219,7 @@
    - Step 3: Check cached synced lyrics in Room `lyrics` table.
    - Step 4: If enabled in settings, query online API (e.g. LRCLIB synced lyrics).
    - Fallback: Allow manual entry in UI with instant embedding into local database and export to companion `.lrc`.
-10. **Smart On-Device Music AI Engine (`MusicAiEngine`)**: Zero-network offline track acoustic fingerprinting, mood detection (Energetic, Calm, Focused, Melancholic, Upbeat), intelligent time-of-day mixes (Morning Kickstart, Afternoon Focus, Night Chill), and cosine similarity track recommendation ("Play Similar Songs").
+10. **On-Device Music Curation (`MusicAiEngine`)**: Offline metadata-based energy/mood estimates, date-seeded mixes, and track recommendations scored by metadata-derived distance. This is heuristic curation, not audio-signal fingerprinting or a learned model.
 11. **100% Bilingual & RTL Support**: Complete parity across English (`strings.xml`) and Persian (`values-fa/strings.xml`) with native RTL directionality.
 
 ## What Is Done
@@ -246,7 +246,7 @@
   - Safe Audiofx hardware capability detection for older / budget devices.
   - Off-main-thread image decoding and palette extraction.
   - Multi-source Synced Lyrics with embedded tag reading and interactive user manual entry.
-  - On-Device Music AI Engine (`MusicAiEngine`) with acoustic DNA clustering, dynamic mood playlists, and smart recommendations.
+  - On-device metadata-based mood playlists and similar-track recommendations, with Persian keyword normalization and no recommendation-service network calls.
   - **Batch 1 (Design System, Layering & Insets Fix, Unified Rows, Rebalanced MiniPlayer, Clean Library Defaults)**:
     - Centralized design system tokens (`AppSpacing`, `AppShapes`, `AppDimensions`, `AppMotion`, `LocalPlaybackBottomPadding`).
     - Fixed bottom window insets/padding across all screens (`MainScreen`, `LibraryScreen`, `HomeScreen`, `SearchScreen`, `PlaylistDetailScreen`, `AlbumDetailScreen`, `ArtistDetailScreen`, `FolderDetailScreen`, `GenreDetailScreen`, `StatsScreen`, `QueueScreen`). Content now scrolls smoothly underneath floating mini player and bottom bar without hard clips or empty gaps.
@@ -274,8 +274,19 @@
       - Added file embedding: when lyrics are imported, saved manually, pasted, or downloaded, they are written to a companion `.lrc` file directly in the song's directory on disk.
       - Added "Export to .lrc file" via Android file picker.
 
+## Recent Product Quality Pass — 2026-10-09
+- Fixed smart mood-playback lifecycle: a mood tap now reads one current library snapshot instead of leaving a database Flow collector alive that could restart playback after later library updates.
+- Localized all five mood mix labels and added a localized snackbar message for an empty result.
+- Replaced generic scaffold branding with LogaRhythm in the app label, onboarding welcome, and widget labels.
+- Replaced the stock Android Studio launcher graphic with a custom waveform mark on a midnight gradient background.
+- Removed dependence on an ignored project-local debug keystore; debug builds now use the Android Gradle Plugin default signing key.
+- Clarified that the on-device recommendation engine uses metadata heuristics, not true signal-level audio fingerprinting. Added Persian keyword normalization and mood cues, plus guards for non-positive playlist/recommendation limits.
+- Added focused JVM tests for empty-library handling, requested playlist limits, and duplicate-free results.
+- Rewrote README with product scope, privacy model, architecture, and accurate setup instructions.
+
 ## Known Issues
 - Online website streaming source is planned for a future online phase.
+- The source archive omits `gradlew`, `gradlew.bat`, and `gradle-wrapper.jar`; generate them with Gradle 9.3.1 before using the wrapper commands.
 
 ## Exact Signatures
 
@@ -470,3 +481,55 @@ interface PlaybackController : PlayerController {
     fun stop()
 }
 ```
+
+## Product Quality Pass 2 — 2026-10-09
+- Added a one-tap “Shuffle all” Home action. It uses the shared library state, and enables Media3 shuffle mode rather than merely randomizing the displayed list.
+- Added a true Recently Added section based on `MediaStore.Audio.Media.DATE_ADDED`, not the file modification timestamp.
+- Bumped Room schema to v6 with a 5→6 migration that adds `dateAdded` and backfills older rows from `dateModified`; registered the migration so v5 user data is retained.
+- Hardened MediaStore scanning: a null cursor, permission loss, or query failure now fails the scan instead of returning an empty list. Because repository deletion happens only after a complete scan, failed scans no longer erase the saved library index.
+- Added a buffered refresh-error event and localized snackbar feedback; cancellation still propagates normally.
+- Added pure JVM tests for Recently Added sorting, tie-breaking, result limits, and non-positive limits.
+- Added `gradle/wrapper/gradle-wrapper.properties`; the wrapper launchers and JAR remain absent from the original archive.
+
+## Verification Notes — Pass 2
+- Environment inspection found Java 21 but no Gradle executable, Gradle wrapper launcher/JAR, Android SDK, SDK manager, or ADB.
+- DNS resolution for both Gradle distributions and Google's Android command-line tools failed inside the build environment, so downloading the missing toolchain was not possible here.
+- A debug APK and Android/Room integration tests are therefore not verified yet. Run `./gradlew assembleDebug` and `./gradlew :app:testDebugUnitTest` after generating the wrapper and installing the Android SDK platform/build tools specified by the Gradle configuration.
+
+## Final Verification Update — 2026-10-09
+- Fixed a fast-tap edge case in mood playback: it now requests the current library emission from the repository instead of possibly reading the StateFlow's initial empty placeholder.
+- Re-ran the standalone Kotlin smoke suite after the change: Recently Added ordering/ties/limits, Persian mood scoring, and the recommendation limit guard passed.
+- Re-ran resource XML checks and executed the Room 5→6 SQL against a sample v5 database; XML/key consistency and row-preserving timestamp backfill passed.
+- Attempted `./gradlew assembleDebug` and `gradle :app:assembleDebug`; both are blocked because the launcher and Gradle executable are absent. `sdkmanager`/`adb` are absent too, and DNS lookup for `services.gradle.org` and `dl.google.com` fails. No APK, full Android compilation, or runtime playback has been verified in this environment.
+
+
+## Product Quality Pass 3 — 2026-10-09
+- Added an explicit `playRadio(seedTrack, similarTracks)` playback-controller operation. The player’s More menu now offers “Start radio from this song,” computes up to 12 recommendations from the current local library, and reports whether a radio could be started. The user-facing message clearly says the prior queue is replaced.
+- Radio starts with the seed song, preserves its current seek position when possible, clears shuffle/repeat to make sequence order predictable, updates queue persistence, and handles duplicate track IDs.
+- Fixed a playback-position regression: queue rebuild/restore can emit a media transition for the same track; the controller no longer resets position unless the track ID really changes.
+- Made play-scrobbling track-aware. Rebuilding a queue around the same playing song no longer resets its listen threshold, while an explicit play action starts a fresh listen session.
+- Improved metadata-based recommendations: mood scoring now includes acoustic character and estimated danceability, recognizes more English/Persian terms, normalizes Arabic/Persian variants and diacritics, and sequences artist/album-diverse results while keeping mood relevance primary. Recommendation APIs deduplicate tracks and support excluded IDs.
+- Fixed search result staleness: a query change now invalidates the previous results immediately, presents a loading state, and debounces database queries rather than letting results from the old query appear under the new one. Empty searches include a clear-search recovery action and a localized hint.
+- Localized album/artist metadata in search results and hardened Home discovery cards against blank titles, blank artwork URI, and artwork loading failures.
+- Added JVM tests for acoustic metadata, acoustic-mood ranking, artist diversity, excluded radio candidates, and Arabic/Persian search normalization.
+
+## Verification Notes — Pass 3
+- Compiled the actual `MusicAiEngine.kt` and `SearchUtils.kt` with `kotlinc`.
+- Ran a standalone Kotlin smoke harness against those production sources: acoustic-vs-electronic scoring, Acoustic Morning selection, radio exclusions and limits, unique recommendations, and Arabic/Persian normalization passed. The observed sample radio sequence avoided repeating the seed artist when comparable alternatives were available.
+- Still not verified: full Gradle/JUnit suite, Compose/Media3 integration compilation, Android runtime playback, and actual queue/seek restoration on a device. No Android build-toolchain investigation was performed in this pass, per task scope.
+
+
+## Product Quality Pass 4 — 2026-10-09
+- Replaced the oversized “Shuffle all” Home hero with a time-aware listening card: start a queue sized for 15, 30, or 60 minutes, or still shuffle the full library from the same entry point.
+- Added a pure-Kotlin `ListeningSessionPlanner`. It filters out unplayable/invalid-duration tracks, prevents duplicates, stays at or below the target duration, gently favors tracks from the current top daily mix, and penalizes artist repetition.
+- Added explicit `setShuffleEnabled` and `setRepeatMode` operations to `PlayerController`; timed sessions disable shuffle and repeat so the finite queue and intended order are preserved, while Shuffle All enables shuffle explicitly.
+- Reworked the three offline daily mixes into distinct intents: familiar rotation, rediscovery, and lower-played discovery. Their track selection is stable for the supplied day seed, prioritizes non-overlapping tracks between mixes when the library is large enough, and interleaves artists to reduce repetition.
+- Redesigned daily-mix cards to use a 2×2 collage of actual library cover art (with fallbacks), localized mix titles and fallback descriptions, and clearer play affordance.
+- Reordered Home around quick listening, moods, daily mixes, and recent activity; moved listening statistics below the main discovery content.
+- Added unit tests for session time bounds, duplicates, invalid tracks/targets, mix preference, mix intent names, and non-overlap across a sufficiently large library.
+
+## Verification Notes — Pass 4
+- Compiled and executed the actual pure-Kotlin production sources for `ListeningSessionPlanner` and `DailyMixGenerator` with a standalone smoke harness. Time-bound session generation, current-mix preference, same-seed stability, daily variation, distinct mix intents, non-overlap for a 60-track library, and prior generator regression expectations passed.
+- Kotlin parser check on the touched Compose/ViewModel/controller files detected no syntax errors. This is not a substitute for Android/Compose type-checking.
+- Parsed all 16 resource XML files; all 300 English/Persian string keys match, all formatted placeholders are compatible, and the Home feature's string references are present.
+- No Gradle, Android SDK, APK generation, or device-runtime checks were attempted in this pass, per request. Full Compose compilation and real playback integration remain unverified.

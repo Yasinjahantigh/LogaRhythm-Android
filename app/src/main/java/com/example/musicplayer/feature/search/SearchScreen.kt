@@ -178,6 +178,7 @@ fun SearchScreen(
                         viewModel.saveRecentQuery(query)
                         onNavigateToArtist(artistName)
                     },
+                    onClearQuery = viewModel::clearQuery,
                     onTrackMenuClick = { track ->
                         selectedTrackForMenu = track
                     }

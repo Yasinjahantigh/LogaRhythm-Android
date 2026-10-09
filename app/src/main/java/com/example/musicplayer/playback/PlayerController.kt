@@ -23,13 +23,17 @@ interface PlayerController {
     val equalizerState: StateFlow<EqualizerState>
 
     fun play(list: List<Track>, startIndex: Int = 0)
+    /** Replaces the queue with a track radio while preserving the seed track position when possible. */
+    fun playRadio(seedTrack: Track, similarTracks: List<Track>)
     fun pause()
     fun resume()
     fun next()
     fun previous()
     fun seekTo(positionMs: Long)
     fun toggleShuffle()
+    fun setShuffleEnabled(enabled: Boolean)
     fun cycleRepeat()
+    fun setRepeatMode(mode: Int)
 
     fun playNext(track: Track)
     fun addToQueue(track: Track)

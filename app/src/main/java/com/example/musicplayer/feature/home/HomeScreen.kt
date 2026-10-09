@@ -21,10 +21,14 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.Bedtime
+import androidx.compose.material.icons.filled.CenterFocusStrong
+import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Psychology
 import androidx.compose.material.icons.filled.Whatshot
+import androidx.compose.material.icons.filled.WbSunny
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -32,13 +36,15 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Surface
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -54,6 +60,7 @@ import com.example.musicplayer.domain.model.Track
 import com.example.musicplayer.feature.library.TrackListItem
 import com.example.musicplayer.feature.playlist.AddToPlaylistDialog
 import com.example.musicplayer.feature.playlist.SongMenuBottomSheet
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -65,16 +72,23 @@ fun HomeScreen(
 ) {
     val dailyMixes by viewModel.dailyMixes.collectAsStateWithLifecycle()
     val recentlyPlayed by viewModel.recentlyPlayed.collectAsStateWithLifecycle()
+    val allTracks by viewModel.allTracks.collectAsStateWithLifecycle()
+    val recentlyAdded by viewModel.recentlyAdded.collectAsStateWithLifecycle()
     val mostPlayed by viewModel.mostPlayed.collectAsStateWithLifecycle()
     val totalTimeMs by viewModel.totalListenTimeMs.collectAsStateWithLifecycle()
     val playlists by viewModel.playlists.collectAsStateWithLifecycle()
 
     var selectedTrackForMenu by remember { mutableStateOf<Track?>(null) }
     var trackForAddToPlaylist by remember { mutableStateOf<Track?>(null) }
+    val snackbarHostState = remember { SnackbarHostState() }
+    val coroutineScope = rememberCoroutineScope()
+    val emptyMoodMessage = stringResource(R.string.ai_mood_empty)
+    val sessionUnavailableMessage = stringResource(R.string.home_session_unavailable)
 
-    val isLibraryEmpty = dailyMixes.isEmpty() && recentlyPlayed.isEmpty() && mostPlayed.isEmpty()
+    val isLibraryEmpty = allTracks.isEmpty() && dailyMixes.isEmpty() && recentlyPlayed.isEmpty() && mostPlayed.isEmpty()
 
     Scaffold(
+        snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
         topBar = {
             TopAppBar(
                 title = {
@@ -133,11 +147,17 @@ fun HomeScreen(
                     .testTag("home_content_list"),
                 contentPadding = PaddingValues(bottom = bottomPadding + 24.dp)
             ) {
-                if (totalTimeMs > 0L) {
+                if (allTracks.isNotEmpty()) {
                     item {
-                        HomeStatsBanner(
-                            totalTimeMs = totalTimeMs,
-                            onClick = onNavigateToStats
+                        ListeningSessionCard(
+                            onStartSession = { minutes ->
+                                viewModel.playListeningSession(minutes) {
+                                    coroutineScope.launch {
+                                        snackbarHostState.showSnackbar(sessionUnavailableMessage)
+                                    }
+                                }
+                            },
+                            onShuffleAll = viewModel::shuffleAllTracks
                         )
                     }
                 }
@@ -160,7 +180,13 @@ fun HomeScreen(
                         MusicAiEngine.AiMood.entries.forEach { mood ->
                             AiMoodChip(
                                 mood = mood,
-                                onClick = { viewModel.playAiMoodPlaylist(mood) }
+                                onClick = {
+                                    viewModel.playAiMoodPlaylist(mood) {
+                                        coroutineScope.launch {
+                                            snackbarHostState.showSnackbar(emptyMoodMessage)
+                                        }
+                                    }
+                                }
                             )
                         }
                     }
@@ -214,6 +240,31 @@ fun HomeScreen(
                     }
                 }
 
+                if (recentlyAdded.isNotEmpty()) {
+                    item {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        HomeSectionHeader(
+                            title = stringResource(R.string.home_recently_added),
+                            icon = Icons.Filled.MusicNote
+                        )
+                    }
+                    item {
+                        LazyRow(
+                            contentPadding = PaddingValues(horizontal = 16.dp),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            modifier = Modifier.testTag("recently_added_row")
+                        ) {
+                            itemsIndexed(recentlyAdded, key = { _, track -> track.id }) { index, track ->
+                                RecentlyPlayedCard(
+                                    track = track,
+                                    onClick = { viewModel.playTracks(recentlyAdded, index) },
+                                    tagPrefix = "recently_added"
+                                )
+                            }
+                        }
+                    }
+                }
+
                 if (mostPlayed.isNotEmpty()) {
                     item {
                         Spacer(modifier = Modifier.height(8.dp))
@@ -231,6 +282,15 @@ fun HomeScreen(
                         )
                     }
                 }
+                if (totalTimeMs > 0L) {
+                    item {
+                        HomeStatsBanner(
+                            totalTimeMs = totalTimeMs,
+                            onClick = onNavigateToStats
+                        )
+                    }
+                }
+
             }
         }
     }
@@ -288,14 +348,28 @@ private fun AiMoodChip(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Icon(
-                imageVector = Icons.Default.AutoAwesome,
+                imageVector = when (mood) {
+                    MusicAiEngine.AiMood.LATE_NIGHT_CHILL -> Icons.Filled.Bedtime
+                    MusicAiEngine.AiMood.DEEP_FOCUS -> Icons.Filled.CenterFocusStrong
+                    MusicAiEngine.AiMood.ENERGY_BOOST -> Icons.Filled.Whatshot
+                    MusicAiEngine.AiMood.MELANCHOLY_RAIN -> Icons.Filled.Cloud
+                    MusicAiEngine.AiMood.ACOUSTIC_MORNING -> Icons.Filled.WbSunny
+                },
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.onSecondaryContainer,
                 modifier = Modifier.size(16.dp)
             )
             Spacer(modifier = Modifier.width(8.dp))
             Text(
-                text = mood.titleEn,
+                text = stringResource(
+                    when (mood) {
+                        MusicAiEngine.AiMood.LATE_NIGHT_CHILL -> R.string.ai_mood_late_night_chill
+                        MusicAiEngine.AiMood.DEEP_FOCUS -> R.string.ai_mood_deep_focus
+                        MusicAiEngine.AiMood.ENERGY_BOOST -> R.string.ai_mood_energy_boost
+                        MusicAiEngine.AiMood.MELANCHOLY_RAIN -> R.string.ai_mood_melancholy_rain
+                        MusicAiEngine.AiMood.ACOUSTIC_MORNING -> R.string.ai_mood_acoustic_morning
+                    }
+                ),
                 style = MaterialTheme.typography.labelLarge,
                 fontWeight = FontWeight.SemiBold,
                 color = MaterialTheme.colorScheme.onSecondaryContainer
@@ -303,3 +377,4 @@ private fun AiMoodChip(
         }
     }
 }
+

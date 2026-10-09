@@ -32,6 +32,7 @@ object AppModule {
             MusicDatabase::class.java,
             "music_player.db"
         )
+            .addMigrations(MusicDatabase.MIGRATION_5_6)
             .fallbackToDestructiveMigration()
             .build()
     }

@@ -100,6 +100,36 @@ class DailyMixGeneratorTest {
     }
 
     @Test
+    fun generateMixes_haveDistinctIntentsAndAvoidOverlapWhenLibraryIsLargeEnough() {
+        val largerLibrary = (1..60).map { i ->
+            Track(
+                id = "local:$i",
+                title = "Song $i",
+                artist = "Artist ${i % 7}",
+                album = "Album ${i / 4}",
+                durationMs = 180_000L,
+                artworkUri = null,
+                sourceType = SourceType.LOCAL,
+                uri = "content://audio/$i"
+            )
+        }
+        val mixes = generator.generateMixes(
+            allTracks = largerLibrary,
+            playEvents = emptyList(),
+            seedDate = 8888L
+        )
+
+        assertEquals(listOf("In Your Rotation", "Time to Revisit", "Off the Beaten Track"), mixes.map { it.title })
+        assertTrue(mixes.all { it.tracks.size == DailyMixGenerator.MIX_SIZE })
+        val firstIds = mixes[0].tracks.map { it.id }.toSet()
+        val secondIds = mixes[1].tracks.map { it.id }.toSet()
+        val thirdIds = mixes[2].tracks.map { it.id }.toSet()
+        assertTrue(firstIds.intersect(secondIds).isEmpty())
+        assertTrue(firstIds.intersect(thirdIds).isEmpty())
+        assertTrue(secondIds.intersect(thirdIds).isEmpty())
+    }
+
+    @Test
     fun generateMixes_prioritizesFrequentAndForgottenLikedTracks() {
         val oldTime = System.currentTimeMillis() - (14 * 24 * 60 * 60 * 1000L)
         val recentTime = System.currentTimeMillis() - (1000L)

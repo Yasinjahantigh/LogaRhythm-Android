@@ -145,11 +145,14 @@ class PlayerControllerImpl @Inject constructor(
 
     private fun onTrackChanged(mediaItem: MediaItem?) {
         val track = mediaItem?.mediaId?.let { trackMap[it] }
+        val isDifferentTrack = _currentTrack.value?.id != track?.id
         _currentTrack.value = track
         if (track != null && track.durationMs > 0L) _duration.value = track.durationMs
-        _position.value = 0L
+        // setMediaItems can emit a transition for the same seed track during radio/queue restore.
+        // Preserve its seek position; only a genuinely different track starts at zero.
+        if (isDifferentTrack) _position.value = 0L
         MusicWidgetUpdater.update(context, track?.title, track?.artist, track?.artworkUri, _isPlaying.value)
-        playScrobbler.onTrackChanged()
+        playScrobbler.onTrackChanged(track?.id)
     }
 
     private fun execute(action: (MediaController) -> Unit) {
@@ -173,10 +176,42 @@ class PlayerControllerImpl @Inject constructor(
         _currentTrack.value = list[validIndex]
         _duration.value = list[validIndex].durationMs
         _position.value = 0L
-        playScrobbler.onTrackChanged()
+        playScrobbler.onTrackChanged(list[validIndex].id, force = true)
         val mediaItems = list.map { MediaItemMapper.toMediaItem(it) }
         execute { controller ->
             controller.setMediaItems(mediaItems, validIndex, 0L)
+            controller.prepare()
+            controller.play()
+            saveQueueState()
+        }
+    }
+
+    override fun playRadio(seedTrack: Track, similarTracks: List<Track>) {
+        val existingPosition = if (_currentTrack.value?.id == seedTrack.id) _position.value else 0L
+        val radioTracks = (listOf(seedTrack) + similarTracks)
+            .distinctBy { it.id }
+        if (radioTracks.size < 2) return
+
+        _queue.value = radioTracks
+        trackMap.clear()
+        radioTracks.forEach { trackMap[it.id] = it }
+        _currentTrack.value = seedTrack
+        val safeResumePosition = if (seedTrack.durationMs > 0L) {
+            existingPosition.coerceIn(0L, seedTrack.durationMs)
+        } else {
+            existingPosition.coerceAtLeast(0L)
+        }
+        _position.value = safeResumePosition
+        _duration.value = seedTrack.durationMs.coerceAtLeast(0L)
+        playScrobbler.onTrackChanged(seedTrack.id)
+
+        val mediaItems = radioTracks.map { MediaItemMapper.toMediaItem(it) }
+        _shuffle.value = false
+        _repeatMode.value = Player.REPEAT_MODE_OFF
+        execute { controller ->
+            controller.shuffleModeEnabled = false
+            controller.repeatMode = Player.REPEAT_MODE_OFF
+            controller.setMediaItems(mediaItems, 0, safeResumePosition)
             controller.prepare()
             controller.play()
             saveQueueState()
@@ -201,6 +236,12 @@ class PlayerControllerImpl @Inject constructor(
         it.shuffleModeEnabled = newMode
         _shuffle.value = newMode
     }
+
+    override fun setShuffleEnabled(enabled: Boolean) = execute {
+        it.shuffleModeEnabled = enabled
+        _shuffle.value = enabled
+    }
+
     override fun cycleRepeat() = execute {
         val next = when (it.repeatMode) {
             Player.REPEAT_MODE_OFF -> Player.REPEAT_MODE_ALL
@@ -209,6 +250,15 @@ class PlayerControllerImpl @Inject constructor(
         }
         it.repeatMode = next
         _repeatMode.value = next
+    }
+
+    override fun setRepeatMode(mode: Int) = execute {
+        val safeMode = when (mode) {
+            Player.REPEAT_MODE_ONE, Player.REPEAT_MODE_ALL -> mode
+            else -> Player.REPEAT_MODE_OFF
+        }
+        it.repeatMode = safeMode
+        _repeatMode.value = safeMode
     }
 
     override fun playNext(track: Track) {

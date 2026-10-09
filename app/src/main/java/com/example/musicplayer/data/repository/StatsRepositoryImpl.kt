@@ -81,6 +81,7 @@ class StatsRepositoryImpl @Inject constructor(
                         },
                         uri = query.uri,
                         dateModified = query.dateModified,
+                        dateAdded = query.dateAdded,
                         folder = query.folder,
                         genre = query.genre
                     ),

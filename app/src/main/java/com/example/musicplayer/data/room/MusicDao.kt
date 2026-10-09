@@ -4,6 +4,7 @@ import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import androidx.room.Transaction
 import androidx.room.Update
 import kotlinx.coroutines.flow.Flow
 
@@ -154,6 +155,18 @@ interface MusicDao {
     @Query("DELETE FROM tracks WHERE id IN (:ids)")
     suspend fun deleteTracksByIds(ids: List<String>)
 
+    /** Apply a completed scan atomically so a database error cannot leave a half-synced library. */
+    @Transaction
+    suspend fun syncLocalTracks(
+        toInsert: List<TrackEntity>,
+        toUpdate: List<TrackEntity>,
+        toDeleteIds: List<String>
+    ) {
+        if (toInsert.isNotEmpty()) insertTracks(toInsert)
+        if (toUpdate.isNotEmpty()) updateTracks(toUpdate)
+        if (toDeleteIds.isNotEmpty()) deleteTracksByIds(toDeleteIds)
+    }
+
     @Query("SELECT * FROM play_events WHERE trackId = :trackId ORDER BY timestamp DESC")
     fun getPlayEventsForTrack(trackId: String): Flow<List<PlayEventEntity>>
 
@@ -170,7 +183,7 @@ interface MusicDao {
     fun getTotalListenTimeMs(sinceTimestamp: Long): Flow<Long>
 
     @Query("""
-        SELECT t.id, t.title, t.artist, t.album, t.durationMs, t.artworkUri, t.sourceType, t.uri, t.dateModified, t.folder, t.genre,
+        SELECT t.id, t.title, t.artist, t.album, t.durationMs, t.artworkUri, t.sourceType, t.uri, t.dateModified, t.folder, t.genre, t.dateAdded,
                COUNT(pe.id) AS playCount,
                COALESCE(SUM(pe.listenedMs), 0) AS totalListenedMs
         FROM play_events pe

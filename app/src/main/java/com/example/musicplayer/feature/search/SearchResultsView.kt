@@ -3,6 +3,7 @@ package com.example.musicplayer.feature.search
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -17,6 +18,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -47,6 +49,7 @@ fun SearchResultsView(
     onAlbumClick: (String) -> Unit,
     onArtistClick: (String) -> Unit,
     modifier: Modifier = Modifier,
+    onClearQuery: () -> Unit = {},
     onTrackMenuClick: ((Track) -> Unit)? = null
 ) {
     if (results.isLoading) {
@@ -58,11 +61,24 @@ fun SearchResultsView(
             modifier = modifier.fillMaxSize().padding(32.dp),
             contentAlignment = Alignment.Center
         ) {
-            Text(
-                text = stringResource(R.string.search_no_results, query),
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text(
+                    text = stringResource(R.string.search_no_results, query),
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Text(
+                    text = stringResource(R.string.search_no_results_hint),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Button(onClick = onClearQuery, modifier = Modifier.testTag("search_clear_from_empty_button")) {
+                    Text(stringResource(R.string.search_clear_query_action))
+                }
+            }
         }
     } else {
         val bottomPadding = com.example.musicplayer.ui.designsystem.LocalPlaybackBottomPadding.current
@@ -180,7 +196,7 @@ private fun AlbumSearchItem(album: Album, onClick: () -> Unit) {
                 overflow = TextOverflow.Ellipsis
             )
             Text(
-                text = "$displayArtist • ${album.trackCount} songs",
+                text = stringResource(R.string.search_album_metadata, displayArtist, album.trackCount),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
@@ -230,7 +246,7 @@ private fun ArtistSearchItem(artist: Artist, onClick: () -> Unit) {
                 overflow = TextOverflow.Ellipsis
             )
             Text(
-                text = "${artist.trackCount} songs • ${artist.albumCount} albums",
+                text = stringResource(R.string.artist_metadata, artist.trackCount, artist.albumCount),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )

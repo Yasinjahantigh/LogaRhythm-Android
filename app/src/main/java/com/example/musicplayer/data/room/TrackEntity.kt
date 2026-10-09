@@ -1,5 +1,6 @@
 package com.example.musicplayer.data.room
 
+import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 import com.example.musicplayer.domain.model.SourceType
@@ -17,6 +18,7 @@ data class TrackEntity(
     val sourceType: String,
     val uri: String,
     val dateModified: Long = 0L,
+    @ColumnInfo(defaultValue = "0") val dateAdded: Long = 0L,
     val folder: String = "",
     val genre: String = ""
 ) {
@@ -30,6 +32,7 @@ data class TrackEntity(
         sourceType = if (sourceType == SourceType.LOCAL.prefix) SourceType.LOCAL else SourceType.WEB,
         uri = uri,
         dateModified = dateModified,
+        dateAdded = dateAdded,
         folder = folder,
         genre = genre
     )
@@ -45,6 +48,7 @@ data class TrackEntity(
             sourceType = track.sourceType.prefix,
             uri = track.uri,
             dateModified = track.dateModified,
+            dateAdded = track.dateAdded,
             folder = track.folder,
             genre = track.genre
         )

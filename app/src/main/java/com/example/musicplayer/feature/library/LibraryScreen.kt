@@ -27,6 +27,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -69,6 +70,12 @@ fun LibraryScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     val context = androidx.compose.ui.platform.LocalContext.current
+
+    LaunchedEffect(viewModel) {
+        viewModel.scanErrors.collect {
+            snackbarHostState.showSnackbar(context.getString(R.string.library_scan_failed))
+        }
+    }
 
     var selectedTrackForMenu by remember { mutableStateOf<Track?>(null) }
     var selectedTrackForAddToPlaylist by remember { mutableStateOf<Track?>(null) }

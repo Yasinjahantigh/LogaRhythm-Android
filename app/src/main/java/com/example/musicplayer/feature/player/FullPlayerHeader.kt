@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.QueueMusic
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Bedtime
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Info
@@ -57,6 +58,7 @@ fun FullPlayerHeader(
     onOpenSpeedDialog: () -> Unit,
     onOpenSleepTimerDialog: () -> Unit,
     onOpenQueue: () -> Unit,
+    onStartRadio: () -> Unit,
     onOpenEqualizer: () -> Unit,
     onAddToPlaylist: () -> Unit,
     onSearchGoogleLyrics: () -> Unit,
@@ -212,6 +214,14 @@ fun FullPlayerHeader(
                         onClick = {
                             showMoreMenu = false
                             onOpenEqualizer()
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.player_menu_start_radio)) },
+                        leadingIcon = { Icon(Icons.Default.AutoAwesome, contentDescription = null) },
+                        onClick = {
+                            showMoreMenu = false
+                            onStartRadio()
                         }
                     )
                     DropdownMenuItem(

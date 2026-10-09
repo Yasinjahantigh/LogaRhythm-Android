@@ -12,6 +12,7 @@ data class TrackStatQueryResult(
     val dateModified: Long = 0L,
     val folder: String = "",
     val genre: String = "",
+    val dateAdded: Long = 0L,
     val playCount: Int,
     val totalListenedMs: Long
 )
