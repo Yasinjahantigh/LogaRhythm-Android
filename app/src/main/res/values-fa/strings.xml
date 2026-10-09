@@ -1,0 +1,302 @@
+<resources>
+    <string name="app_name">پخش‌کننده موسیقی</string>
+    <string name="nav_home">خانه</string>
+    <string name="nav_search">جستجو</string>
+    <string name="nav_library">کتابخانه</string>
+    <string name="nav_settings">تنظیمات</string>
+    <string name="home_title">خانه</string>
+    <string name="search_title">جستجو</string>
+    <string name="library_title">کتابخانه</string>
+    <string name="settings_title">تنظیمات</string>
+    <string name="home_empty_message">سفر موسیقی شما از اینجا آغاز می‌شود</string>
+    <string name="search_empty_message">جستجوی آهنگ‌ها، هنرمندان و آلبوم‌ها</string>
+    <string name="library_empty_message">موسیقی‌ها و لیست‌های پخش شما</string>
+    <string name="settings_empty_message">تنظیمات پخش، پوسته و برنامه</string>
+    <string name="cd_home_icon">برگه خانه</string>
+    <string name="cd_search_icon">برگه جستجو</string>
+    <string name="cd_library_icon">برگه کتابخانه</string>
+    <string name="cd_settings_icon">برگه تنظیمات</string>
+
+    <!-- Phase 1: Local Library & Permissions -->
+    <string name="permission_audio_title">دسترسی به فایل‌های صوتی لازم است</string>
+    <string name="permission_audio_desc">پخش‌کننده موسیقی برای یافتن و نمایش آهنگ‌های دستگاه به دسترسی فایل‌های صوتی نیاز دارد.</string>
+    <string name="permission_grant_button">اعطای دسترسی</string>
+    <string name="permission_open_settings">باز کردن تنظیمات</string>
+    <string name="library_empty_title">هیچ آهنگی یافت نشد</string>
+    <string name="library_empty_desc">فایل‌های صوتی به دستگاه خود اضافه کنید یا برای بازخوانی روی اسکن مجدد ضربه بزنید.</string>
+    <string name="library_rescan">اسکن مجدد کتابخانه</string>
+    <string name="library_scanning">در حال اسکن کتابخانه…</string>
+    <string name="library_track_count">%1$d آهنگ</string>
+    <string name="cd_artwork">تصویر آلبوم برای %1$s</string>
+    <string name="cd_rescan">اسکن مجدد کتابخانه موسیقی</string>
+    <string name="cd_permission_icon">آیکون دسترسی فایل‌های صوتی</string>
+
+    <!-- Phase 2: Playback Core -->
+    <string name="cd_play">پخش</string>
+    <string name="cd_pause">توقف</string>
+    <string name="cd_skip_next">آهنگ بعدی</string>
+    <string name="cd_skip_prev">آهنگ قبلی</string>
+    <string name="cd_shuffle">پخش تصادفی</string>
+    <string name="cd_repeat">تکرار</string>
+    <string name="cd_repeat_one">تکرار همین آهنگ</string>
+    <string name="cd_collapse_player">بستن صفحه پخش</string>
+    <string name="cd_expand_player">نمایش کامل صفحه پخش</string>
+    <string name="cd_mini_player">پخش‌کننده کوچک</string>
+    <string name="cd_seek_bar">نوار پیشرفت پخش</string>
+    <string name="unknown_title">عنوان نامشخص</string>
+    <string name="unknown_artist">هنرمند نامشخص</string>
+    <string name="unknown_album">آلبوم نامشخص</string>
+    <string name="now_playing">در حال پخش</string>
+
+    <!-- Phase 3: Browsing and Search -->
+    <string name="tab_songs">آهنگ‌ها</string>
+    <string name="tab_albums">آلبوم‌ها</string>
+    <string name="tab_artists">هنرمندان</string>
+    <string name="tab_folders">پوشه‌ها</string>
+    <string name="search_placeholder">جستجوی آهنگ‌ها، آلبوم‌ها، هنرمندان…</string>
+    <string name="search_recent_title">جستجوهای اخیر</string>
+    <string name="search_clear_recent">پاک کردن همه</string>
+    <string name="search_no_results">نتیجه‌ای برای «%1$s» یافت نشد</string>
+    <string name="search_section_songs">آهنگ‌ها</string>
+    <string name="search_section_albums">آلبوم‌ها</string>
+    <string name="search_section_artists">هنرمندان</string>
+    <string name="cd_clear_search">پاک کردن عبارت جستجو</string>
+    <string name="cd_remove_recent">حذف مورد از تاریخچه</string>
+    <string name="btn_play">پخش</string>
+    <string name="btn_shuffle">پخش تصادفی</string>
+    <string name="album_detail_title">آلبوم</string>
+    <string name="artist_detail_title">هنرمند</string>
+    <string name="folder_detail_title">پوشه</string>
+    <string name="album_track_count">%1$d آهنگ</string>
+    <string name="artist_metadata">%1$d آهنگ • %2$d آلبوم</string>
+    <string name="folder_track_count">%1$d آهنگ</string>
+    <string name="cd_back">بازگشت</string>
+    <string name="empty_album_tracks">هیچ آهنگی در این آلبوم وجود ندارد</string>
+    <string name="empty_artist_tracks">هیچ آهنگی از این هنرمند وجود ندارد</string>
+    <string name="empty_folder_tracks">هیچ آهنگی در این پوشه وجود ندارد</string>
+    <string name="empty_albums">هیچ آلبومی یافت نشد</string>
+    <string name="empty_artists">هیچ هنرمندی یافت نشد</string>
+    <string name="empty_folders">هیچ پوشه‌ای یافت نشد</string>
+    <string name="cd_album_item">آلبوم %1$s</string>
+    <string name="cd_artist_item">هنرمند %1$s</string>
+    <string name="cd_folder_item">پوشه %1$s</string>
+
+    <!-- Phase 4: Queue, Playlists & Favorites -->
+    <string name="tab_playlists">لیست‌های پخش</string>
+    <string name="queue_title">صف پخش</string>
+    <string name="queue_empty">صف پخش خالی است</string>
+    <string name="queue_track_count">%1$d آهنگ در صف</string>
+    <string name="queue_item_removed">از صف حذف شد</string>
+    <string name="queue_undo">بازگردانی</string>
+    <string name="cd_queue">صف پخش</string>
+    <string name="cd_drag_handle">تغییر ترتیب</string>
+    <string name="cd_remove_from_queue">حذف از صف</string>
+    <string name="song_menu_title">گزینه‌های آهنگ</string>
+    <string name="action_play_next">پخش به عنوان بعدی</string>
+    <string name="action_add_to_queue">افزودن به صف</string>
+    <string name="action_add_to_playlist">افزودن به لیست پخش</string>
+    <string name="action_remove_from_playlist">حذف از لیست پخش</string>
+    <string name="added_to_queue">به صف افزوده شد</string>
+    <string name="playing_next">به عنوان بعدی پخش خواهد شد</string>
+    <string name="added_to_playlist">به «%1$s» افزوده شد</string>
+    <string name="removed_from_playlist">از لیست پخش حذف شد</string>
+    <string name="cd_song_menu">گزینه‌های آهنگ %1$s</string>
+    <string name="playlist_favorites">علاقه‌مندی‌ها</string>
+    <string name="playlist_create">لیست پخش جدید</string>
+    <string name="playlist_name_hint">نام لیست پخش</string>
+    <string name="dialog_create_playlist_title">ایجاد لیست پخش</string>
+    <string name="dialog_rename_playlist_title">تغییر نام لیست پخش</string>
+    <string name="dialog_delete_playlist_title">حذف لیست پخش</string>
+    <string name="dialog_delete_playlist_confirm">آیا از حذف «%1$s» مطمئن هستید؟</string>
+    <string name="btn_create">ایجاد</string>
+    <string name="btn_rename">تغییر نام</string>
+    <string name="btn_delete">حذف</string>
+    <string name="btn_cancel">لغو</string>
+    <string name="empty_playlists">هنوز لیست پخشی ایجاد نشده است</string>
+    <string name="empty_playlist_tracks">هیچ آهنگی در این لیست پخش وجود ندارد</string>
+    <string name="playlist_track_count">%1$d آهنگ</string>
+    <string name="cd_favorite">افزودن به علاقه‌مندی‌ها</string>
+    <string name="cd_unfavorite">حذف از علاقه‌مندی‌ها</string>
+    <string name="cd_playlist_item">لیست پخش %1$s</string>
+    <string name="cd_playlist_menu">گزینه‌های لیست پخش</string>
+
+    <!-- Phase 5: Statistics & Insights -->
+    <string name="stats_title">آمار گوش دادن</string>
+    <string name="stats_range_week">این هفته</string>
+    <string name="stats_range_month">این ماه</string>
+    <string name="stats_range_all_time">همه زمان‌ها</string>
+    <string name="stats_total_time">کل زمان گوش دادن</string>
+    <string name="stats_top_tracks">برترین آهنگ‌ها</string>
+    <string name="stats_top_artists">برترین هنرمندان</string>
+    <string name="stats_top_albums">برترین آلبوم‌ها</string>
+    <string name="stats_empty_title">هنوز آماری ثبت نشده است</string>
+    <string name="stats_empty_desc">برای مشاهده آمار و رتبه‌بندی‌ها، آهنگ‌های مورد علاقه‌تان را پخش کنید.</string>
+    <string name="stats_play_count">%1$d بار پخش</string>
+    <string name="home_recently_played">اخیراً پخش شده</string>
+    <string name="home_most_played">بیشترین پخش</string>
+    <string name="home_browse_library">مشاهده کتابخانه</string>
+    <string name="home_stats_card_title">عادت‌های موسیقی شما</string>
+    <string name="home_stats_card_desc">شما %1$s به موسیقی گوش داده‌اید</string>
+    <string name="home_stats_card_action">مشاهده آمار گوش دادن</string>
+    <string name="cd_stats_icon">آمار گوش دادن</string>
+    <string name="settings_stats_title">آمار گوش دادن</string>
+    <string name="settings_stats_desc">مشاهده برترین آهنگ‌ها، هنرمندان و زمان گوش دادن</string>
+
+    <!-- Phase 6: Lyrics -->
+    <string name="cd_lyrics">متن آهنگ</string>
+    <string name="lyrics_loading">در حال دریافت متن آهنگ…</string>
+    <string name="lyrics_empty_title">متن آهنگی یافت نشد</string>
+    <string name="lyrics_empty_desc">یک فایل .lrc وارد کنید یا متن آنلاین را در تنظیمات فعال کنید.</string>
+    <string name="btn_import_lrc">وارد کردن فایل .lrc</string>
+    <string name="btn_fetch_online">جستجوی آنلاین</string>
+    <string name="cd_import_lrc">وارد کردن فایل متن آهنگ</string>
+    <string name="settings_lrclib_title">متن آهنگ آنلاین (LRCLIB)</string>
+    <string name="settings_lrclib_desc">دریافت خودکار متن همگام‌سازی شده از lrclib.net</string>
+
+    <!-- Phase 7: Extras (Sleep timer, Equalizer, Playback speed) -->
+    <string name="sleep_timer_title">تایمر خواب</string>
+    <string name="sleep_timer_off">تایمر خاموش</string>
+    <string name="sleep_timer_15m">۱۵ دقیقه</string>
+    <string name="sleep_timer_30m">۳۰ دقیقه</string>
+    <string name="sleep_timer_45m">۴۵ دقیقه</string>
+    <string name="sleep_timer_60m">۶۰ دقیقه</string>
+    <string name="sleep_timer_end_of_track">پایان آهنگ فعلی</string>
+    <string name="sleep_timer_active">فعال: %1$s باقی‌مانده</string>
+    <string name="sleep_timer_remaining">%1$s</string>
+    <string name="sleep_timer_cancel">لغو تایمر</string>
+    <string name="cd_sleep_timer">تایمر خواب</string>
+
+    <string name="playback_speed_title">سرعت پخش</string>
+    <string name="speed_format">%1$.2fx</string>
+    <string name="speed_normal">۱.۰x (عادی)</string>
+    <string name="speed_reset">بازنشانی</string>
+    <string name="cd_playback_speed">سرعت پخش</string>
+
+    <string name="equalizer_title">اکولایزر</string>
+    <string name="settings_equalizer_title">اکولایزر</string>
+    <string name="settings_equalizer_desc">فرکانس‌های صوتی، حالت‌های پیش‌فرض و پروفایل صدا</string>
+    <string name="equalizer_enable">فعال‌سازی اکولایزر</string>
+    <string name="equalizer_presets">حالت‌های پیش‌فرض</string>
+    <string name="equalizer_custom">سفارشی</string>
+    <string name="equalizer_reset">بازنشانی به حالت پیش‌فرض</string>
+    <string name="equalizer_not_supported">اکولایزر در این دستگاه/شبیه‌ساز پشتیبانی نمی‌شود</string>
+    <string name="equalizer_band_db">%1$+d دسی‌بل</string>
+    <string name="cd_equalizer">اکولایزر</string>
+    <string name="cd_equalizer_band">باند %1$s</string>
+
+    <!-- Phase 8: Smart Mixes & Personalization -->
+    <string name="home_daily_mixes">میکس‌های روزانه</string>
+    <string name="daily_mix_play">پخش %1$s</string>
+    <string name="settings_category_appearance">ظاهر و پوسته</string>
+    <string name="settings_category_library">کتابخانه و اسکن</string>
+    <string name="settings_category_audio">صدا و جلوه‌ها</string>
+    <string name="settings_theme_title">پوسته</string>
+    <string name="settings_theme_system">پیروی از سیستم</string>
+    <string name="settings_theme_light">روشن</string>
+    <string name="settings_theme_dark">تاریک</string>
+    <string name="settings_color_source_title">منبع رنگ</string>
+    <string name="settings_color_wallpaper">تصویر پس‌زمینه سیستم (متریال یو)</string>
+    <string name="settings_color_album_art">رنگ پویای کاور آلبوم</string>
+    <string name="settings_color_fixed">پالت رنگ اختصاصی</string>
+    <string name="settings_corner_title">گردی گوشه‌ها</string>
+    <string name="settings_corner_standard">استاندارد</string>
+    <string name="settings_corner_soft">نرم و گرد</string>
+    <string name="settings_corner_sharp">تیز و ساده</string>
+    <string name="settings_compact_mini_player_title">پخش‌کننده کوچک فشرده</string>
+    <string name="settings_compact_mini_player_desc">استفاده از نمای باریک‌تر برای پخش‌کننده کوچک</string>
+    <string name="settings_min_track_length_title">حداقل طول آهنگ</string>
+    <string name="settings_min_track_length_desc">نادیده گرفتن فایل‌های صوتی کوتاه: %1$s</string>
+    <string name="settings_min_length_0s">همه فایل‌ها (۰ ثانیه)</string>
+    <string name="settings_min_length_15s">۱۵ ثانیه</string>
+    <string name="settings_min_length_30s">۳۰ ثانیه</string>
+    <string name="settings_min_length_60s">۶۰ ثانیه</string>
+    <string name="settings_excluded_folders_title">پوشه‌های نادیده‌گرفته‌شده</string>
+    <string name="settings_excluded_folders_desc">%1$d پوشه نادیده گرفته شده</string>
+    <string name="settings_excluded_folders_dialog_title">نادیده گرفتن پوشه‌ها</string>
+    <string name="settings_no_folders_found">هیچ پوشه‌ای در کتابخانه یافت نشد</string>
+
+    <!-- Phase 9: Widget & Onboarding -->
+    <string name="widget_name">پخش‌کننده موسیقی</string>
+    <string name="widget_description">کنترل سریع پخش و آهنگ در حال پخش</string>
+    <string name="no_track_playing">در حال پخش نیست</string>
+    <string name="cd_widget_play_pause">پخش یا توقف</string>
+    <string name="cd_widget_next">آهنگ بعدی</string>
+    <string name="cd_widget_prev">آهنگ قبلی</string>
+
+    <string name="onboarding_welcome_title">به پخش‌کننده موسیقی خوش آمدید</string>
+    <string name="onboarding_welcome_subtitle">تجربه‌ای مدرن و آفلاین که برای مجموعه موسیقی شخصی شما طراحی شده است.</string>
+    <string name="onboarding_feature_offline_title">۱۰۰٪ آفلاین و خصوصی</string>
+    <string name="onboarding_feature_offline_desc">موسیقی‌های شما کاملاً بر روی دستگاه شما باقی می‌ماند بدون هیچ ردیابی.</string>
+    <string name="onboarding_feature_audio_title">کیفیت برتر و اکولایزر</string>
+    <string name="onboarding_feature_audio_desc">شامل اکولایزر ۵ بانده، تایمر خواب و تنظیمات سرعت پخش.</string>
+    <string name="onboarding_feature_lyrics_title">متن همگام و میکس روزانه</string>
+    <string name="onboarding_feature_lyrics_desc">از متن‌های شناور .lrc و ۳ میکس روزانه متناسب با سلیقه خود لذت ببرید.</string>
+    <string name="onboarding_feature_clean_title">کتابخانه تمیز به‌صورت پیش‌فرض</string>
+    <string name="onboarding_feature_clean_desc">فایل‌های صوتی زیر ۶۰ ثانیه و وویس‌های پیام‌رسان به‌صورت خودکار فیلتر می‌شوند. در تنظیمات قابل تغییر است.</string>
+    <string name="onboarding_permission_info">برای شروع، دسترسی به فایل‌های صوتی برای اسکن کتابخانه و دسترسی به اعلان‌ها برای کنترل پخش لازم است.</string>
+    <string name="onboarding_btn_start">شروع کنید</string>
+ 
+    <!-- Overhaul: Genres, Sorting, Fast Scroll, and Enhanced Controls -->
+    <string name="tab_genres">سبک‌ها</string>
+    <string name="empty_genres">هیچ سبکی یافت نشد</string>
+    <string name="empty_genre_tracks">هیچ آهنگی در این سبک وجود ندارد</string>
+    <string name="genre_track_count">%1$d آهنگ</string>
+    <string name="cd_genre_item">سبک %1$s</string>
+    <string name="sort_by_title">مرتب‌سازی بر اساس</string>
+    <string name="sort_title">عنوان آهنگ</string>
+    <string name="sort_artist">هنرمند</string>
+    <string name="sort_album">آلبوم</string>
+    <string name="sort_date_added">تاریخ افزودن</string>
+    <string name="sort_duration">مدت زمان</string>
+    <string name="sort_ascending">صعودی</string>
+    <string name="sort_descending">نزولی</string>
+    <string name="cd_rewind_10">۱۰ ثانیه به عقب</string>
+    <string name="cd_forward_10">۱۰ ثانیه به جلو</string>
+    <string name="offline_audio_badge">فایل محلی</string>
+    <string name="equalizer_bands_title">باندهای فرکانسی</string>
+    <string name="audio_effects_title">افکت‌های صوتی</string>
+    <string name="bass_boost_label">تقویت بیس (Bass Boost)</string>
+    <string name="virtualizer_label">صدای فراگیر (Virtualizer)</string>
+ 
+    <!-- Lyrics manual entry & AI features -->
+    <string name="lyrics_empty_prompt_desc">متن آهنگی یافت نشد. می‌توانید فایل .lrc وارد کنید، آنلاین جستجو کنید، یا متن را دستی بنویسید.</string>
+    <string name="lyrics_enter_manually_btn">افزودن دستی متن آهنگ</string>
+    <string name="lyrics_manual_dialog_title">ویرایش یا درج متن آهنگ</string>
+    <string name="lyrics_manual_dialog_hint">متن را وارد کنید (عادی یا همگام با زمان [mm:ss.xx]):</string>
+    <string name="lyrics_manual_dialog_placeholder">متن ترانه را اینجا بنویسید…</string>
+    <string name="lyrics_edit_action">ویرایش متن</string>
+    <string name="save_lyrics">ذخیره متن</string>
+    <string name="home_ai_mood_title">میکس‌ها و حال‌وهوا</string>
+
+    <!-- Enhanced Menus & Lyrics Actions -->
+    <string name="action_view_lyrics">مشاهده و ویرایش متن آهنگ</string>
+    <string name="action_search_lyrics_google">جستجوی متن در گوگل</string>
+    <string name="action_delete_lyrics">حذف متن آهنگ</string>
+    <string name="dialog_delete_lyrics_title">حذف متن آهنگ</string>
+    <string name="dialog_delete_lyrics_confirm">آیا مطمئن هستید که می‌خواهید متن آهنگ «%1$s» را حذف کنید؟</string>
+    <string name="lyrics_deleted">متن آهنگ حذف شد</string>
+    <string name="action_paste_lyrics">جای‌گذاری از کلیپ‌بورد</string>
+    <string name="clipboard_empty">کلیپ‌بورد خالی است</string>
+    <string name="action_export_lrc">خروجی فایل .lrc</string>
+    <string name="lyrics_saved_to_file">متن ترانه در کنار فایل آهنگ ذخیره شد</string>
+    <string name="action_go_to_album">رفتن به آلبوم</string>
+    <string name="action_go_to_artist">رفتن به هنرمند</string>
+    <string name="action_song_details">مشخصات آهنگ</string>
+    <string name="dialog_song_details_title">اطلاعات فایل و آهنگ</string>
+    <string name="detail_title">عنوان</string>
+    <string name="detail_artist">هنرمند</string>
+    <string name="detail_album">آلبوم</string>
+    <string name="detail_duration">مدت زمان</string>
+    <string name="detail_file_path">مسیر فایل</string>
+    <string name="detail_file_size">حجم فایل</string>
+    <string name="detail_source">منبع</string>
+    <string name="action_share_song">اشتراک‌گذاری آهنگ</string>
+    <string name="action_delete_song">حذف فایل آهنگ</string>
+    <string name="dialog_delete_song_title">حذف فایل از دستگاه</string>
+    <string name="dialog_delete_song_confirm">آیا از حذف آهنگ «%1$s» از حافظه دستگاه مطمئن هستید؟ این عملیات غیرقابل بازگشت است.</string>
+    <string name="song_deleted">آهنگ حذف شد</string>
+    <string name="cd_close_player">بستن پلیر</string>
+    <string name="btn_close">بستن</string>
+    <string name="player_more_options">گزینه‌های بیشتر</string>
+    <string name="player_menu_equalizer">اکولایزر</string>
+</resources>
