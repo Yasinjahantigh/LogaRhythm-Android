@@ -176,4 +176,25 @@ class StatsAggregationTest {
         assertEquals("local:3", mostPlayed[0].id)
         assertEquals("local:1", mostPlayed[1].id)
     }
+
+    @Test
+    fun skippedEvents_doNotCountAsPlaysButFinalListenTimeIsCorrected() = runBlocking {
+        dao.insertPlayEvent(PlayEventEntity(trackId = "local:1", timestamp = 1000L, listenedMs = 30_000L))
+        dao.insertPlayEvent(PlayEventEntity(trackId = "local:1", timestamp = 2000L, listenedMs = 4_000L, skipped = true))
+        dao.insertPlayEvent(PlayEventEntity(trackId = "local:2", timestamp = 3000L, listenedMs = 3_000L, skipped = true))
+
+        val top = dao.getTopTracks(0L).first()
+        assertEquals(1, top.size)
+        assertEquals(1, top[0].playCount)
+        assertEquals(30_000L, top[0].totalListenedMs)
+        assertEquals(listOf("local:1"), dao.getMostPlayedTracks(10).first().map { it.id })
+        assertEquals(listOf("local:1"), dao.getRecentlyPlayedTracks(10).first().map { it.id })
+
+        // The scrobbler logs a play at the 30s threshold, then corrects it to the real total.
+        dao.updatePlayEventListened("local:1", 1000L, 215_000L)
+        assertEquals(215_000L, dao.getTopTracks(0L).first()[0].totalListenedMs)
+        // A skip's timestamp must never be rewritten as if it were a play.
+        dao.updatePlayEventListened("local:1", 2000L, 999_000L)
+        assertEquals(215_000L + 4_000L, dao.getTotalListenTimeMs().first() - 3_000L)
+    }
 }

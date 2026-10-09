@@ -212,7 +212,7 @@
     <string name="settings_color_source_title">Color Source</string>
     <string name="settings_color_wallpaper">System Wallpaper (Material You)</string>
     <string name="settings_color_album_art">Album Art Dynamic Color</string>
-    <string name="settings_color_fixed">Fixed Signature Palette</string>
+    <string name="settings_color_fixed">LogaRhythm Ink &amp; Ember</string>
     <string name="settings_corner_title">Corner Roundness</string>
     <string name="settings_corner_standard">Standard</string>
     <string name="settings_corner_soft">Soft &amp; Rounded</string>
@@ -326,4 +326,18 @@
     <string name="search_no_results_hint">Try a shorter title, artist name, or album.</string>
     <string name="search_clear_query_action">Clear search</string>
     <string name="search_album_metadata">%1$s • %2$d songs</string>
+    <string name="home_greeting_morning">Good morning</string>
+    <string name="home_greeting_afternoon">Good afternoon</string>
+    <string name="home_greeting_evening">Good evening</string>
+    <string name="home_greeting_night">Late night</string>
+    <string name="home_right_now_label">RIGHT NOW</string>
+    <string name="home_right_now_morning">Your morning</string>
+    <string name="home_right_now_afternoon">Your afternoon</string>
+    <string name="home_right_now_evening">Your evening</string>
+    <string name="home_right_now_night">Your night</string>
+    <string name="home_right_now_habit">Songs you reach for at this hour</string>
+    <string name="home_right_now_mood">A gentle start while LogaRhythm learns your rhythm</string>
+    <string name="home_right_now_play">Play</string>
+    <string name="home_on_repeat">On repeat</string>
+    <string name="home_because_played">Because you played %1$s</string>
 </resources>

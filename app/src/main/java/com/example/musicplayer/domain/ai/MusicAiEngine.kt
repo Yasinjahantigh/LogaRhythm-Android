@@ -1,6 +1,7 @@
 package com.example.musicplayer.domain.ai
 
 import com.example.musicplayer.domain.model.Track
+import com.example.musicplayer.domain.taste.TasteProfile
 import kotlin.math.abs
 
 /**
@@ -101,18 +102,34 @@ object MusicAiEngine {
         currentTrack: Track,
         allTracks: List<Track>,
         limit: Int = 10,
-        excludedTrackIds: Set<String> = emptySet()
+        excludedTrackIds: Set<String> = emptySet(),
+        profile: TasteProfile? = null
     ): List<Track> {
         if (limit <= 0) return emptyList()
         val candidates = allTracks.distinctBy { it.id }
             .filter { it.id != currentTrack.id && it.id !in excludedTrackIds }
-            .map { candidate -> candidate to calculateSimilarity(currentTrack, candidate) }
+            .map { candidate ->
+                var distance = calculateSimilarity(currentTrack, candidate)
+                if (profile != null) {
+                    // Real listening beats metadata guesses: songs heard together pull closer,
+                    // loved songs get a nudge, and songs the listener keeps skipping sink.
+                    distance -= profile.coListenStrength(currentTrack.id, candidate.id).toFloat() * 0.45f
+                    distance -= profile.affinity(candidate.id).coerceIn(-2.0, 3.0).toFloat() * 0.04f
+                    if (profile.isDisliked(candidate.id)) distance += 0.5f
+                }
+                candidate to distance
+            }
             .sortedWith(compareBy<Pair<Track, Float>> { it.second }.thenBy { it.first.title.lowercase() })
         return selectDiverse(candidates, limit)
     }
 
     /** Generates a mood queue using energy, valence, acoustic character, and estimated danceability. */
-    fun generateMoodPlaylist(mood: AiMood, allTracks: List<Track>, count: Int = 15): List<Track> {
+    fun generateMoodPlaylist(
+        mood: AiMood,
+        allTracks: List<Track>,
+        count: Int = 15,
+        profile: TasteProfile? = null
+    ): List<Track> {
         if (allTracks.isEmpty() || count <= 0) return emptyList()
         val ranked = allTracks.distinctBy { it.id }.map { track ->
             val dna = analyzeTrackDna(track)
@@ -120,7 +137,11 @@ object MusicAiEngine {
                 abs(dna.moodValence - mood.targetValence) * 0.30f +
                 abs(dna.acousticScore - mood.targetAcoustic) * 0.16f +
                 abs(dna.danceabilityScore - mood.targetDanceability) * 0.12f
-            track to distance
+            val tasteAdjusted = if (profile == null) distance else {
+                distance - profile.affinity(track.id).coerceIn(-2.0, 3.0).toFloat() * 0.02f +
+                    (if (profile.isDisliked(track.id)) 0.4f else 0f)
+            }
+            track to tasteAdjusted
         }.sortedWith(compareBy<Pair<Track, Float>> { it.second }.thenBy { it.first.title.lowercase() })
 
         // Diversity is applied only to a relevant candidate pool, so novelty cannot swamp mood fit.

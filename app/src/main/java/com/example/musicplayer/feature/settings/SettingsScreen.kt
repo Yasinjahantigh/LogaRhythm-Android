@@ -84,9 +84,9 @@ fun SettingsScreen(
         SingleChoiceDialog(
             title = stringResource(R.string.settings_color_source_title),
             options = listOf(
+                "fixed_color" to stringResource(R.string.settings_color_fixed),
                 "wallpaper" to stringResource(R.string.settings_color_wallpaper),
-                "album_art" to stringResource(R.string.settings_color_album_art),
-                "fixed_color" to stringResource(R.string.settings_color_fixed)
+                "album_art" to stringResource(R.string.settings_color_album_art)
             ),
             selectedKey = colorSource,
             onSelectKey = viewModel::setColorSource,
@@ -190,8 +190,8 @@ fun SettingsScreen(
             item {
                 val colorLabel = when (colorSource) {
                     "album_art" -> stringResource(R.string.settings_color_album_art)
-                    "fixed_color" -> stringResource(R.string.settings_color_fixed)
-                    else -> stringResource(R.string.settings_color_wallpaper)
+                    "wallpaper" -> stringResource(R.string.settings_color_wallpaper)
+                    else -> stringResource(R.string.settings_color_fixed)
                 }
                 SettingsActionItem(
                     title = stringResource(R.string.settings_color_source_title),

@@ -284,6 +284,17 @@
 - Added focused JVM tests for empty-library handling, requested playlist limits, and duplicate-free results.
 - Rewrote README with product scope, privacy model, architecture, and accurate setup instructions.
 
+## Product Evolution Pass — 2026-10-09
+- **Listening history fixed**: `PlayScrobbler` previously logged one event at ~30s and never updated it, so total listening time was badly understated, and skips were invisible. It now logs the play at the threshold, corrects `listenedMs` to the real total (periodically and on track change), and records skips as `play_events.skipped = 1` (Room v7, `MIGRATION_6_7`, default 0 so existing history is preserved). Thresholds live in `domain/stats/ListenPolicy`.
+- All stats/“recently played”/“most played” queries exclude skipped events; total listening time includes them.
+- **Taste engine** (`domain/taste/TasteProfile`): recency-weighted affinity (plays up, skips down, favorites boosted), co-listening between tracks played in the same sitting, per-track time-of-day weights, and a conservative `isDisliked`.
+- **Discovery** (`domain/discovery/Discovery`): `rightNow` (habits at this hour, mood top-up for new listeners), `onRepeat`, `becauseYouPlayed`.
+- `MusicAiEngine.recommendNextTracks`/`generateMoodPlaylist` accept an optional `TasteProfile`; track radio (`PlayerViewModel.startTrackRadio`) now uses it. `DailyMixGenerator` ignores skips as plays and penalizes skipped tracks.
+- **Home** leads with a time-of-day greeting and the “Right now” card, followed by On repeat and Because-you-played shelves, then the existing session card, moods, mixes, and history.
+- **Visual identity**: “Ink & Ember” palette (default color source is now `fixed_color`; wallpaper and album-art remain selectable), fully specified surface-container roles (the album-art scheme previously leaked baseline purple-grey containers), and serif display type for headlines/titles.
+- Tests added: `ListenPolicyTest`, `TasteProfileTest`, `DiscoveryTest`, and a DAO test for skip handling.
+- Verification note: the pure-Kotlin domain code was compiled and exercised with kotlinc; Android/Compose/Room changes were not compiled in this environment.
+
 ## Known Issues
 - Online website streaming source is planned for a future online phase.
 - The source archive omits `gradlew`, `gradlew.bat`, and `gradle-wrapper.jar`; generate them with Gradle 9.3.1 before using the wrapper commands.

@@ -9,6 +9,8 @@ import kotlinx.coroutines.flow.Flow
 
 interface StatsRepository {
     suspend fun recordPlayEvent(event: PlayEvent)
+    /** Corrects a provisional event's listened time once the track has actually finished or been left. */
+    suspend fun updatePlayEventListened(trackId: String, timestamp: Long, listenedMs: Long)
 
     fun getPlayEventsForTrack(trackId: String): Flow<List<PlayEvent>>
 

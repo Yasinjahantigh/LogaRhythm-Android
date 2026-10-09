@@ -176,6 +176,10 @@ interface MusicDao {
     @Insert
     suspend fun insertPlayEvent(event: PlayEventEntity)
 
+    /** Replaces the provisional listened time recorded at the play threshold with the final total. */
+    @Query("UPDATE play_events SET listenedMs = :listenedMs WHERE trackId = :trackId AND timestamp = :timestamp AND skipped = 0")
+    suspend fun updatePlayEventListened(trackId: String, timestamp: Long, listenedMs: Long)
+
     @Query("SELECT COALESCE(SUM(listenedMs), 0) FROM play_events")
     fun getTotalListenTimeMs(): Flow<Long>
 
@@ -188,7 +192,7 @@ interface MusicDao {
                COALESCE(SUM(pe.listenedMs), 0) AS totalListenedMs
         FROM play_events pe
         INNER JOIN tracks t ON pe.trackId = t.id
-        WHERE pe.timestamp >= :sinceTimestamp
+        WHERE pe.timestamp >= :sinceTimestamp AND pe.skipped = 0
         GROUP BY pe.trackId
         ORDER BY playCount DESC, totalListenedMs DESC
         LIMIT :limit
@@ -202,7 +206,7 @@ interface MusicDao {
                COUNT(DISTINCT t.id) AS trackCount
         FROM play_events pe
         INNER JOIN tracks t ON pe.trackId = t.id
-        WHERE pe.timestamp >= :sinceTimestamp AND t.artist != ''
+        WHERE pe.timestamp >= :sinceTimestamp AND pe.skipped = 0 AND t.artist != ''
         GROUP BY t.artist
         ORDER BY playCount DESC, totalListenedMs DESC
         LIMIT :limit
@@ -218,7 +222,7 @@ interface MusicDao {
                COUNT(DISTINCT t.id) AS trackCount
         FROM play_events pe
         INNER JOIN tracks t ON pe.trackId = t.id
-        WHERE pe.timestamp >= :sinceTimestamp AND t.album != ''
+        WHERE pe.timestamp >= :sinceTimestamp AND pe.skipped = 0 AND t.album != ''
         GROUP BY t.album, t.artist
         ORDER BY playCount DESC, totalListenedMs DESC
         LIMIT :limit
@@ -229,6 +233,7 @@ interface MusicDao {
         SELECT t.*
         FROM play_events pe
         INNER JOIN tracks t ON pe.trackId = t.id
+        WHERE pe.skipped = 0
         GROUP BY pe.trackId
         ORDER BY MAX(pe.timestamp) DESC
         LIMIT :limit
@@ -239,6 +244,7 @@ interface MusicDao {
         SELECT t.*
         FROM play_events pe
         INNER JOIN tracks t ON pe.trackId = t.id
+        WHERE pe.skipped = 0
         GROUP BY pe.trackId
         ORDER BY COUNT(pe.id) DESC, SUM(pe.listenedMs) DESC
         LIMIT :limit
