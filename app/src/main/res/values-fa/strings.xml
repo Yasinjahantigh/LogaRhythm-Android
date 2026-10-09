@@ -212,7 +212,7 @@
     <string name="settings_color_source_title">منبع رنگ</string>
     <string name="settings_color_wallpaper">تصویر پس‌زمینه سیستم (متریال یو)</string>
     <string name="settings_color_album_art">رنگ پویای کاور آلبوم</string>
-    <string name="settings_color_fixed">پالت رنگ اختصاصی</string>
+    <string name="settings_color_fixed">جوهر و شراره LogaRhythm</string>
     <string name="settings_corner_title">گردی گوشه‌ها</string>
     <string name="settings_corner_standard">استاندارد</string>
     <string name="settings_corner_soft">نرم و گرد</string>
@@ -326,4 +326,18 @@
     <string name="search_no_results_hint">عنوان کوتاه‌تر، نام خواننده یا نام آلبوم را امتحان کن</string>
     <string name="search_clear_query_action">پاک کردن جستجو</string>
     <string name="search_album_metadata">%1$s • %2$d آهنگ</string>
+    <string name="home_greeting_morning">صبح بخیر</string>
+    <string name="home_greeting_afternoon">بعدازظهر بخیر</string>
+    <string name="home_greeting_evening">عصر بخیر</string>
+    <string name="home_greeting_night">دل شب</string>
+    <string name="home_right_now_label">همین حالا</string>
+    <string name="home_right_now_morning">صبح تو</string>
+    <string name="home_right_now_afternoon">بعدازظهر تو</string>
+    <string name="home_right_now_evening">عصر تو</string>
+    <string name="home_right_now_night">شب تو</string>
+    <string name="home_right_now_habit">آهنگ‌هایی که در این ساعت سراغشان می‌روی</string>
+    <string name="home_right_now_mood">شروعی ملایم تا LogaRhythm ریتم تو را بشناسد</string>
+    <string name="home_right_now_play">پخش</string>
+    <string name="home_on_repeat">روی تکرار</string>
+    <string name="home_because_played">چون «%1$s» را گوش دادی</string>
 </resources>

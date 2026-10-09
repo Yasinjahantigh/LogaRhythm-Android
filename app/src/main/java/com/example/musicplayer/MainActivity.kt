@@ -37,7 +37,7 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             val themeMode by preferencesManager.themeMode.collectAsStateWithLifecycle(initialValue = "system")
-            val colorSource by preferencesManager.colorSource.collectAsStateWithLifecycle(initialValue = "wallpaper")
+            val colorSource by preferencesManager.colorSource.collectAsStateWithLifecycle(initialValue = "fixed_color")
             val cornerRoundness by preferencesManager.cornerRoundness.collectAsStateWithLifecycle(initialValue = "standard")
             val isOnboardingCompleted by preferencesManager.isOnboardingCompleted.collectAsStateWithLifecycle(initialValue = false)
             val currentTrack by playerController.currentTrack.collectAsStateWithLifecycle()

@@ -27,6 +27,8 @@ import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Psychology
+import androidx.compose.material.icons.filled.Autorenew
+import androidx.compose.material.icons.filled.Radio
 import androidx.compose.material.icons.filled.Whatshot
 import androidx.compose.material.icons.filled.WbSunny
 import androidx.compose.material3.Button
@@ -60,6 +62,8 @@ import com.example.musicplayer.domain.model.Track
 import com.example.musicplayer.feature.library.TrackListItem
 import com.example.musicplayer.feature.playlist.AddToPlaylistDialog
 import com.example.musicplayer.feature.playlist.SongMenuBottomSheet
+import com.example.musicplayer.ui.theme.DisplayFontFamily
+import com.example.musicplayer.domain.discovery.Discovery
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -77,6 +81,9 @@ fun HomeScreen(
     val mostPlayed by viewModel.mostPlayed.collectAsStateWithLifecycle()
     val totalTimeMs by viewModel.totalListenTimeMs.collectAsStateWithLifecycle()
     val playlists by viewModel.playlists.collectAsStateWithLifecycle()
+    val rightNow by viewModel.rightNow.collectAsStateWithLifecycle()
+    val onRepeat by viewModel.onRepeat.collectAsStateWithLifecycle()
+    val becauseYouPlayed by viewModel.becauseYouPlayed.collectAsStateWithLifecycle()
 
     var selectedTrackForMenu by remember { mutableStateOf<Track?>(null) }
     var trackForAddToPlaylist by remember { mutableStateOf<Track?>(null) }
@@ -93,8 +100,10 @@ fun HomeScreen(
             TopAppBar(
                 title = {
                     Text(
-                        text = stringResource(id = R.string.home_title),
-                        fontWeight = FontWeight.Bold
+                        text = rightNow?.let { greetingFor(it.daypart) }
+                            ?: stringResource(id = R.string.home_title),
+                        style = MaterialTheme.typography.headlineMedium,
+                        fontFamily = DisplayFontFamily
                     )
                 }
             )
@@ -147,6 +156,44 @@ fun HomeScreen(
                     .testTag("home_content_list"),
                 contentPadding = PaddingValues(bottom = bottomPadding + 24.dp)
             ) {
+                rightNow?.takeIf { it.tracks.isNotEmpty() }?.let { now ->
+                    item {
+                        RightNowCard(rightNow = now, onPlay = viewModel::playRightNow)
+                    }
+                }
+
+                if (onRepeat.isNotEmpty()) {
+                    item {
+                        HomeSectionHeader(
+                            title = stringResource(R.string.home_on_repeat),
+                            icon = Icons.Filled.Autorenew
+                        )
+                    }
+                    item {
+                        TrackShelf(
+                            tracks = onRepeat,
+                            tagPrefix = "on_repeat",
+                            onPlay = { list, index -> viewModel.playTracks(list, index) }
+                        )
+                    }
+                }
+
+                becauseYouPlayed?.let { because ->
+                    item {
+                        HomeSectionHeader(
+                            title = stringResource(R.string.home_because_played, because.seed.title),
+                            icon = Icons.Filled.Radio
+                        )
+                    }
+                    item {
+                        TrackShelf(
+                            tracks = because.tracks,
+                            tagPrefix = "because_played",
+                            onPlay = { list, index -> viewModel.playTracks(list, index) }
+                        )
+                    }
+                }
+
                 if (allTracks.isNotEmpty()) {
                     item {
                         ListeningSessionCard(

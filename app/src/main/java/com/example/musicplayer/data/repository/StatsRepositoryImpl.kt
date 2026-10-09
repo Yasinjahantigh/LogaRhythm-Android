@@ -24,9 +24,14 @@ class StatsRepositoryImpl @Inject constructor(
             PlayEventEntity(
                 trackId = event.trackId,
                 timestamp = event.timestamp,
-                listenedMs = event.listenedMs
+                listenedMs = event.listenedMs,
+                skipped = event.skipped
             )
         )
+    }
+
+    override suspend fun updatePlayEventListened(trackId: String, timestamp: Long, listenedMs: Long) {
+        musicDao.updatePlayEventListened(trackId, timestamp, listenedMs)
     }
 
     override fun getPlayEventsForTrack(trackId: String): Flow<List<PlayEvent>> {
@@ -36,7 +41,8 @@ class StatsRepositoryImpl @Inject constructor(
                     id = entity.id,
                     trackId = entity.trackId,
                     timestamp = entity.timestamp,
-                    listenedMs = entity.listenedMs
+                    listenedMs = entity.listenedMs,
+                    skipped = entity.skipped
                 )
             }
         }
@@ -49,7 +55,8 @@ class StatsRepositoryImpl @Inject constructor(
                     id = entity.id,
                     trackId = entity.trackId,
                     timestamp = entity.timestamp,
-                    listenedMs = entity.listenedMs
+                    listenedMs = entity.listenedMs,
+                    skipped = entity.skipped
                 )
             }
         }

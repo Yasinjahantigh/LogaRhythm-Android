@@ -3,6 +3,7 @@ package com.example.musicplayer.feature.home
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.musicplayer.domain.ai.MusicAiEngine
+import com.example.musicplayer.domain.discovery.Discovery
 import com.example.musicplayer.domain.mix.DailyMixGenerator
 import com.example.musicplayer.domain.model.DailyMix
 import com.example.musicplayer.domain.model.Playlist
@@ -11,9 +12,16 @@ import com.example.musicplayer.domain.repository.PlaylistRepository
 import com.example.musicplayer.domain.repository.StatsRepository
 import com.example.musicplayer.domain.repository.TrackRepository
 import com.example.musicplayer.domain.session.ListeningSessionPlanner
+import com.example.musicplayer.domain.taste.TasteProfile
 import com.example.musicplayer.playback.PlayerController
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.Dispatchers
+import java.util.Calendar
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
@@ -94,6 +102,63 @@ class HomeViewModel @Inject constructor(
         started = SharingStarted.WhileSubscribed(5000),
         initialValue = emptyList()
     )
+
+    private val allPlayEvents = statsRepository.getAllPlayEvents()
+
+    /** What the listener's own history says about their taste; empty until there is history. */
+    private val tasteProfile: StateFlow<TasteProfile> = combine(allPlayEvents, favoritesTrackIds) { events, favIds ->
+        TasteProfile.build(events, favIds)
+    }
+        .flowOn(Dispatchers.Default)
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = TasteProfile.EMPTY
+        )
+
+    /** Local hour of day, refreshed so Home's daypart follows the clock while the app stays open. */
+    private val currentHour = flow {
+        while (true) {
+            emit(Calendar.getInstance().get(Calendar.HOUR_OF_DAY))
+            delay(60_000L)
+        }
+    }.distinctUntilChanged()
+
+    val rightNow: StateFlow<Discovery.RightNow?> = combine(allTracks, tasteProfile, currentHour) { tracks, profile, hour ->
+        if (tracks.isEmpty()) null else Discovery.rightNow(tracks, profile, hour)
+    }
+        .flowOn(Dispatchers.Default)
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = null
+        )
+
+    val onRepeat: StateFlow<List<Track>> = combine(allTracks, allPlayEvents) { tracks, events ->
+        Discovery.onRepeat(tracks, events)
+    }
+        .flowOn(Dispatchers.Default)
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = emptyList()
+        )
+
+    val becauseYouPlayed: StateFlow<Discovery.BecauseYouPlayed?> = combine(allTracks, allPlayEvents, tasteProfile) { tracks, events, profile ->
+        Discovery.becauseYouPlayed(tracks, events, profile)
+    }
+        .flowOn(Dispatchers.Default)
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = null
+        )
+
+    /** Plays the current "right now" queue exactly as the card shows it. */
+    fun playRightNow() {
+        val queue = rightNow.value?.tracks.orEmpty()
+        if (queue.isNotEmpty()) playerController.play(queue, 0)
+    }
 
     fun playTracks(tracks: List<Track>, startIndex: Int = 0) {
         playerController.play(tracks, startIndex)

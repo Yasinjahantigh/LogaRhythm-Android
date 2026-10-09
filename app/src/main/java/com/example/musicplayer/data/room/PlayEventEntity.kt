@@ -1,5 +1,6 @@
 package com.example.musicplayer.data.room
 
+import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 
@@ -9,5 +10,6 @@ data class PlayEventEntity(
     val id: Long = 0L,
     val trackId: String,
     val timestamp: Long,
-    val listenedMs: Long
+    val listenedMs: Long,
+    @ColumnInfo(defaultValue = "0") val skipped: Boolean = false
 )

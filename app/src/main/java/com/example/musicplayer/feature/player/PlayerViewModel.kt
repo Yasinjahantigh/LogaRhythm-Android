@@ -6,6 +6,8 @@ import com.example.musicplayer.data.datastore.PreferencesManager
 import com.example.musicplayer.domain.ai.MusicAiEngine
 import com.example.musicplayer.domain.model.Track
 import com.example.musicplayer.domain.repository.PlaylistRepository
+import com.example.musicplayer.domain.repository.StatsRepository
+import com.example.musicplayer.domain.taste.TasteProfile
 import com.example.musicplayer.domain.repository.TrackRepository
 import com.example.musicplayer.playback.PlayerController
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -27,6 +29,7 @@ class PlayerViewModel @Inject constructor(
     private val playerController: PlayerController,
     private val playlistRepository: PlaylistRepository,
     private val trackRepository: TrackRepository,
+    private val statsRepository: StatsRepository,
     preferencesManager: PreferencesManager
 ) : ViewModel() {
 
@@ -107,10 +110,14 @@ class PlayerViewModel @Inject constructor(
         val seed = currentTrack.value ?: return
         viewModelScope.launch {
             val library = trackRepository.getAllTracks().first()
+            // Radio learns from real listening: songs heard together rise, skipped songs sink.
+            val favoriteIds = playlistRepository.getPlaylistTracks(1L).first().map { it.id }.toSet()
+            val profile = TasteProfile.build(statsRepository.getAllPlayEvents().first(), favoriteIds)
             val recommendations = MusicAiEngine.recommendNextTracks(
                 currentTrack = seed,
                 allTracks = library,
-                limit = 12
+                limit = 12,
+                profile = profile
             )
             if (recommendations.isNotEmpty()) playerController.playRadio(seed, recommendations)
             onResult(recommendations.size)

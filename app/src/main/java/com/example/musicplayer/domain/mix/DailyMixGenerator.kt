@@ -26,15 +26,19 @@ class DailyMixGenerator {
         val library = allTracks.distinctBy { it.id }
         if (library.isEmpty()) return emptyList()
 
-        val playCounts = playEvents.groupingBy { it.trackId }.eachCount()
-        val lastPlayed = playEvents.groupBy { it.trackId }
+        // Skips are not plays: they must not inflate familiarity, and they count against a track.
+        val completedEvents = playEvents.filter { !it.skipped }
+        val skipCounts = playEvents.filter { it.skipped }.groupingBy { it.trackId }.eachCount()
+        val playCounts = completedEvents.groupingBy { it.trackId }.eachCount()
+        val lastPlayed = completedEvents.groupBy { it.trackId }
             .mapValues { (_, events) -> events.maxOfOrNull { it.timestamp } ?: 0L }
         // Anchor time-based scoring to the supplied day so a mix cannot reshuffle mid-day.
         val snapshotTimeMs = seedDate * DAY_MS + DAY_MS / 2
 
         // Mix 1: familiar music, with favorites boosted and random tie ordering for daily variation.
         val familiarRanked = library.shuffled(Random(seedDate * 31L + 1L)).sortedByDescending { track ->
-            (playCounts[track.id] ?: 0) * 2.0 + if (track.id in favoriteTrackIds) 6.0 else 0.0
+            (playCounts[track.id] ?: 0) * 2.0 + (if (track.id in favoriteTrackIds) 6.0 else 0.0) -
+                (skipCounts[track.id] ?: 0) * 2.5
         }
         val familiar = diversifyByArtist(familiarRanked.take(MIX_SIZE), Random(seedDate * 31L + 11L))
 
@@ -47,7 +51,8 @@ class DailyMixGenerator {
                 ((snapshotTimeMs - lastTime).coerceAtLeast(0L) / DAY_MS).coerceAtMost(MAX_STALE_DAYS)
             val neverPlayedBonus = if (count == 0) 8.0 else 0.0
             return staleDays / 8.0 + neverPlayedBonus +
-                (if (track.id in favoriteTrackIds) 7.0 else 0.0) - count * 1.3
+                (if (track.id in favoriteTrackIds) 7.0 else 0.0) - count * 1.3 -
+                (skipCounts[track.id] ?: 0) * 1.5
         }
         // Prefer tracks not already in the familiar mix; only overlap when the library is small.
         val rediscoveryUnique = library.filter { it.id !in familiarIds }

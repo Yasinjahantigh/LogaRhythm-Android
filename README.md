@@ -8,13 +8,15 @@ LogaRhythm is an offline-first Android music player built with Kotlin, Jetpack C
 - Background playback through Media3, with a persistent mini player, full player, queue, and home-screen widget
 - Playlists, favorites, sorting, search history, and listening statistics
 - Synced lyrics from local files and optional online sources, plus manual editing and `.lrc` export
-- Offline mood mixes, three distinct daily-mix intents, and a one-tap “radio from this song” queue built from lightweight metadata similarity
+- A taste engine that learns from how you actually listen: completed plays, skips, songs heard together, and the hours you play them. It powers a time-of-day “Right now” queue, “On repeat”, “Because you played…”, smarter radio, and daily mixes that stop resurfacing songs you keep skipping
+- Honest listening history: plays log real listened time, and skips are recorded separately so they never inflate play counts
+- Offline mood mixes, three distinct daily-mix intents, and a one-tap “radio from this song” queue built from lightweight metadata similarity, now re-ranked by your own history
 - One-tap shuffle across the entire library, time-boxed 15/30/60-minute listening sessions, and a true Recently Added row driven by MediaStore's added timestamp
 - Safe library refreshes: a failed scan keeps the last successful index instead of treating the error as an empty library
 - Equalizer, bass boost, virtualizer, playback speed, and sleep timer where supported by the device
-- English and Persian UI with RTL support, localized search metadata, resilient artwork fallbacks, theme preferences, and dynamic color options
+- English and Persian UI with RTL support, localized search metadata, resilient artwork fallbacks, theme preferences, and a signature “Ink & Ember” palette with optional wallpaper and album-art color
 
-Mood suggestions are intentionally lightweight and private. They infer approximate energy, mood, acoustic character, and similarity from local metadata; they do not perform signal-level audio analysis or send your listening library to a recommendation service. Radio deliberately replaces the current queue, keeps the currently playing song and seek position where possible, then sequences relevant tracks with artist/album diversity.
+All personalization is computed on-device from your own play history; nothing is uploaded. Mood suggestions are intentionally lightweight and private. They infer approximate energy, mood, acoustic character, and similarity from local metadata; they do not perform signal-level audio analysis or send your listening library to a recommendation service. Radio deliberately replaces the current queue, keeps the currently playing song and seek position where possible, then sequences relevant tracks with artist/album diversity.
 
 ## Build
 

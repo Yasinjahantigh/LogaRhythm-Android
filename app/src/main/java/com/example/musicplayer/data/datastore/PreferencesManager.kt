@@ -64,7 +64,7 @@ class PreferencesManager @Inject constructor(
     }
 
     val colorSource: Flow<String> = dataStore.data.map { preferences ->
-        preferences[keyColorSource] ?: "wallpaper"
+        preferences[keyColorSource] ?: "fixed_color"
     }
 
     suspend fun setColorSource(source: String) {

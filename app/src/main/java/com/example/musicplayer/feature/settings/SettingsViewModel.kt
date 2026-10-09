@@ -29,7 +29,7 @@ class SettingsViewModel @Inject constructor(
         .stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5000),
-            initialValue = "wallpaper"
+            initialValue = "fixed_color"
         )
 
     val cornerRoundness: StateFlow<String> = preferencesManager.cornerRoundness
