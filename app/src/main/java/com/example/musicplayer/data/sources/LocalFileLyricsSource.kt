@@ -38,7 +38,7 @@ class LocalFileLyricsSource @Inject constructor(
             val lrcFile = File(lrcPath)
             if (lrcFile.exists() && lrcFile.canRead()) {
                 try {
-                    val content = lrcFile.readText()
+                    val content = decodeLrcFileContent(lrcFile)
                     val parsed = LrcParser.parse(content)
                     if (!parsed.isEmpty) return@withContext parsed
                 } catch (_: Exception) {
@@ -118,14 +118,13 @@ class LocalFileLyricsSource @Inject constructor(
                         (header[8].toInt() and 0x7F shl 7) or
                         (header[9].toInt() and 0x7F)
 
-                val tagData = ByteArray(tagSize.coerceAtMost(256 * 1024)) // Read up to 256KB
+                val tagData = ByteArray(tagSize.coerceAtMost(512 * 1024)) // Read up to 512KB
                 raf.readFully(tagData)
 
-                // Search for USLT or SYLT frame id
+                // Search for USLT frame id
                 val usltMarker = byteArrayOf('U'.code.toByte(), 'S'.code.toByte(), 'L'.code.toByte(), 'T'.code.toByte())
                 val index = indexOfBytes(tagData, usltMarker)
                 if (index != -1 && index + 10 < tagData.size) {
-                    // Frame header is 10 bytes (4 ID, 4 size, 2 flags)
                     val frameSize = if (version == 4) {
                         (tagData[index + 4].toInt() and 0x7F shl 21) or
                                 (tagData[index + 5].toInt() and 0x7F shl 14) or
@@ -139,25 +138,149 @@ class LocalFileLyricsSource @Inject constructor(
                     }
                     if (frameSize > 4 && index + 10 + frameSize <= tagData.size) {
                         val frameContent = tagData.copyOfRange(index + 10, index + 10 + frameSize)
-                        // USLT: Encoding byte (1), Language (3), Descriptor (\0 terminated), Lyrics
-                        if (frameContent.size > 4) {
-                            var textStart = 4
-                            // skip descriptor until zero
-                            while (textStart < frameContent.size && frameContent[textStart].toInt() != 0) {
-                                textStart++
-                            }
-                            textStart++ // skip zero
-                            if (textStart < frameContent.size) {
-                                val textBytes = frameContent.copyOfRange(textStart, frameContent.size)
-                                return String(textBytes, Charsets.UTF_8).trim()
-                            }
-                        }
+                        val decoded = decodeUsltFrame(frameContent)
+                        if (!decoded.isNullOrBlank()) return decoded
                     }
                 }
             }
         } catch (_: Exception) {
         }
         return null
+    }
+
+    private fun decodeUsltFrame(frameContent: ByteArray): String? {
+        if (frameContent.size < 5) return null
+        val encodingByte = frameContent[0].toInt() and 0xFF
+        val isUtf16 = (encodingByte == 1 || encodingByte == 2)
+        var textStart = 4 // skip encoding (1 byte) + language (3 bytes)
+
+        if (isUtf16) {
+            // In UTF-16, descriptor is null-terminated by 2 zero bytes: 0x00 0x00 (aligned to 2-byte boundary)
+            while (textStart + 1 < frameContent.size) {
+                if (frameContent[textStart] == 0.toByte() && frameContent[textStart + 1] == 0.toByte()) {
+                    textStart += 2
+                    break
+                }
+                textStart += 2
+            }
+        } else {
+            // In UTF-8 / ISO-8859-1, descriptor is null-terminated by 1 zero byte: 0x00
+            while (textStart < frameContent.size) {
+                if (frameContent[textStart] == 0.toByte()) {
+                    textStart++
+                    break
+                }
+                textStart++
+            }
+        }
+
+        if (textStart >= frameContent.size) return null
+        val rawLyricsBytes = frameContent.copyOfRange(textStart, frameContent.size)
+        return decodeLyricsBytes(rawLyricsBytes, encodingByte)
+    }
+
+    private fun decodeLyricsBytes(bytes: ByteArray, encodingByte: Int): String {
+        if (bytes.isEmpty()) return ""
+        val decoded = when (encodingByte) {
+            1 -> {
+                // UTF-16 with BOM
+                if (bytes.size >= 2 && bytes[0] == 0xFF.toByte() && bytes[1] == 0xFE.toByte()) {
+                    String(bytes, 2, bytes.size - 2, Charsets.UTF_16LE)
+                } else if (bytes.size >= 2 && bytes[0] == 0xFE.toByte() && bytes[1] == 0xFF.toByte()) {
+                    String(bytes, 2, bytes.size - 2, Charsets.UTF_16BE)
+                } else {
+                    String(bytes, Charsets.UTF_16)
+                }
+            }
+            2 -> String(bytes, Charsets.UTF_16BE)
+            3 -> String(bytes, Charsets.UTF_8)
+            else -> {
+                // Nominally ISO-8859-1, but many Persian/Arabic taggers write Windows-1256 or UTF-8
+                val utf8 = tryDecode(bytes, Charsets.UTF_8)
+                if (utf8 != null && !utf8.contains('\uFFFD') && hasNonAscii(bytes)) {
+                    utf8
+                } else {
+                    try {
+                        val w1256 = String(bytes, java.nio.charset.Charset.forName("windows-1256"))
+                        if (containsPersianArabicChars(w1256)) {
+                            w1256
+                        } else {
+                            String(bytes, Charsets.ISO_8859_1)
+                        }
+                    } catch (_: Exception) {
+                        String(bytes, Charsets.ISO_8859_1)
+                    }
+                }
+            }
+        }
+
+        val cleaned = decoded.replace("\u0000", "").trim()
+        if (cleaned.contains('\uFFFD') || (cleaned.length > 4 && cleaned.contains('?'))) {
+            // Fallback trial 1: UTF-16LE without BOM
+            val utf16Le = tryDecode(bytes, Charsets.UTF_16LE)
+            if (utf16Le != null && !utf16Le.contains('\uFFFD') && utf16Le.length > 5) {
+                return utf16Le.replace("\u0000", "").trim()
+            }
+            // Fallback trial 2: Windows-1256
+            try {
+                val w1256 = String(bytes, java.nio.charset.Charset.forName("windows-1256"))
+                if (containsPersianArabicChars(w1256)) {
+                    return w1256.replace("\u0000", "").trim()
+                }
+            } catch (_: Exception) {
+            }
+        }
+
+        return cleaned
+    }
+
+    private fun decodeLrcFileContent(file: File): String {
+        val bytes = file.readBytes()
+        if (bytes.isEmpty()) return ""
+        // Check BOM
+        if (bytes.size >= 3 && bytes[0] == 0xEF.toByte() && bytes[1] == 0xBB.toByte() && bytes[2] == 0xBF.toByte()) {
+            return String(bytes, 3, bytes.size - 3, Charsets.UTF_8)
+        }
+        if (bytes.size >= 2 && bytes[0] == 0xFF.toByte() && bytes[1] == 0xFE.toByte()) {
+            return String(bytes, 2, bytes.size - 2, Charsets.UTF_16LE)
+        }
+        if (bytes.size >= 2 && bytes[0] == 0xFE.toByte() && bytes[1] == 0xFF.toByte()) {
+            return String(bytes, 2, bytes.size - 2, Charsets.UTF_16BE)
+        }
+        val utf8 = String(bytes, Charsets.UTF_8)
+        if (!utf8.contains('\uFFFD')) {
+            return utf8
+        }
+        return try {
+            val w1256 = String(bytes, java.nio.charset.Charset.forName("windows-1256"))
+            if (containsPersianArabicChars(w1256)) w1256 else utf8
+        } catch (_: Exception) {
+            utf8
+        }
+    }
+
+    private fun tryDecode(bytes: ByteArray, charset: java.nio.charset.Charset): String? {
+        return try {
+            String(bytes, charset)
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    private fun hasNonAscii(bytes: ByteArray): Boolean {
+        for (b in bytes) {
+            if ((b.toInt() and 0x80) != 0) return true
+        }
+        return false
+    }
+
+    private fun containsPersianArabicChars(text: String): Boolean {
+        for (ch in text) {
+            if (ch in '\u0600'..'\u06FF' || ch in '\uFB50'..'\uFDFF' || ch in '\uFE70'..'\uFEFF') {
+                return true
+            }
+        }
+        return false
     }
 
     private fun indexOfBytes(source: ByteArray, target: ByteArray): Int {

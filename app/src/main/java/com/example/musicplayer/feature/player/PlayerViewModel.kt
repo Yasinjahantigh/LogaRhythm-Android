@@ -130,4 +130,21 @@ class PlayerViewModel @Inject constructor(
             playlistRepository.toggleFavorite(track.id)
         }
     }
+
+    fun updateTrackMetadata(
+        id: String,
+        title: String,
+        artist: String,
+        album: String,
+        genre: String,
+        onDone: (Track?) -> Unit = {}
+    ) {
+        viewModelScope.launch {
+            val updated = trackRepository.updateTrackMetadata(id, title, artist, album, genre)
+            if (updated != null) {
+                playerController.updateTrackInPlayback(updated)
+            }
+            onDone(updated)
+        }
+    }
 }

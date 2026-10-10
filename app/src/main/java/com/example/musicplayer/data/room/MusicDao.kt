@@ -152,6 +152,9 @@ interface MusicDao {
     @Update
     suspend fun updateTracks(tracks: List<TrackEntity>)
 
+    @Query("UPDATE tracks SET title = :title, artist = :artist, album = :album, genre = :genre WHERE id = :id")
+    suspend fun updateTrackMetadata(id: String, title: String, artist: String, album: String, genre: String)
+
     @Query("DELETE FROM tracks WHERE id IN (:ids)")
     suspend fun deleteTracksByIds(ids: List<String>)
 

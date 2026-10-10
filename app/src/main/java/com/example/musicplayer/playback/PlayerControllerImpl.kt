@@ -342,6 +342,15 @@ class PlayerControllerImpl @Inject constructor(
         equalizerManager.setVirtualizerStrength(strength)
     override fun resetEqualizer() = equalizerManager.resetEqualizer()
 
+    override fun updateTrackInPlayback(updatedTrack: Track) {
+        trackMap[updatedTrack.id] = updatedTrack
+        if (_currentTrack.value?.id == updatedTrack.id) {
+            _currentTrack.value = updatedTrack
+            MusicWidgetUpdater.update(context, updatedTrack.title, updatedTrack.artist, updatedTrack.artworkUri, _isPlaying.value)
+        }
+        _queue.value = _queue.value.map { if (it.id == updatedTrack.id) updatedTrack else it }
+    }
+
     override fun playTrack(track: Track) = play(listOf(track), 0)
     override fun playQueue(tracks: List<Track>, startIndex: Int) = play(tracks, startIndex)
     override fun skipToNext() = next()

@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Sort
@@ -46,6 +47,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.R
 import com.example.musicplayer.core.utils.PermissionUtils
 import com.example.musicplayer.domain.model.Track
+import com.example.musicplayer.feature.player.EditTrackDialog
 import com.example.musicplayer.feature.playlist.AddToPlaylistDialog
 import com.example.musicplayer.feature.playlist.PlaylistsTabContent
 import com.example.musicplayer.feature.playlist.SongMenuBottomSheet
@@ -77,8 +79,15 @@ fun LibraryScreen(
         }
     }
 
+    LaunchedEffect(viewModel) {
+        viewModel.scanSuccess.collect { count ->
+            snackbarHostState.showSnackbar(context.getString(R.string.library_refreshed_toast, count))
+        }
+    }
+
     var selectedTrackForMenu by remember { mutableStateOf<Track?>(null) }
     var selectedTrackForAddToPlaylist by remember { mutableStateOf<Track?>(null) }
+    var selectedTrackForEdit by remember { mutableStateOf<Track?>(null) }
     var showSortSheet by remember { mutableStateOf(false) }
 
     val permissionLauncher = rememberLauncherForActivityResult(
@@ -136,12 +145,29 @@ fun LibraryScreen(
                 }
             },
             onAddToPlaylist = { selectedTrackForAddToPlaylist = track },
+            onDeleteTrack = { viewModel.deleteTrack(track) },
+            onEditTrack = { selectedTrackForEdit = track },
             onGoToAlbum = if (track.album.isNotBlank() && track.album != "Unknown Album") {
                 { onNavigateToAlbum(track.album) }
             } else null,
             onGoToArtist = if (track.artist.isNotBlank() && track.artist != "Unknown Artist") {
                 { onNavigateToArtist(track.artist) }
             } else null
+        )
+    }
+
+    selectedTrackForEdit?.let { track ->
+        EditTrackDialog(
+            track = track,
+            onDismiss = { selectedTrackForEdit = null },
+            onSave = { newTitle, newArtist, newAlbum, newGenre ->
+                viewModel.updateTrackMetadata(track.id, newTitle, newArtist, newAlbum, newGenre) {
+                    selectedTrackForEdit = null
+                    scope.launch {
+                        snackbarHostState.showSnackbar(context.getString(R.string.track_updated_toast))
+                    }
+                }
+            }
         )
     }
 
@@ -163,8 +189,20 @@ fun LibraryScreen(
                         IconButton(onClick = { showSortSheet = true }, modifier = Modifier.testTag("sort_action_button")) {
                             Icon(Icons.Default.Sort, contentDescription = stringResource(R.string.sort_by_title))
                         }
-                        IconButton(onClick = { viewModel.refresh(false) }, modifier = Modifier.testTag("refresh_action_button")) {
-                            Icon(Icons.Default.Refresh, contentDescription = stringResource(R.string.cd_rescan))
+                        IconButton(
+                            onClick = { viewModel.refresh(true) },
+                            enabled = !uiState.isRefreshing,
+                            modifier = Modifier.testTag("refresh_action_button")
+                        ) {
+                            if (uiState.isRefreshing) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(20.dp),
+                                    strokeWidth = 2.dp,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            } else {
+                                Icon(Icons.Default.Refresh, contentDescription = stringResource(R.string.cd_rescan))
+                            }
                         }
                     }
                 }

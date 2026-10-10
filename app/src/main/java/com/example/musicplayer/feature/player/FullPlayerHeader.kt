@@ -14,6 +14,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Bedtime
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.KeyboardArrowDown
@@ -64,6 +65,7 @@ fun FullPlayerHeader(
     onSearchGoogleLyrics: () -> Unit,
     onOpenSongDetails: () -> Unit,
     onShareSong: () -> Unit,
+    onEditSongDetails: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val isTimerActive = sleepTimerRemainingMs != null
@@ -81,6 +83,7 @@ fun FullPlayerHeader(
             Icon(
                 imageVector = Icons.Default.KeyboardArrowDown,
                 contentDescription = stringResource(R.string.cd_collapse_player),
+                tint = MaterialTheme.colorScheme.onSurface,
                 modifier = Modifier.size(32.dp)
             )
         }
@@ -122,7 +125,8 @@ fun FullPlayerHeader(
             Text(
                 text = stringResource(R.string.now_playing),
                 style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Medium
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.onSurface
             )
         }
 
@@ -187,7 +191,8 @@ fun FullPlayerHeader(
             ) {
                 Icon(
                     imageVector = Icons.AutoMirrored.Filled.QueueMusic,
-                    contentDescription = stringResource(R.string.cd_queue)
+                    contentDescription = stringResource(R.string.cd_queue),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
 
@@ -208,6 +213,14 @@ fun FullPlayerHeader(
                     expanded = showMoreMenu,
                     onDismissRequest = { showMoreMenu = false }
                 ) {
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.action_edit_track_info)) },
+                        leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
+                        onClick = {
+                            showMoreMenu = false
+                            onEditSongDetails()
+                        }
+                    )
                     DropdownMenuItem(
                         text = { Text(stringResource(R.string.player_menu_equalizer)) },
                         leadingIcon = { Icon(Icons.Default.GraphicEq, contentDescription = null) },

@@ -115,4 +115,28 @@ class SearchViewModel @Inject constructor(
         val index = allSongs.indexOfFirst { it.id == track.id }.coerceAtLeast(0)
         playerController.play(allSongs, index)
     }
+
+    fun updateTrackMetadata(
+        id: String,
+        title: String,
+        artist: String,
+        album: String,
+        genre: String,
+        onSuccess: () -> Unit = {}
+    ) {
+        viewModelScope.launch {
+            val updated = trackRepository.updateTrackMetadata(id, title, artist, album, genre)
+            if (updated != null) {
+                playerController.updateTrackInPlayback(updated)
+                onSuccess()
+            }
+        }
+    }
+
+    fun deleteTrack(track: Track, onDone: () -> Unit = {}) {
+        viewModelScope.launch {
+            trackRepository.deleteTrack(track)
+            onDone()
+        }
+    }
 }

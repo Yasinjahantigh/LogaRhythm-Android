@@ -8,6 +8,11 @@ import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -29,6 +34,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -58,7 +64,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -129,6 +137,8 @@ fun FullPlayerScreen(
     var showEqualizerSheet by remember { mutableStateOf(false) }
     var showAddToPlaylistDialog by remember { mutableStateOf(false) }
     var showDetailsDialog by remember { mutableStateOf(false) }
+    var showEditTrackDialog by remember { mutableStateOf(false) }
+    var isVinylMode by remember { mutableStateOf(false) }
     var isDragging by remember { mutableStateOf(false) }
     var dragPositionMs by remember { mutableFloatStateOf(0f) }
     var showRemainingTime by remember { mutableStateOf(false) }
@@ -191,6 +201,18 @@ fun FullPlayerScreen(
         )
     }
 
+    if (showEditTrackDialog && track != null) {
+        EditTrackDialog(
+            track = track,
+            onDismiss = { showEditTrackDialog = false },
+            onSave = { newTitle, newArtist, newAlbum, newGenre ->
+                viewModel.updateTrackMetadata(track.id, newTitle, newArtist, newAlbum, newGenre) {
+                    Toast.makeText(context, context.getString(R.string.track_updated_toast), Toast.LENGTH_SHORT).show()
+                }
+            }
+        )
+    }
+
     val surfaceColor = MaterialTheme.colorScheme.surface
     var dynamicArtworkColor by remember { mutableStateOf(surfaceColor) }
 
@@ -209,143 +231,215 @@ fun FullPlayerScreen(
         label = "player_bg_color"
     )
 
-    Box(
+    val infinitePlayerTransition = rememberInfiniteTransition(label = "cute_player_glow")
+    val breathingGlowScale by infinitePlayerTransition.animateFloat(
+        initialValue = 0.94f,
+        targetValue = 1.05f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1500, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "breathing_aura_scale"
+    )
+
+    Surface(
         modifier = modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.surface)
-            .background(
-                Brush.verticalGradient(
-                    colors = listOf(
-                        animatedBgColor.copy(alpha = 0.45f),
-                        MaterialTheme.colorScheme.surface
-                    )
-                )
-            )
-            .testTag("full_player_screen")
+            .testTag("full_player_screen"),
+        color = MaterialTheme.colorScheme.surface,
+        contentColor = MaterialTheme.colorScheme.onSurface
     ) {
-        Column(
+        Box(
             modifier = Modifier
                 .fillMaxSize()
-                .statusBarsPadding()
-                .padding(horizontal = 24.dp, vertical = 12.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.SpaceBetween
-        ) {
-            FullPlayerHeader(
-                showLyrics = showLyrics,
-                playbackSpeed = playbackSpeed,
-                sleepTimerRemainingMs = sleepTimerRemainingMs,
-                isSleepTimerEndOfTrack = isSleepTimerEndOfTrack,
-                onCollapse = onCollapse,
-                onToggleLyrics = { showLyrics = !showLyrics },
-                onOpenSpeedDialog = { showSpeedDialog = true },
-                onOpenSleepTimerDialog = { showSleepTimerDialog = true },
-                onOpenQueue = viewModel::openQueue,
-                onStartRadio = {
-                    viewModel.startTrackRadio { count ->
-                        val message = if (count > 0) {
-                            context.getString(R.string.player_radio_started, count)
-                        } else {
-                            context.getString(R.string.player_radio_empty)
-                        }
-                        Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
-                    }
-                },
-                onOpenEqualizer = { showEqualizerSheet = true },
-                onAddToPlaylist = { showAddToPlaylistDialog = true },
-                onSearchGoogleLyrics = {
-                    if (track != null) {
-                        val query = "${track.title} ${track.artist} lyrics"
-                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://www.google.com/search?q=${URLEncoder.encode(query, "UTF-8")}"))
-                        context.startActivity(intent)
-                    }
-                },
-                onOpenSongDetails = { showDetailsDialog = true },
-                onShareSong = {
-                    if (track != null) {
-                        shareTrack(context, track)
-                    }
-                }
-            )
-
-            // Central Area: Flippable between Artwork and Lyrics with Swipe-to-skip
-            if (showLyrics) {
-                LyricsView(
-                    viewModel = lyricsViewModel,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f)
-                        .padding(vertical = 8.dp)
+                .background(
+                    Brush.verticalGradient(
+                        colors = listOf(
+                            animatedBgColor.copy(alpha = 0.45f),
+                            MaterialTheme.colorScheme.surface
+                        )
+                    )
                 )
-            } else {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Card(
-                        shape = RoundedCornerShape(32.dp),
-                        elevation = CardDefaults.cardElevation(defaultElevation = 10.dp),
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .statusBarsPadding()
+                    .padding(horizontal = 24.dp, vertical = 12.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.SpaceBetween
+            ) {
+                FullPlayerHeader(
+                    showLyrics = showLyrics,
+                    playbackSpeed = playbackSpeed,
+                    sleepTimerRemainingMs = sleepTimerRemainingMs,
+                    isSleepTimerEndOfTrack = isSleepTimerEndOfTrack,
+                    onCollapse = onCollapse,
+                    onToggleLyrics = { showLyrics = !showLyrics },
+                    onOpenSpeedDialog = { showSpeedDialog = true },
+                    onOpenSleepTimerDialog = { showSleepTimerDialog = true },
+                    onOpenQueue = viewModel::openQueue,
+                    onStartRadio = {
+                        viewModel.startTrackRadio { count ->
+                            val message = if (count > 0) {
+                                context.getString(R.string.player_radio_started, count)
+                            } else {
+                                context.getString(R.string.player_radio_empty)
+                            }
+                            Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+                        }
+                    },
+                    onOpenEqualizer = { showEqualizerSheet = true },
+                    onAddToPlaylist = { showAddToPlaylistDialog = true },
+                    onSearchGoogleLyrics = {
+                        if (track != null) {
+                            val query = "${track.title} ${track.artist} lyrics"
+                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://www.google.com/search?q=${URLEncoder.encode(query, "UTF-8")}"))
+                            context.startActivity(intent)
+                        }
+                    },
+                    onOpenSongDetails = { showDetailsDialog = true },
+                    onShareSong = {
+                        if (track != null) {
+                            shareTrack(context, track)
+                        }
+                    },
+                    onEditSongDetails = { showEditTrackDialog = true }
+                )
+
+                // Central Area: Flippable between Artwork and Lyrics with Swipe-to-skip
+                if (showLyrics) {
+                    LyricsView(
+                        viewModel = lyricsViewModel,
+                        onNext = viewModel::next,
+                        onPrevious = viewModel::previous,
                         modifier = Modifier
-                            .fillMaxWidth(0.88f)
-                            .widthIn(max = 330.dp)
-                            .aspectRatio(1f)
-                            .offset { IntOffset(artworkDragOffsetX.value.roundToInt(), 0) }
-                            .pointerInput(Unit) {
-                                detectHorizontalDragGestures(
-                                    onDragEnd = {
-                                        coroutineScope.launch {
-                                            val current = artworkDragOffsetX.value
-                                            if (current < -120f) {
-                                                viewModel.next()
-                                            } else if (current > 120f) {
-                                                viewModel.previous()
-                                            }
-                                            artworkDragOffsetX.animateTo(0f, spring())
-                                        }
-                                    },
-                                    onDragCancel = {
-                                        coroutineScope.launch { artworkDragOffsetX.animateTo(0f, spring()) }
-                                    },
-                                    onHorizontalDrag = { change, dragAmount ->
-                                        change.consume()
-                                        coroutineScope.launch {
-                                            artworkDragOffsetX.snapTo((artworkDragOffsetX.value + dragAmount).coerceIn(-200f, 200f))
-                                        }
-                                    }
+                            .fillMaxWidth()
+                            .weight(1f)
+                            .padding(vertical = 8.dp)
+                    )
+                } else {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        // Cute Style Switcher Toggle Button in top-end corner
+                        Surface(
+                            onClick = { isVinylMode = !isVinylMode },
+                            shape = CircleShape,
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.75f),
+                            modifier = Modifier
+                                .align(Alignment.TopEnd)
+                                .padding(end = 6.dp, top = 2.dp)
+                                .testTag("player_style_toggle")
+                        ) {
+                            Text(
+                                text = if (isVinylMode) "💿 Vinyl" else "🎴 Card",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                            )
+                        }
+
+                        if (isVinylMode) {
+                            CuteVinylTurntable(
+                                track = track,
+                                isPlaying = isPlaying,
+                                modifier = Modifier
+                                    .fillMaxWidth(0.92f)
+                                    .widthIn(max = 330.dp)
+                                    .aspectRatio(1f)
+                                    .offset { IntOffset(artworkDragOffsetX.value.roundToInt(), 0) }
+                            )
+                        } else {
+                            // Pulsating breathing aura glow behind Album Card
+                            if (isPlaying) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth(0.90f)
+                                        .widthIn(max = 340.dp)
+                                        .aspectRatio(1f)
+                                        .scale(breathingGlowScale)
+                                        .clip(RoundedCornerShape(38.dp))
+                                        .background(
+                                            Brush.radialGradient(
+                                                colors = listOf(
+                                                    animatedBgColor.copy(alpha = 0.65f),
+                                                    MaterialTheme.colorScheme.primary.copy(alpha = 0.35f),
+                                                    Color.Transparent
+                                                )
+                                            )
+                                        )
                                 )
                             }
-                    ) {
-                        AsyncImage(
-                            model = track?.artworkUri,
-                            contentDescription = stringResource(R.string.cd_artwork, track?.title.orEmpty()),
-                            placeholder = painterResource(id = R.drawable.ic_music_placeholder),
-                            error = painterResource(id = R.drawable.ic_music_placeholder),
-                            contentScale = ContentScale.Crop,
-                            modifier = Modifier.fillMaxSize()
-                        )
+
+                            Card(
+                                shape = RoundedCornerShape(32.dp),
+                                elevation = CardDefaults.cardElevation(defaultElevation = 10.dp),
+                                modifier = Modifier
+                                    .fillMaxWidth(0.88f)
+                                    .widthIn(max = 330.dp)
+                                    .aspectRatio(1f)
+                                    .offset { IntOffset(artworkDragOffsetX.value.roundToInt(), 0) }
+                                    .pointerInput(Unit) {
+                                        detectHorizontalDragGestures(
+                                            onDragEnd = {
+                                                coroutineScope.launch {
+                                                    val current = artworkDragOffsetX.value
+                                                    if (current < -120f) {
+                                                        viewModel.next()
+                                                    } else if (current > 120f) {
+                                                        viewModel.previous()
+                                                    }
+                                                    artworkDragOffsetX.animateTo(0f, spring())
+                                                }
+                                            },
+                                            onDragCancel = {
+                                                coroutineScope.launch { artworkDragOffsetX.animateTo(0f, spring()) }
+                                            },
+                                            onHorizontalDrag = { change, dragAmount ->
+                                                change.consume()
+                                                coroutineScope.launch {
+                                                    artworkDragOffsetX.snapTo((artworkDragOffsetX.value + dragAmount).coerceIn(-200f, 200f))
+                                                }
+                                            }
+                                        )
+                                    }
+                            ) {
+                                AsyncImage(
+                                    model = track?.artworkUri,
+                                    contentDescription = stringResource(R.string.cd_artwork, track?.title.orEmpty()),
+                                    placeholder = painterResource(id = R.drawable.ic_music_placeholder),
+                                    error = painterResource(id = R.drawable.ic_music_placeholder),
+                                    contentScale = ContentScale.Crop,
+                                    modifier = Modifier.fillMaxSize()
+                                )
+                            }
+                        }
                     }
                 }
-            }
 
-            // Track metadata & Favorite Button & Format Tag
-            Column(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = track?.title?.ifBlank { stringResource(R.string.unknown_title) } ?: stringResource(R.string.unknown_title),
-                            style = MaterialTheme.typography.headlineSmall,
-                            fontWeight = FontWeight.Bold,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.basicMarquee()
-                        )
-                        Spacer(modifier = Modifier.height(2.dp))
+                // Track metadata & Favorite Button & Format Tag
+                Column(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = track?.title?.ifBlank { stringResource(R.string.unknown_title) } ?: stringResource(R.string.unknown_title),
+                                style = MaterialTheme.typography.headlineSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.basicMarquee()
+                            )
+                            Spacer(modifier = Modifier.height(2.dp))
                         Text(
                             text = track?.artist?.ifBlank { stringResource(R.string.unknown_artist) } ?: stringResource(R.string.unknown_artist),
                             style = MaterialTheme.typography.titleMedium,
@@ -368,20 +462,52 @@ fun FullPlayerScreen(
                     }
                 }
 
-                // Subtitle audio info badge (e.g. genre or local audio)
+                // Subtitle audio info badge + cute vibe indicator + lively jumping visualizer bars
                 val genreText = track?.genre?.takeIf { it.isNotBlank() && it != "Unknown Genre" }
                 val albumText = track?.album?.takeIf { it.isNotBlank() && it != "Unknown Album" }
                 val tagText = genreText ?: albumText ?: stringResource(R.string.offline_audio_badge)
-                Surface(
-                    shape = RoundedCornerShape(8.dp),
-                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                    modifier = Modifier.padding(top = 4.dp)
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Text(
-                        text = tagText,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                        ) {
+                            Text(
+                                text = tagText,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                            )
+                        }
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)
+                        ) {
+                            Text(
+                                text = if (isPlaying) "✨ Groovy Vibe 🎵" else "💤 Paused",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                            )
+                        }
+                    }
+
+                    // Cute lively equalizer bars!
+                    CuteEqualizerVisualizer(
+                        isPlaying = isPlaying,
+                        barColor = MaterialTheme.colorScheme.primary,
+                        maxHeight = 18.dp
                     )
                 }
             }
@@ -453,6 +579,7 @@ fun FullPlayerScreen(
             )
         }
     }
+}
 }
 
 @Composable

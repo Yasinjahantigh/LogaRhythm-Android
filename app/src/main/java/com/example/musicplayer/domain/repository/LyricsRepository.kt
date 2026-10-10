@@ -11,4 +11,6 @@ interface LyricsRepository {
     suspend fun deleteLyrics(trackId: String)
     suspend fun deleteLyrics(track: Track)
     suspend fun fetchOnlineLyrics(track: Track): Lyrics?
+    suspend fun fetchOnlineLyricsWithCustomQuery(track: Track, title: String, artist: String): Lyrics?
+    suspend fun searchLyricsCandidates(title: String, artist: String): List<com.example.musicplayer.domain.model.LyricsCandidate>
 }

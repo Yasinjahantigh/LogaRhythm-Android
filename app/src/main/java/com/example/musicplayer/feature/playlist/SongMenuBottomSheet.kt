@@ -25,6 +25,7 @@ import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.filled.Album
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DeleteOutline
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Lyrics
@@ -86,7 +87,8 @@ fun SongMenuBottomSheet(
     onGoToAlbum: (() -> Unit)? = null,
     onGoToArtist: (() -> Unit)? = null,
     onRemoveFromPlaylist: (() -> Unit)? = null,
-    onDeleteTrack: (() -> Unit)? = null
+    onDeleteTrack: (() -> Unit)? = null,
+    onEditTrack: (() -> Unit)? = null
 ) {
     val sheetState = rememberModalBottomSheetState()
     val context = LocalContext.current
@@ -275,6 +277,16 @@ fun SongMenuBottomSheet(
                 )
             }
 
+            // Edit song metadata
+            if (onEditTrack != null) {
+                SongMenuOption(
+                    icon = Icons.Default.Edit,
+                    title = stringResource(R.string.action_edit_track_info),
+                    tag = "menu_edit_track",
+                    onClick = { onEditTrack(); onDismissRequest() }
+                )
+            }
+
             // Song Information / Details
             SongMenuOption(
                 icon = Icons.Default.Info,
@@ -417,16 +429,28 @@ private fun shareAudioTrack(context: Context, track: Track) {
 
 private fun deleteAudioFile(context: Context, track: Track) {
     try {
+        val path = resolveFilePath(context, track)
+        if (!path.isNullOrBlank()) {
+            val file = java.io.File(path)
+            if (file.exists()) {
+                file.delete()
+            }
+        }
+    } catch (_: Exception) {
+    }
+
+    try {
         if (track.id.startsWith("local:")) {
             val id = track.id.removePrefix("local:").toLongOrNull()
             if (id != null) {
                 val uri = Uri.withAppendedPath(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, id.toString())
                 context.contentResolver.delete(uri, null, null)
-                Toast.makeText(context, context.getString(R.string.song_deleted), Toast.LENGTH_SHORT).show()
             }
         }
     } catch (_: Exception) {
     }
+
+    Toast.makeText(context, context.getString(R.string.song_deleted), Toast.LENGTH_SHORT).show()
 }
 
 private fun resolveFilePath(context: Context, track: Track): String? {
