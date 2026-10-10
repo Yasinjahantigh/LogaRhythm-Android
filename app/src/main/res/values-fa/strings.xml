@@ -386,4 +386,11 @@
     <string name="lyrics_embed_failed">ذخیره متن ترانه داخل فایل ممکن نشد، در صورت وجود نسخه کش‌شده در LogaRhythm باقی می‌ماند</string>
     <string name="saving">در حال ذخیره…</string>
     <string name="track_metadata_write_failed">به‌روزرسانی فایل صوتی ممکن نشد، فعلاً فقط فایل MP3 با دسترسی نوشتن پشتیبانی می‌شود</string>
+    <string name="lyrics_source_embedded">تعبیه‌شده در فایل (ID3)</string>
+    <string name="lyrics_source_companion">فایل همگام (.lrc)</string>
+    <string name="lyrics_source_cached">ذخیره‌شده در برنامه</string>
+    <string name="lyrics_source_manual">ورودی دستی</string>
+    <string name="lyrics_source_imported">فایل وارد شده</string>
+    <string name="lyrics_source_clipboard">از کلیپ‌بورد</string>
+    <string name="lyrics_source_online">آنلاین (%1$s)</string>
 </resources>

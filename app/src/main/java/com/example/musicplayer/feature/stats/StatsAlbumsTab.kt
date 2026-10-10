@@ -87,14 +87,16 @@ private fun AlbumStatRow(
 
     val displayAlbum = if (stat.album.isBlank() ||
         stat.album.equals("<unknown>", ignoreCase = true) ||
-        stat.album.equals("unknown", ignoreCase = true)
+        stat.album.equals("unknown", ignoreCase = true) ||
+        stat.album.equals("null", ignoreCase = true)
     ) {
         stringResource(R.string.unknown_album)
     } else stat.album
 
     val displayArtist = if (stat.artist.isBlank() ||
         stat.artist.equals("<unknown>", ignoreCase = true) ||
-        stat.artist.equals("unknown", ignoreCase = true)
+        stat.artist.equals("unknown", ignoreCase = true) ||
+        stat.artist.equals("null", ignoreCase = true)
     ) {
         stringResource(R.string.unknown_artist)
     } else stat.artist

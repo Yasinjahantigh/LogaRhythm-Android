@@ -1,6 +1,7 @@
 package com.example.musicplayer.feature.lyrics
 
 import android.content.Intent
+import android.content.res.Configuration
 import android.net.Uri
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -78,11 +79,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -328,84 +331,136 @@ fun LyricsView(
                 }
             }
 
-            // Quick actions in top-end corner when lyrics exist
+            // Top header bar with source badge and quick actions when lyrics exist
             if (!isLoading && lyrics != null && !lyrics!!.isEmpty) {
                 Row(
                     modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .padding(8.dp),
-                    horizontalArrangement = Arrangement.spacedBy(2.dp)
+                        .fillMaxWidth()
+                        .align(Alignment.TopCenter)
+                        .padding(horizontal = 12.dp, vertical = 6.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    IconButton(
-                        onClick = { viewModel.searchCandidatesOnline() },
-                        modifier = Modifier.testTag("lyrics_candidates_search_button")
+                    // Type and Source badges
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.ManageSearch,
-                            contentDescription = stringResource(R.string.lyrics_search_candidates_btn),
-                            tint = MaterialTheme.colorScheme.primary
-                        )
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = if (lyrics!!.isSynced) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant
+                        ) {
+                            Text(
+                                text = stringResource(if (lyrics!!.isSynced) R.string.lyrics_synced_badge else R.string.lyrics_plain_badge),
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.SemiBold,
+                                color = if (lyrics!!.isSynced) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                            )
+                        }
+
+                        val sourceLabel = when (lyrics!!.source) {
+                            "embedded" -> stringResource(R.string.lyrics_source_embedded)
+                            "companion" -> stringResource(R.string.lyrics_source_companion)
+                            "user_manual" -> stringResource(R.string.lyrics_source_manual)
+                            "imported_file" -> stringResource(R.string.lyrics_source_imported)
+                            "user_clipboard" -> stringResource(R.string.lyrics_source_clipboard)
+                            "lrclib", "netease", "kugou", "lyrics_ovh" -> stringResource(R.string.lyrics_source_online, lyrics!!.source!!.uppercase())
+                            else -> stringResource(R.string.lyrics_source_cached)
+                        }
+
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.8f)
+                        ) {
+                            Text(
+                                text = sourceLabel,
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Medium,
+                                color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                modifier = Modifier
+                                    .padding(horizontal = 8.dp, vertical = 4.dp)
+                                    .testTag("lyrics_source_badge")
+                            )
+                        }
                     }
 
-                    IconButton(
-                        onClick = onSearchGoogleLyrics,
-                        modifier = Modifier.testTag("lyrics_google_search_button")
+                    // Action buttons
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(2.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.OpenInBrowser,
-                            contentDescription = stringResource(R.string.action_search_lyrics_google),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
+                        IconButton(
+                            onClick = { viewModel.searchCandidatesOnline() },
+                            modifier = Modifier.testTag("lyrics_candidates_search_button")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.ManageSearch,
+                                contentDescription = stringResource(R.string.lyrics_search_candidates_btn),
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        }
 
-                    IconButton(
-                        onClick = {
-                            val defaultName = "${currentTrack?.title.orEmpty()}.lrc"
-                            exportPicker.launch(defaultName)
-                        },
-                        modifier = Modifier.testTag("lyrics_export_button")
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.SaveAlt,
-                            contentDescription = stringResource(R.string.action_export_lrc),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
+                        IconButton(
+                            onClick = onSearchGoogleLyrics,
+                            modifier = Modifier.testTag("lyrics_google_search_button")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.OpenInBrowser,
+                                contentDescription = stringResource(R.string.action_search_lyrics_google),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
 
-                    IconButton(
-                        onClick = { viewModel.setManualEditOpen(true) },
-                        modifier = Modifier.testTag("lyrics_manual_edit_button")
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Edit,
-                            contentDescription = stringResource(R.string.lyrics_edit_action),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
+                        IconButton(
+                            onClick = {
+                                val defaultName = "${currentTrack?.title.orEmpty()}.lrc"
+                                exportPicker.launch(defaultName)
+                            },
+                            modifier = Modifier.testTag("lyrics_export_button")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.SaveAlt,
+                                contentDescription = stringResource(R.string.action_export_lrc),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
 
-                    IconButton(
-                        onClick = { filePicker.launch(arrayOf("*/*", "text/*")) },
-                        modifier = Modifier.testTag("lyrics_import_button")
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.FileUpload,
-                            contentDescription = stringResource(R.string.cd_import_lrc),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
+                        IconButton(
+                            onClick = { viewModel.setManualEditOpen(true) },
+                            modifier = Modifier.testTag("lyrics_manual_edit_button")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Edit,
+                                contentDescription = stringResource(R.string.lyrics_edit_action),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
 
-                    IconButton(
-                        onClick = {
-                            trackForLyricsDeletion = currentTrack
-                            showDeleteConfirmDialog = trackForLyricsDeletion != null
-                        },
-                        modifier = Modifier.testTag("lyrics_delete_button")
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Delete,
-                            contentDescription = stringResource(R.string.action_delete_lyrics),
-                            tint = MaterialTheme.colorScheme.error.copy(alpha = 0.8f)
-                        )
+                        IconButton(
+                            onClick = { filePicker.launch(arrayOf("*/*", "text/*")) },
+                            modifier = Modifier.testTag("lyrics_import_button")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.FileUpload,
+                                contentDescription = stringResource(R.string.cd_import_lrc),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+
+                        IconButton(
+                            onClick = {
+                                trackForLyricsDeletion = currentTrack
+                                showDeleteConfirmDialog = trackForLyricsDeletion != null
+                            },
+                            modifier = Modifier.testTag("lyrics_delete_button")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Delete,
+                                contentDescription = stringResource(R.string.action_delete_lyrics),
+                                tint = MaterialTheme.colorScheme.error.copy(alpha = 0.8f)
+                            )
+                        }
                     }
                 }
             }
@@ -420,23 +475,29 @@ private fun SyncedLyricsContent(
     onSeekTo: (Long) -> Unit
 ) {
     val listState = rememberLazyListState()
+    val configuration = LocalConfiguration.current
+    val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
 
     LaunchedEffect(activeIndex) {
         if (activeIndex >= 0 && activeIndex < lyrics.lines.size) {
-            listState.animateScrollToItem((activeIndex - 2).coerceAtLeast(0))
+            val offset = if (isLandscape) 1 else 2
+            listState.animateScrollToItem((activeIndex - offset).coerceAtLeast(0))
         }
     }
 
+    val verticalContentPadding = if (isLandscape) 28.dp else 64.dp
+    val lineVerticalPadding = if (isLandscape) 6.dp else 12.dp
+
     LazyColumn(
         state = listState,
-        contentPadding = PaddingValues(top = 64.dp, bottom = 64.dp, start = 20.dp, end = 20.dp),
+        contentPadding = PaddingValues(top = verticalContentPadding, bottom = verticalContentPadding, start = 16.dp, end = 16.dp),
         modifier = Modifier.fillMaxSize()
     ) {
         itemsIndexed(lyrics.lines) { index, line ->
             val isCurrent = index == activeIndex
 
             val scale by animateFloatAsState(
-                targetValue = if (isCurrent) 1.14f else 1.0f,
+                targetValue = if (isCurrent) (if (isLandscape) 1.08f else 1.14f) else 1.0f,
                 animationSpec = spring(
                     dampingRatio = Spring.DampingRatioMediumBouncy,
                     stiffness = Spring.StiffnessLow
@@ -466,12 +527,13 @@ private fun SyncedLyricsContent(
                         transformOrigin = TransformOrigin(0.5f, 0.5f)
                     }
                     .clickable { onSeekTo(line.timestampMs) }
-                    .padding(vertical = 12.dp, horizontal = 14.dp),
+                    .padding(vertical = lineVerticalPadding, horizontal = 12.dp),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
                     text = line.text,
-                    style = MaterialTheme.typography.titleLarge,
+                    style = (if (isLandscape) MaterialTheme.typography.titleMedium else MaterialTheme.typography.titleLarge)
+                        .copy(textDirection = TextDirection.Content),
                     fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Medium,
                     color = textColor,
                     textAlign = TextAlign.Center,
@@ -486,16 +548,24 @@ private fun SyncedLyricsContent(
 
 @Composable
 private fun PlainLyricsContent(plainText: String) {
+    val isLandscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
     Column(
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(top = 56.dp, bottom = 36.dp, start = 24.dp, end = 24.dp),
+            .padding(
+                top = if (isLandscape) 24.dp else 56.dp,
+                bottom = if (isLandscape) 24.dp else 36.dp,
+                start = 24.dp,
+                end = 24.dp
+            ),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Text(
             text = plainText,
-            style = MaterialTheme.typography.bodyLarge,
+            style = MaterialTheme.typography.bodyLarge.copy(
+                textDirection = TextDirection.Content
+            ),
             color = MaterialTheme.colorScheme.onSurface,
             textAlign = TextAlign.Center,
             lineHeight = MaterialTheme.typography.bodyLarge.lineHeight * 1.35f
@@ -848,17 +918,32 @@ private fun LyricsCandidatePickerDialog(
                                     shape = RoundedCornerShape(12.dp)
                                 ) {
                                     Column(modifier = Modifier.padding(12.dp)) {
+                                        val candidateTitle = candidate.trackName.takeUnless {
+                                            it.isBlank() || it.equals("null", ignoreCase = true) || it.equals("<unknown>", ignoreCase = true)
+                                        } ?: stringResource(R.string.unknown_title)
+
+                                        val cleanArtist = candidate.artistName.takeUnless {
+                                            it.isBlank() || it.equals("null", ignoreCase = true) || it.equals("<unknown>", ignoreCase = true) || it.equals("unknown artist", ignoreCase = true)
+                                        }
+                                        val cleanAlbum = candidate.albumName.takeUnless {
+                                            it.isBlank() || it.equals("null", ignoreCase = true) || it.equals("<unknown>", ignoreCase = true)
+                                        }
+                                        val subtitle = listOfNotNull(cleanArtist, cleanAlbum).joinToString(" • ").ifBlank {
+                                            stringResource(R.string.unknown_artist)
+                                        }
+
                                         Row(
                                             modifier = Modifier.fillMaxWidth(),
                                             horizontalArrangement = Arrangement.SpaceBetween,
                                             verticalAlignment = Alignment.CenterVertically
                                         ) {
                                             Text(
-                                                text = candidate.trackName,
+                                                text = candidateTitle,
                                                 style = MaterialTheme.typography.titleMedium,
                                                 fontWeight = FontWeight.SemiBold,
                                                 modifier = Modifier.weight(1f)
                                             )
+                                            Spacer(modifier = Modifier.width(8.dp))
                                             Surface(
                                                 shape = RoundedCornerShape(6.dp),
                                                 color = if (candidate.isSynced)
@@ -880,24 +965,30 @@ private fun LyricsCandidatePickerDialog(
                                         }
 
                                         Spacer(modifier = Modifier.height(4.dp))
-                                        val subtitle = listOfNotNull(
-                                            candidate.artistName.ifBlank { null },
-                                            candidate.albumName.ifBlank { null }
-                                        ).joinToString(" • ")
-
-                                        if (subtitle.isNotBlank()) {
-                                            Text(
-                                                text = subtitle,
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                                            )
-                                        }
+                                        Text(
+                                            text = subtitle,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
 
                                         Spacer(modifier = Modifier.height(8.dp))
                                         Row(
                                             modifier = Modifier.fillMaxWidth(),
-                                            horizontalArrangement = Arrangement.End
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
                                         ) {
+                                            Surface(
+                                                shape = RoundedCornerShape(4.dp),
+                                                color = MaterialTheme.colorScheme.surfaceContainerHighest
+                                            ) {
+                                                Text(
+                                                    text = candidate.sourceName,
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                                )
+                                            }
+
                                             FilledTonalButton(
                                                 onClick = { onSelectCandidate(candidate) },
                                                 contentPadding = PaddingValues(horizontal = 14.dp, vertical = 4.dp),

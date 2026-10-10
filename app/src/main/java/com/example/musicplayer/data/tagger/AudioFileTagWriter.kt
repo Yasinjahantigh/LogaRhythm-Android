@@ -540,15 +540,31 @@ class AudioFileTagWriter @Inject constructor(
                 expectedFile.inputStream().buffered().use { expectedStream ->
                     val actualBuffer = ByteArray(64 * 1024)
                     val expectedBuffer = ByteArray(64 * 1024)
+                    var matched = true
                     while (true) {
                         val actualCount = fillChunk(actualStream, actualBuffer)
                         val expectedCount = fillChunk(expectedStream, expectedBuffer)
-                        if (actualCount != expectedCount) return false
-                        if (actualCount < 0) return true
+                        if (actualCount != expectedCount) {
+                            matched = false
+                            break
+                        }
+                        if (actualCount < 0) {
+                            matched = true
+                            break
+                        }
+                        var chunkMatch = true
                         for (index in 0 until actualCount) {
-                            if (actualBuffer[index] != expectedBuffer[index]) return false
+                            if (actualBuffer[index] != expectedBuffer[index]) {
+                                chunkMatch = false
+                                break
+                            }
+                        }
+                        if (!chunkMatch) {
+                            matched = false
+                            break
                         }
                     }
+                    matched
                 }
             }
         } catch (_: Exception) {

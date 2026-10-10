@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
@@ -112,16 +113,22 @@ fun QueueScreen(
                 )
             }
         } else {
-            LazyColumn(
+            Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(innerPadding)
-                    .testTag("queue_list")
+                    .padding(innerPadding),
+                contentAlignment = Alignment.TopCenter
             ) {
-                itemsIndexed(
-                    items = queue,
-                    key = { index, track -> "${track.id}_$index" }
-                ) { index, track ->
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .widthIn(max = 840.dp)
+                        .testTag("queue_list")
+                ) {
+                    itemsIndexed(
+                        items = queue,
+                        key = { index, track -> "${track.id}_$index" }
+                    ) { index, track ->
                     QueueItem(
                         track = track,
                         isCurrent = track.id == currentTrack?.id,
@@ -150,4 +157,5 @@ fun QueueScreen(
             }
         }
     }
+}
 }

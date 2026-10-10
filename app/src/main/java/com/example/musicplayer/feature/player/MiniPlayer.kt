@@ -84,14 +84,16 @@ fun MiniPlayer(
     val displayTitle = when {
         track.title.isBlank() ||
             track.title.equals("<unknown>", ignoreCase = true) ||
-            track.title.equals("unknown", ignoreCase = true) -> stringResource(R.string.unknown_title)
+            track.title.equals("unknown", ignoreCase = true) ||
+            track.title.equals("null", ignoreCase = true) -> stringResource(R.string.unknown_title)
         else -> track.title
     }
 
     val displayArtist = when {
         track.artist.isBlank() ||
             track.artist.equals("<unknown>", ignoreCase = true) ||
-            track.artist.equals("unknown", ignoreCase = true) -> stringResource(R.string.unknown_artist)
+            track.artist.equals("unknown", ignoreCase = true) ||
+            track.artist.equals("null", ignoreCase = true) -> stringResource(R.string.unknown_artist)
         else -> track.artist
     }
 

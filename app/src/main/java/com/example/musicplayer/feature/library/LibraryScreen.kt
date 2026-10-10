@@ -11,8 +11,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Sort
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -215,7 +215,7 @@ fun LibraryScreen(
                 actions = {
                     if (uiState.hasPermission) {
                         IconButton(onClick = { showSortSheet = true }, modifier = Modifier.testTag("sort_action_button")) {
-                            Icon(Icons.Default.Sort, contentDescription = stringResource(R.string.sort_by_title))
+                            Icon(Icons.AutoMirrored.Filled.Sort, contentDescription = stringResource(R.string.sort_by_title))
                         }
                         IconButton(
                             onClick = { viewModel.refresh(true) },

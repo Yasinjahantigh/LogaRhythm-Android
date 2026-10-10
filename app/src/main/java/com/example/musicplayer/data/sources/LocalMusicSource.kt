@@ -163,7 +163,8 @@ class LocalMusicSource @Inject constructor(
         val trimmed = value.trim()
         if (trimmed.isEmpty() ||
             trimmed.equals("<unknown>", ignoreCase = true) ||
-            trimmed.equals("unknown", ignoreCase = true)
+            trimmed.equals("unknown", ignoreCase = true) ||
+            trimmed.equals("null", ignoreCase = true)
         ) {
             return fallback
         }
@@ -174,11 +175,15 @@ class LocalMusicSource @Inject constructor(
         val trimmed = title.trim()
         if (trimmed.isEmpty() ||
             trimmed.equals("<unknown>", ignoreCase = true) ||
-            trimmed.equals("unknown", ignoreCase = true)
+            trimmed.equals("unknown", ignoreCase = true) ||
+            trimmed.equals("null", ignoreCase = true)
         ) {
             if (!filePath.isNullOrBlank()) {
                 val fileName = File(filePath).nameWithoutExtension
-                if (fileName.isNotBlank() && !fileName.equals("unknown", ignoreCase = true)) {
+                if (fileName.isNotBlank() &&
+                    !fileName.equals("unknown", ignoreCase = true) &&
+                    !fileName.equals("null", ignoreCase = true)
+                ) {
                     return fileName.replace('_', ' ').replace('-', ' ').trim()
                 }
             }

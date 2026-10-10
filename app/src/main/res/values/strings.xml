@@ -386,4 +386,11 @@
     <string name="lyrics_embed_failed">Lyrics could not be embedded. They remain available in LogaRhythm when cached.</string>
     <string name="saving">Saving…</string>
     <string name="track_metadata_write_failed">Could not update the audio file. Only MP3 files with available write access are supported right now.</string>
+    <string name="lyrics_source_embedded">Embedded (ID3)</string>
+    <string name="lyrics_source_companion">Companion (.lrc)</string>
+    <string name="lyrics_source_cached">Cached in app</string>
+    <string name="lyrics_source_manual">Manual entry</string>
+    <string name="lyrics_source_imported">Imported file</string>
+    <string name="lyrics_source_clipboard">Clipboard</string>
+    <string name="lyrics_source_online">Online (%1$s)</string>
 </resources>

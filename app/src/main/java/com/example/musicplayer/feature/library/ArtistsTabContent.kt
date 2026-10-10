@@ -60,7 +60,8 @@ fun ArtistsTabContent(
             ) { artist ->
                 val displayArtistName = if (artist.name.isBlank() ||
                     artist.name.equals("<unknown>", ignoreCase = true) ||
-                    artist.name.equals("unknown", ignoreCase = true)
+                    artist.name.equals("unknown", ignoreCase = true) ||
+                    artist.name.equals("null", ignoreCase = true)
                 ) {
                     stringResource(R.string.unknown_artist)
                 } else artist.name

@@ -95,14 +95,16 @@ private fun TrackStatRow(
 
     val displayTitle = if (stat.track.title.isBlank() ||
         stat.track.title.equals("<unknown>", ignoreCase = true) ||
-        stat.track.title.equals("unknown", ignoreCase = true)
+        stat.track.title.equals("unknown", ignoreCase = true) ||
+        stat.track.title.equals("null", ignoreCase = true)
     ) {
         stringResource(R.string.unknown_title)
     } else stat.track.title
 
     val displayArtist = if (stat.track.artist.isBlank() ||
         stat.track.artist.equals("<unknown>", ignoreCase = true) ||
-        stat.track.artist.equals("unknown", ignoreCase = true)
+        stat.track.artist.equals("unknown", ignoreCase = true) ||
+        stat.track.artist.equals("null", ignoreCase = true)
     ) {
         stringResource(R.string.unknown_artist)
     } else stat.track.artist

@@ -107,11 +107,19 @@ fun ArtistDetailScreen(
         )
     }
 
+    val displayArtistName = if (viewModel.artistName.isBlank() ||
+        viewModel.artistName.equals("<unknown>", ignoreCase = true) ||
+        viewModel.artistName.equals("unknown", ignoreCase = true) ||
+        viewModel.artistName.equals("null", ignoreCase = true)
+    ) {
+        stringResource(R.string.unknown_artist)
+    } else viewModel.artistName
+
     Scaffold(
         modifier = modifier.fillMaxSize().testTag("artist_detail_screen"),
         topBar = {
             TopAppBar(
-                title = { Text(text = viewModel.artistName, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                title = { Text(text = displayArtistName, maxLines = 1, overflow = TextOverflow.Ellipsis) },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack, modifier = Modifier.testTag("artist_back_button")) {
                         Icon(
@@ -124,12 +132,6 @@ fun ArtistDetailScreen(
         }
     ) { innerPadding ->
         val bottomPadding = com.example.musicplayer.ui.designsystem.LocalPlaybackBottomPadding.current
-        val displayArtistName = if (viewModel.artistName.isBlank() ||
-            viewModel.artistName.equals("<unknown>", ignoreCase = true) ||
-            viewModel.artistName.equals("unknown", ignoreCase = true)
-        ) {
-            stringResource(R.string.unknown_artist)
-        } else viewModel.artistName
 
         LazyColumn(
             contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = bottomPadding + 16.dp),

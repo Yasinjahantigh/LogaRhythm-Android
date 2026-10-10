@@ -5,6 +5,8 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.widget.Toast
+import java.io.File
+import com.example.musicplayer.core.utils.FileUtils
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -361,7 +363,7 @@ private fun SongDetailsDialog(
     onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
-    val filePath = remember(track) { resolveFilePath(context, track) }
+    val filePath = remember(track) { FileUtils.resolveTrackPath(context, track) }
     val fileSizeMb = remember(filePath) {
         if (filePath != null) {
             val f = File(filePath)
