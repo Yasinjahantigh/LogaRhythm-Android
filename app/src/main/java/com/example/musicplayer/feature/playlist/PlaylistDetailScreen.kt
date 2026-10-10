@@ -12,15 +12,16 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.QueueMusic
 import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
@@ -180,29 +181,37 @@ fun PlaylistDetailScreen(
         }
     ) { innerPadding ->
         val bottomPadding = com.example.musicplayer.ui.designsystem.LocalPlaybackBottomPadding.current
-        LazyColumn(
-            contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = bottomPadding + 16.dp),
-            modifier = Modifier.fillMaxSize().padding(innerPadding)
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding),
+            contentAlignment = Alignment.TopCenter
         ) {
-            item {
-                Column(
-                    modifier = Modifier.fillMaxWidth().padding(24.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(110.dp)
-                            .clip(RoundedCornerShape(24.dp))
-                            .background(if (isBuiltIn) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHighest),
-                        contentAlignment = Alignment.Center
+            LazyColumn(
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = bottomPadding + 16.dp),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .widthIn(max = 840.dp)
+            ) {
+                item {
+                    Column(
+                        modifier = Modifier.fillMaxWidth().padding(24.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        Icon(
-                            imageVector = if (isBuiltIn) Icons.Default.Favorite else Icons.Default.QueueMusic,
-                            contentDescription = null,
-                            tint = if (isBuiltIn) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(54.dp)
-                        )
-                    }
+                        Box(
+                            modifier = Modifier
+                                .size(110.dp)
+                                .clip(RoundedCornerShape(24.dp))
+                                .background(if (isBuiltIn) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHighest),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = if (isBuiltIn) Icons.Default.Favorite else Icons.AutoMirrored.Filled.QueueMusic,
+                                contentDescription = null,
+                                tint = if (isBuiltIn) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(54.dp)
+                            )
+                        }
                     Spacer(modifier = Modifier.height(16.dp))
                     Text(text = displayName, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
                     val totalDuration = tracks.sumOf { it.durationMs }
@@ -244,4 +253,5 @@ fun PlaylistDetailScreen(
             }
         }
     }
+}
 }

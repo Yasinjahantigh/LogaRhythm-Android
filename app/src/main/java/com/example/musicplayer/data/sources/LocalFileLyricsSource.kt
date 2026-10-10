@@ -44,7 +44,7 @@ class LocalFileLyricsSource @Inject constructor(
                 try {
                     val content = decodeLrcFileContent(lrcFile)
                     val parsed = LrcParser.parse(content)
-                    if (!parsed.isEmpty) return@withContext parsed
+                    if (!parsed.isEmpty) return@withContext parsed.copy(source = "companion")
                 } catch (_: Exception) {
                 }
             }
@@ -53,7 +53,7 @@ class LocalFileLyricsSource @Inject constructor(
         // 2. Check embedded ID3 lyrics directly from the file/URI stream.
         val embedded = extractEmbeddedLyrics(track, audioFilePath)
         if (embedded != null && !embedded.isEmpty) {
-            return@withContext embedded
+            return@withContext embedded.copy(source = "embedded")
         }
 
         null

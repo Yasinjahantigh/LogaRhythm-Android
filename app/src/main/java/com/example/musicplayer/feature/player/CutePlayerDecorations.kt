@@ -26,6 +26,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -46,82 +48,68 @@ import com.example.R
 import com.example.musicplayer.domain.model.Track
 
 /**
- * Animated cute equalizer bars that bounce playfully when playback is active.
+ * Lightweight, high-performance equalizer visualizer bars.
+ * Renders via a single Canvas pass and halts all animation clocks when paused.
  */
 @Composable
 fun CuteEqualizerVisualizer(
     isPlaying: Boolean,
     modifier: Modifier = Modifier,
-    barCount: Int = 7,
-    maxHeight: Dp = 24.dp,
+    barCount: Int = 5,
+    maxHeight: Dp = 20.dp,
     barColor: Color = MaterialTheme.colorScheme.primary
 ) {
-    val infiniteTransition = rememberInfiniteTransition(label = "cute_eq_anim")
+    val phase by if (isPlaying) {
+        val infiniteTransition = rememberInfiniteTransition(label = "eq_anim")
+        infiniteTransition.animateFloat(
+            initialValue = 0f,
+            targetValue = 6.283185f, // 2*PI
+            animationSpec = infiniteRepeatable(
+                animation = tween(1200, easing = LinearEasing),
+                repeatMode = RepeatMode.Restart
+            ),
+            label = "eq_phase"
+        )
+    } else {
+        remember { mutableFloatStateOf(0f) }
+    }
 
-    // Generate distinct bounce animations for each bar to look natural & playful
-    val bar1 by infiniteTransition.animateFloat(
-        initialValue = 0.2f, targetValue = 0.95f,
-        animationSpec = infiniteRepeatable(tween(380, easing = FastOutSlowInEasing), RepeatMode.Reverse),
-        label = "eq1"
-    )
-    val bar2 by infiniteTransition.animateFloat(
-        initialValue = 0.35f, targetValue = 1.0f,
-        animationSpec = infiniteRepeatable(tween(290, easing = FastOutSlowInEasing), RepeatMode.Reverse),
-        label = "eq2"
-    )
-    val bar3 by infiniteTransition.animateFloat(
-        initialValue = 0.15f, targetValue = 0.85f,
-        animationSpec = infiniteRepeatable(tween(420, easing = FastOutSlowInEasing), RepeatMode.Reverse),
-        label = "eq3"
-    )
-    val bar4 by infiniteTransition.animateFloat(
-        initialValue = 0.4f, targetValue = 0.98f,
-        animationSpec = infiniteRepeatable(tween(330, easing = FastOutSlowInEasing), RepeatMode.Reverse),
-        label = "eq4"
-    )
-    val bar5 by infiniteTransition.animateFloat(
-        initialValue = 0.2f, targetValue = 0.9f,
-        animationSpec = infiniteRepeatable(tween(360, easing = FastOutSlowInEasing), RepeatMode.Reverse),
-        label = "eq5"
-    )
-    val bar6 by infiniteTransition.animateFloat(
-        initialValue = 0.25f, targetValue = 0.8f,
-        animationSpec = infiniteRepeatable(tween(410, easing = FastOutSlowInEasing), RepeatMode.Reverse),
-        label = "eq6"
-    )
-    val bar7 by infiniteTransition.animateFloat(
-        initialValue = 0.3f, targetValue = 1.0f,
-        animationSpec = infiniteRepeatable(tween(300, easing = FastOutSlowInEasing), RepeatMode.Reverse),
-        label = "eq7"
-    )
+    val tertiaryColor = MaterialTheme.colorScheme.tertiary
+    val barWidthDp = 3.5.dp
+    val spacingDp = 3.dp
+    val totalWidth = (barWidthDp * barCount) + (spacingDp * (barCount - 1))
 
-    val factors = listOf(bar1, bar2, bar3, bar4, bar5, bar6, bar7)
-
-    Row(
-        modifier = modifier.height(maxHeight),
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
-        verticalAlignment = Alignment.CenterVertically
+    Canvas(
+        modifier = modifier
+            .size(width = totalWidth, height = maxHeight)
     ) {
-        factors.take(barCount).forEachIndexed { index, factor ->
-            val animatedHeight = if (isPlaying) {
-                (maxHeight * factor).coerceAtLeast(4.dp)
+        val barWidthPx = barWidthDp.toPx()
+        val spacingPx = spacingDp.toPx()
+        val maxHPx = size.height
+        val minHPx = 3.dp.toPx()
+
+        for (i in 0 until barCount) {
+            val factor = if (isPlaying) {
+                // Harmonic wave per bar derived from single phase
+                val wave = kotlin.math.sin(phase.toDouble() * (1.0 + i * 0.4) + i * 1.2).toFloat()
+                ((wave + 1f) / 2f).coerceIn(0.18f, 1.0f)
             } else {
-                4.dp
+                0.20f
             }
 
-            Box(
-                modifier = Modifier
-                    .width(4.dp)
-                    .height(animatedHeight)
-                    .clip(RoundedCornerShape(percent = 50))
-                    .background(
-                        Brush.verticalGradient(
-                            colors = listOf(
-                                barColor,
-                                MaterialTheme.colorScheme.tertiary
-                            )
-                        )
-                    )
+            val barHeight = (maxHPx * factor).coerceAtLeast(minHPx)
+            val left = i * (barWidthPx + spacingPx)
+            val top = maxHPx - barHeight
+
+            drawRoundRect(
+                brush = Brush.verticalGradient(
+                    colors = listOf(barColor, tertiaryColor),
+                    startY = top,
+                    endY = maxHPx
+                ),
+                topLeft = Offset(left, top),
+                size = androidx.compose.ui.geometry.Size(barWidthPx, barHeight),
+                cornerRadius = androidx.compose.ui.geometry.CornerRadius(barWidthPx / 2f, barWidthPx / 2f)
             )
         }
     }
@@ -136,16 +124,20 @@ fun CuteVinylTurntable(
     isPlaying: Boolean,
     modifier: Modifier = Modifier
 ) {
-    val infiniteTransition = rememberInfiniteTransition(label = "vinyl_transition")
-    val rotation by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = 360f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(8000, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "vinyl_spin"
-    )
+    val rotation by if (isPlaying) {
+        val infiniteTransition = rememberInfiniteTransition(label = "vinyl_transition")
+        infiniteTransition.animateFloat(
+            initialValue = 0f,
+            targetValue = 360f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(8000, easing = LinearEasing),
+                repeatMode = RepeatMode.Restart
+            ),
+            label = "vinyl_spin"
+        )
+    } else {
+        remember { mutableFloatStateOf(0f) }
+    }
 
     val tonearmAngle by animateFloatAsState(
         targetValue = if (isPlaying) 0f else -26f,

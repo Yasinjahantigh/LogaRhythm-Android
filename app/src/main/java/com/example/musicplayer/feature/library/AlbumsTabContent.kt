@@ -53,7 +53,7 @@ fun AlbumsTabContent(
     } else {
         val bottomPadding = com.example.musicplayer.ui.designsystem.LocalPlaybackBottomPadding.current
         LazyVerticalGrid(
-            columns = GridCells.Fixed(2),
+            columns = GridCells.Adaptive(minSize = 150.dp),
             modifier = modifier.fillMaxSize().testTag("albums_grid"),
             contentPadding = PaddingValues(start = 16.dp, top = 16.dp, end = 16.dp, bottom = bottomPadding + 16.dp),
             horizontalArrangement = Arrangement.spacedBy(16.dp),
@@ -65,14 +65,16 @@ fun AlbumsTabContent(
             ) { album ->
                 val displayAlbumName = if (album.name.isBlank() ||
                     album.name.equals("<unknown>", ignoreCase = true) ||
-                    album.name.equals("unknown", ignoreCase = true)
+                    album.name.equals("unknown", ignoreCase = true) ||
+                    album.name.equals("null", ignoreCase = true)
                 ) {
                     stringResource(R.string.unknown_album)
                 } else album.name
 
                 val displayArtistName = if (album.artist.isBlank() ||
                     album.artist.equals("<unknown>", ignoreCase = true) ||
-                    album.artist.equals("unknown", ignoreCase = true)
+                    album.artist.equals("unknown", ignoreCase = true) ||
+                    album.artist.equals("null", ignoreCase = true)
                 ) {
                     stringResource(R.string.unknown_artist)
                 } else album.artist

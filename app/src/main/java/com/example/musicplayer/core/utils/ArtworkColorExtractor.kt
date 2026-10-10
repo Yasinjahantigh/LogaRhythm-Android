@@ -2,6 +2,7 @@ package com.example.musicplayer.core.utils
 
 import android.content.Context
 import android.graphics.Bitmap
+import android.util.LruCache
 import androidx.compose.ui.graphics.Color
 import androidx.core.graphics.drawable.toBitmap
 import coil.Coil
@@ -14,8 +15,12 @@ import kotlin.math.min
 
 /**
  * Extracts dominant vibrant color from album artwork offline for dynamic UI theming.
+ * Caches results in memory to avoid repeated bitmap processing and decoding overhead.
  */
 object ArtworkColorExtractor {
+
+    // Fast memory cache for extracted artwork colors (key: artworkUri, value: Color 64-bit ULARGE)
+    private val colorCache = LruCache<String, Long>(64)
 
     suspend fun extractDominantColor(
         context: Context,
@@ -23,6 +28,14 @@ object ArtworkColorExtractor {
         fallbackColor: Color = Color(0xFF006A60)
     ): Color = withContext(Dispatchers.IO) {
         if (artworkUri.isNullOrBlank()) return@withContext fallbackColor
+
+        synchronized(colorCache) {
+            val cached = colorCache.get(artworkUri)
+            if (cached != null) {
+                return@withContext Color(cached.toULong())
+            }
+        }
+
         try {
             // Coil's application-scoped loader reuses memory/disk caches and networking.
             val imageLoader = Coil.imageLoader(context.applicationContext)
@@ -35,7 +48,11 @@ object ArtworkColorExtractor {
             val result = imageLoader.execute(request)
             if (result is SuccessResult) {
                 val bitmap = result.drawable.toBitmap(64, 64, Bitmap.Config.ARGB_8888)
-                extractVibrantColorFromBitmap(bitmap, fallbackColor)
+                val color = extractVibrantColorFromBitmap(bitmap, fallbackColor)
+                synchronized(colorCache) {
+                    colorCache.put(artworkUri, color.value.toLong())
+                }
+                color
             } else {
                 fallbackColor
             }

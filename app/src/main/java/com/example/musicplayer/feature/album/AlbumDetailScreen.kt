@@ -106,11 +106,28 @@ fun AlbumDetailScreen(
         )
     }
 
+    val displayAlbumName = if (viewModel.albumName.isBlank() ||
+        viewModel.albumName.equals("<unknown>", ignoreCase = true) ||
+        viewModel.albumName.equals("unknown", ignoreCase = true) ||
+        viewModel.albumName.equals("null", ignoreCase = true)
+    ) {
+        stringResource(R.string.unknown_album)
+    } else viewModel.albumName
+
+    val rawArtistName = album?.artist ?: tracks.firstOrNull()?.artist.orEmpty()
+    val displayArtistName = if (rawArtistName.isBlank() ||
+        rawArtistName.equals("<unknown>", ignoreCase = true) ||
+        rawArtistName.equals("unknown", ignoreCase = true) ||
+        rawArtistName.equals("null", ignoreCase = true)
+    ) {
+        stringResource(R.string.unknown_artist)
+    } else rawArtistName
+
     Scaffold(
         modifier = modifier.fillMaxSize().testTag("album_detail_screen"),
         topBar = {
             TopAppBar(
-                title = { Text(text = viewModel.albumName, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                title = { Text(text = displayAlbumName, maxLines = 1, overflow = TextOverflow.Ellipsis) },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack, modifier = Modifier.testTag("album_back_button")) {
                         Icon(
@@ -123,20 +140,6 @@ fun AlbumDetailScreen(
         }
     ) { innerPadding ->
         val bottomPadding = com.example.musicplayer.ui.designsystem.LocalPlaybackBottomPadding.current
-        val displayAlbumName = if (viewModel.albumName.isBlank() ||
-            viewModel.albumName.equals("<unknown>", ignoreCase = true) ||
-            viewModel.albumName.equals("unknown", ignoreCase = true)
-        ) {
-            stringResource(R.string.unknown_album)
-        } else viewModel.albumName
-
-        val rawArtistName = album?.artist ?: tracks.firstOrNull()?.artist.orEmpty()
-        val displayArtistName = if (rawArtistName.isBlank() ||
-            rawArtistName.equals("<unknown>", ignoreCase = true) ||
-            rawArtistName.equals("unknown", ignoreCase = true)
-        ) {
-            stringResource(R.string.unknown_artist)
-        } else rawArtistName
 
         LazyColumn(
             contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = bottomPadding + 16.dp),

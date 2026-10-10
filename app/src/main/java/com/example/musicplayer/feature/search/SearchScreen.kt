@@ -1,10 +1,12 @@
 package com.example.musicplayer.feature.search
 
 import android.widget.Toast
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -24,6 +26,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
@@ -152,11 +155,17 @@ fun SearchScreen(
             )
         }
     ) { innerPadding ->
-        Column(
+        Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(innerPadding)
+                .padding(innerPadding),
+            contentAlignment = Alignment.TopCenter
         ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .widthIn(max = 840.dp)
+            ) {
             OutlinedTextField(
                 value = query,
                 onValueChange = viewModel::onQueryChange,
@@ -234,4 +243,5 @@ fun SearchScreen(
             }
         }
     }
+}
 }

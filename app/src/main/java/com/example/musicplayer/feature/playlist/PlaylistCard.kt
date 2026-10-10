@@ -12,9 +12,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.QueueMusic
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -67,7 +67,7 @@ fun PlaylistCard(
             contentAlignment = Alignment.Center
         ) {
             Icon(
-                imageVector = if (isFav) Icons.Default.Favorite else Icons.Default.QueueMusic,
+                imageVector = if (isFav) Icons.Default.Favorite else Icons.AutoMirrored.Filled.QueueMusic,
                 contentDescription = null,
                 tint = if (isFav) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.size(28.dp)

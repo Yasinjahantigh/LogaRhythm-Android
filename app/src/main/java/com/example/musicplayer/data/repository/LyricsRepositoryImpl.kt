@@ -54,7 +54,7 @@ class LyricsRepositoryImpl @Inject constructor(
             if (entity == null || entity.source == "deleted" || entity.content.isBlank()) {
                 null
             } else {
-                LrcParser.parse(entity.content)
+                LrcParser.parse(entity.content).copy(source = entity.source)
             }
         }
     }
@@ -66,14 +66,15 @@ class LyricsRepositoryImpl @Inject constructor(
             if (cached.source == "deleted") {
                 return@withContext null
             }
-            val parsed = LrcParser.parse(cached.content)
+            val parsed = LrcParser.parse(cached.content).copy(source = cached.source)
             if (!parsed.isEmpty) return@withContext parsed
         }
 
         // Step 2: Check local audio file (companion .lrc or embedded tags in ID3/MP4)
         val localLyrics = localFileLyricsSource.getLyrics(track)
         if (localLyrics != null && !localLyrics.isEmpty) {
-            cacheLyrics(track.id, localLyrics, "local_file")
+            val source = localLyrics.source ?: "local_file"
+            cacheLyrics(track.id, localLyrics, source)
             return@withContext localLyrics
         }
 
@@ -82,10 +83,11 @@ class LyricsRepositoryImpl @Inject constructor(
         if (isOnlineEnabled) {
             val foundLyrics = searchAllOnlineSources(track)
             if (foundLyrics != null && !foundLyrics.lyrics.isEmpty) {
-                cacheLyrics(track.id, foundLyrics.lyrics, foundLyrics.sourceName)
+                val sourcedLyrics = foundLyrics.lyrics.copy(source = foundLyrics.sourceName)
+                cacheLyrics(track.id, sourcedLyrics, foundLyrics.sourceName)
                 // Loading/searching must never mutate shared audio files in the background.
                 // Embedded writes are reserved for explicit user save actions after consent.
-                return@withContext foundLyrics.lyrics
+                return@withContext sourcedLyrics
             }
         }
 
@@ -95,8 +97,9 @@ class LyricsRepositoryImpl @Inject constructor(
     override suspend fun fetchOnlineLyrics(track: Track): Lyrics? = withContext(Dispatchers.IO) {
         val foundLyrics = searchAllOnlineSources(track)
         if (foundLyrics != null && !foundLyrics.lyrics.isEmpty) {
-            cacheLyrics(track.id, foundLyrics.lyrics, foundLyrics.sourceName)
-            return@withContext foundLyrics.lyrics
+            val sourcedLyrics = foundLyrics.lyrics.copy(source = foundLyrics.sourceName)
+            cacheLyrics(track.id, sourcedLyrics, foundLyrics.sourceName)
+            return@withContext sourcedLyrics
         }
         null
     }
@@ -109,8 +112,9 @@ class LyricsRepositoryImpl @Inject constructor(
         val queryTrack = track.copy(title = title.trim(), artist = artist.trim())
         val foundLyrics = searchAllOnlineSources(queryTrack)
         if (foundLyrics != null && !foundLyrics.lyrics.isEmpty) {
-            cacheLyrics(track.id, foundLyrics.lyrics, foundLyrics.sourceName)
-            return@withContext foundLyrics.lyrics
+            val sourcedLyrics = foundLyrics.lyrics.copy(source = foundLyrics.sourceName)
+            cacheLyrics(track.id, sourcedLyrics, foundLyrics.sourceName)
+            return@withContext sourcedLyrics
         }
         null
     }

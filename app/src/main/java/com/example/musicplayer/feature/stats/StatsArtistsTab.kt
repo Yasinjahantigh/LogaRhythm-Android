@@ -83,7 +83,8 @@ private fun ArtistStatRow(
 
     val displayArtist = if (stat.artist.isBlank() ||
         stat.artist.equals("<unknown>", ignoreCase = true) ||
-        stat.artist.equals("unknown", ignoreCase = true)
+        stat.artist.equals("unknown", ignoreCase = true) ||
+        stat.artist.equals("null", ignoreCase = true)
     ) {
         stringResource(R.string.unknown_artist)
     } else stat.artist

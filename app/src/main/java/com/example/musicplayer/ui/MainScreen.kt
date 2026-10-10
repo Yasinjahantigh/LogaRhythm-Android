@@ -72,17 +72,9 @@ fun MainScreen(
 
     CompositionLocalProvider(LocalPlaybackBottomPadding provides totalBottomPadding) {
         Box(modifier = modifier.fillMaxSize()) {
-            // Layer 1: Nav Graph fills the whole screen so lists scroll smoothly under bottom elements
-            MusicNavGraph(
-                navController = navController,
-                modifier = Modifier
-                    .fillMaxSize()
-                    .then(if (useNavigationRail && isTopLevelRoute) Modifier.padding(start = 80.dp) else Modifier)
-            )
-
-            // Layer 2: Adaptive shell. Wide/landscape windows use a rail and keep playback controls at the bottom of the content region.
             if (useNavigationRail && isTopLevelRoute) {
-                Row(modifier = Modifier.fillMaxSize(), verticalAlignment = Alignment.Bottom) {
+                // Adaptive landscape / wide shell: Rail on start edge, content beside it
+                Row(modifier = Modifier.fillMaxSize()) {
                     MusicBottomBar(
                         currentDestination = currentRoute,
                         onNavigateToDestination = { destination ->
@@ -96,6 +88,10 @@ fun MainScreen(
                         }
                     )
                     Box(modifier = Modifier.weight(1f).fillMaxSize()) {
+                        MusicNavGraph(
+                            navController = navController,
+                            modifier = Modifier.fillMaxSize()
+                        )
                         Column(modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth()) {
                             AnimatedVisibility(
                                 visible = showMiniPlayer,
@@ -116,6 +112,11 @@ fun MainScreen(
                     }
                 }
             } else {
+                // Portrait / compact shell: full-screen nav graph, mini player & bottom bar anchored at bottom
+                MusicNavGraph(
+                    navController = navController,
+                    modifier = Modifier.fillMaxSize()
+                )
                 Column(modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth()) {
                     AnimatedVisibility(
                         visible = showMiniPlayer,

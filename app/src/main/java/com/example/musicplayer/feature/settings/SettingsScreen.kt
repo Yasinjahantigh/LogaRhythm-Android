@@ -4,6 +4,7 @@ import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
 import android.widget.Toast
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -13,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BarChart
@@ -181,10 +183,18 @@ fun SettingsScreen(
             )
         }
     ) { innerPadding ->
-        LazyColumn(
-            modifier = Modifier.fillMaxSize().padding(innerPadding),
-            contentPadding = PaddingValues(bottom = playbackBottomPadding + 48.dp)
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding),
+            contentAlignment = Alignment.TopCenter
         ) {
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .widthIn(max = 840.dp),
+                contentPadding = PaddingValues(bottom = playbackBottomPadding + 48.dp)
+            ) {
             item { SettingsCategoryHeader(stringResource(R.string.settings_category_audio)) }
             item {
                 SettingsActionItem(
@@ -364,6 +374,7 @@ fun SettingsScreen(
             }
         }
     }
+}
 }
 
 

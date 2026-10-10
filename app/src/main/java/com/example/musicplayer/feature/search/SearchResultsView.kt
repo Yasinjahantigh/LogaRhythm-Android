@@ -156,14 +156,16 @@ private fun SectionHeader(title: String, count: Int) {
 private fun AlbumSearchItem(album: Album, onClick: () -> Unit) {
     val displayAlbum = if (album.name.isBlank() ||
         album.name.equals("<unknown>", ignoreCase = true) ||
-        album.name.equals("unknown", ignoreCase = true)
+        album.name.equals("unknown", ignoreCase = true) ||
+        album.name.equals("null", ignoreCase = true)
     ) {
         stringResource(R.string.unknown_album)
     } else album.name
 
     val displayArtist = if (album.artist.isBlank() ||
         album.artist.equals("<unknown>", ignoreCase = true) ||
-        album.artist.equals("unknown", ignoreCase = true)
+        album.artist.equals("unknown", ignoreCase = true) ||
+        album.artist.equals("null", ignoreCase = true)
     ) {
         stringResource(R.string.unknown_artist)
     } else album.artist
@@ -210,7 +212,8 @@ private fun AlbumSearchItem(album: Album, onClick: () -> Unit) {
 private fun ArtistSearchItem(artist: Artist, onClick: () -> Unit) {
     val displayArtist = if (artist.name.isBlank() ||
         artist.name.equals("<unknown>", ignoreCase = true) ||
-        artist.name.equals("unknown", ignoreCase = true)
+        artist.name.equals("unknown", ignoreCase = true) ||
+        artist.name.equals("null", ignoreCase = true)
     ) {
         stringResource(R.string.unknown_artist)
     } else artist.name
