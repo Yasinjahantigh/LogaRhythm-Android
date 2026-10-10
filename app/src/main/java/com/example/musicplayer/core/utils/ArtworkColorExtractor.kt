@@ -4,7 +4,7 @@ import android.content.Context
 import android.graphics.Bitmap
 import androidx.compose.ui.graphics.Color
 import androidx.core.graphics.drawable.toBitmap
-import coil.ImageLoader
+import coil.Coil
 import coil.request.ImageRequest
 import coil.request.SuccessResult
 import kotlinx.coroutines.Dispatchers
@@ -24,7 +24,8 @@ object ArtworkColorExtractor {
     ): Color = withContext(Dispatchers.IO) {
         if (artworkUri.isNullOrBlank()) return@withContext fallbackColor
         try {
-            val imageLoader = ImageLoader(context)
+            // Coil's application-scoped loader reuses memory/disk caches and networking.
+            val imageLoader = Coil.imageLoader(context.applicationContext)
             val request = ImageRequest.Builder(context)
                 .data(artworkUri)
                 .size(64, 64)

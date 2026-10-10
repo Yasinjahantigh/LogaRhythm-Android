@@ -12,6 +12,7 @@ import com.example.musicplayer.domain.lyrics.LrcParser
 import com.example.musicplayer.domain.model.Lyrics
 import com.example.musicplayer.domain.model.Track
 import com.example.musicplayer.domain.repository.LyricsRepository
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
@@ -33,8 +34,8 @@ import javax.inject.Singleton
  *    b. UNSYNCED / PLAIN LYRICS FALLBACK:
  *       - LRCLIB (plainLyrics fallback)
  *       - Lyrics.ovh (plain lyrics)
- * 4. Automatic saving: Any lyrics successfully fetched online are cached into Room
- *    and saved into a companion .lrc file next to the track so they are permanently offline!
+ * 4. Lyrics are cached in Room for reliable offline access. For supported local MP3 files,
+ *    callers can explicitly request embedded ID3 lyrics; companion .lrc files remain a separate fallback.
  * 5. If no lyrics found anywhere: Allows manual entry via UI or external file import.
  */
 @Singleton
@@ -82,7 +83,8 @@ class LyricsRepositoryImpl @Inject constructor(
             val foundLyrics = searchAllOnlineSources(track)
             if (foundLyrics != null && !foundLyrics.lyrics.isEmpty) {
                 cacheLyrics(track.id, foundLyrics.lyrics, foundLyrics.sourceName)
-                localFileLyricsSource.saveCompanionLrc(track, formatLyricsToLrc(foundLyrics.lyrics))
+                // Loading/searching must never mutate shared audio files in the background.
+                // Embedded writes are reserved for explicit user save actions after consent.
                 return@withContext foundLyrics.lyrics
             }
         }
@@ -94,7 +96,6 @@ class LyricsRepositoryImpl @Inject constructor(
         val foundLyrics = searchAllOnlineSources(track)
         if (foundLyrics != null && !foundLyrics.lyrics.isEmpty) {
             cacheLyrics(track.id, foundLyrics.lyrics, foundLyrics.sourceName)
-            localFileLyricsSource.saveCompanionLrc(track, formatLyricsToLrc(foundLyrics.lyrics))
             return@withContext foundLyrics.lyrics
         }
         null
@@ -109,7 +110,6 @@ class LyricsRepositoryImpl @Inject constructor(
         val foundLyrics = searchAllOnlineSources(queryTrack)
         if (foundLyrics != null && !foundLyrics.lyrics.isEmpty) {
             cacheLyrics(track.id, foundLyrics.lyrics, foundLyrics.sourceName)
-            localFileLyricsSource.saveCompanionLrc(track, formatLyricsToLrc(foundLyrics.lyrics))
             return@withContext foundLyrics.lyrics
         }
         null
@@ -121,6 +121,8 @@ class LyricsRepositoryImpl @Inject constructor(
     ): List<com.example.musicplayer.domain.model.LyricsCandidate> = withContext(Dispatchers.IO) {
         try {
             lrclibLyricsSource.searchCandidates(title, artist)
+        } catch (cancelled: CancellationException) {
+            throw cancelled
         } catch (_: Exception) {
             emptyList()
         }
@@ -146,6 +148,8 @@ class LyricsRepositoryImpl @Inject constructor(
                     fallbackPlainLyrics = LyricsSearchResult(lrclibRes, "lrclib")
                 }
             }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
         } catch (_: Exception) {
         }
 
@@ -159,6 +163,8 @@ class LyricsRepositoryImpl @Inject constructor(
                     fallbackPlainLyrics = LyricsSearchResult(neteaseRes, "netease")
                 }
             }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
         } catch (_: Exception) {
         }
 
@@ -172,6 +178,8 @@ class LyricsRepositoryImpl @Inject constructor(
                     fallbackPlainLyrics = LyricsSearchResult(kugouRes, "kugou")
                 }
             }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
         } catch (_: Exception) {
         }
 
@@ -186,26 +194,49 @@ class LyricsRepositoryImpl @Inject constructor(
             if (ovhRes != null && !ovhRes.isEmpty) {
                 return LyricsSearchResult(ovhRes, "lyrics_ovh")
             }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
         } catch (_: Exception) {
         }
 
         return null
     }
 
+    /**
+     * Saves lyrics to app storage first, then attempts embedded MP3 tags. The return value
+     * is true only when embedded lyrics were written and verified. Room remains a fallback,
+     * and its presence is never described as an embedded-file write.
+     */
     override suspend fun saveLyrics(track: Track, content: String, source: String): Boolean =
         withContext(Dispatchers.IO) {
-            val parsed = LrcParser.parse(content)
+            val cleanContent = content.trim()
+            if (cleanContent.isBlank()) return@withContext false
+            val parsed = LrcParser.parse(cleanContent)
+            // Cache is the reliable app-level fallback even when the file is read-only.
+            // The return value specifically reports whether embedded audio tags were verified.
             lyricsDao.insertLyrics(
                 LyricsEntity(
                     trackId = track.id,
-                    content = content,
+                    content = cleanContent,
                     isSynced = parsed.isSynced,
                     source = source
                 )
             )
-            val companionSaved = localFileLyricsSource.saveCompanionLrc(track, content)
-            companionSaved
+            // Do not silently create a sidecar file when embedding fails. The caller can
+            // report cached-only honestly; companion .lrc saving is a separate operation.
+            localFileLyricsSource.saveEmbeddedLyrics(track, cleanContent)
         }
+
+    /** Explicit companion-file fallback, separate from embedded tag writing. */
+    suspend fun saveLyricsCompanion(track: Track, content: String): Boolean = withContext(Dispatchers.IO) {
+        val cleanContent = content.trim()
+        if (cleanContent.isBlank()) return@withContext false
+        val parsed = LrcParser.parse(cleanContent)
+        lyricsDao.insertLyrics(
+            LyricsEntity(trackId = track.id, content = cleanContent, isSynced = parsed.isSynced, source = "companion_file")
+        )
+        localFileLyricsSource.saveCompanionLrc(track, cleanContent)
+    }
 
     override suspend fun deleteLyrics(trackId: String) = withContext(Dispatchers.IO) {
         lyricsDao.insertLyrics(
@@ -227,8 +258,15 @@ class LyricsRepositoryImpl @Inject constructor(
                 source = "deleted"
             )
         )
+        // Lyrics metadata is a separate user asset; preserve the cache tombstone even
+        // when a provider denies companion-file deletion.
         localFileLyricsSource.deleteCompanionLrc(track)
         Unit
+    }
+
+    /** Removes the app's override/tombstone so normal local/embedded/default lookup resumes. */
+    override suspend fun resetLyricsToDefault(trackId: String) = withContext(Dispatchers.IO) {
+        lyricsDao.deleteLyricsForTrack(trackId)
     }
 
     private suspend fun cacheLyrics(trackId: String, lyrics: Lyrics, source: String) {

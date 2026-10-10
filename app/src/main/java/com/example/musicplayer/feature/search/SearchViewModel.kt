@@ -7,6 +7,7 @@ import com.example.musicplayer.domain.model.Track
 import com.example.musicplayer.domain.repository.TrackRepository
 import com.example.musicplayer.playback.PlayerController
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -122,21 +123,31 @@ class SearchViewModel @Inject constructor(
         artist: String,
         album: String,
         genre: String,
-        onSuccess: () -> Unit = {}
+        onDone: (Track?) -> Unit = {}
     ) {
         viewModelScope.launch {
-            val updated = trackRepository.updateTrackMetadata(id, title, artist, album, genre)
-            if (updated != null) {
-                playerController.updateTrackInPlayback(updated)
-                onSuccess()
+            val updated = try {
+                trackRepository.updateTrackMetadata(id, title, artist, album, genre)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                null
             }
+            if (updated != null) playerController.updateTrackInPlayback(updated)
+            onDone(updated)
         }
     }
 
-    fun deleteTrack(track: Track, onDone: () -> Unit = {}) {
+    fun deleteTrack(track: Track, onDone: (Boolean) -> Unit = {}) {
         viewModelScope.launch {
-            trackRepository.deleteTrack(track)
-            onDone()
+            val deleted = try {
+                trackRepository.deleteTrack(track)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                false
+            }
+            onDone(deleted)
         }
     }
 }

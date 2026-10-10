@@ -1,6 +1,9 @@
 package com.example.musicplayer
 
+import android.content.Context
+import android.content.res.Configuration
 import android.os.Bundle
+import java.util.Locale
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -31,6 +34,29 @@ class MainActivity : ComponentActivity() {
 
     @Inject
     lateinit var playerController: PlayerController
+
+    override fun attachBaseContext(newBase: Context) {
+        // This preference lives in SharedPreferences so it is available before Hilt/DataStore
+        // is initialized. It does not overwrite Android's system language setting.
+        val language = newBase.getSharedPreferences("music_settings", Context.MODE_PRIVATE)
+            .getString("app_locale_override", "system") ?: "system"
+        val locale = when (language) {
+            "fa" -> Locale.forLanguageTag("fa")
+            "en" -> Locale.forLanguageTag("en")
+            else -> null
+        }
+        val configured = if (locale == null) {
+            Locale.setDefault(newBase.resources.configuration.locales[0])
+            newBase
+        } else {
+            Locale.setDefault(locale)
+            val config = Configuration(newBase.resources.configuration)
+            config.setLocale(locale)
+            config.setLayoutDirection(locale)
+            newBase.createConfigurationContext(config)
+        }
+        super.attachBaseContext(configured)
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)

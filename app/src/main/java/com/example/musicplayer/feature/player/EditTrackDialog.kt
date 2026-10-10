@@ -30,7 +30,9 @@ import com.example.musicplayer.domain.model.Track
 fun EditTrackDialog(
     track: Track,
     onDismiss: () -> Unit,
-    onSave: (title: String, artist: String, album: String, genre: String) -> Unit
+    onSave: (title: String, artist: String, album: String, genre: String) -> Unit,
+    isSaving: Boolean = false,
+    errorMessage: String? = null
 ) {
     var title by remember(track) { mutableStateOf(track.title) }
     var artist by remember(track) { mutableStateOf(track.artist) }
@@ -100,17 +102,23 @@ fun EditTrackDialog(
                         .fillMaxWidth()
                         .testTag("edit_track_genre_input")
                 )
+                if (errorMessage != null) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = errorMessage,
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
             }
         },
         confirmButton = {
             Button(
-                onClick = {
-                    onSave(title, artist, album, genre)
-                    onDismiss()
-                },
+                enabled = !isSaving && title.isNotBlank() && artist.isNotBlank(),
+                onClick = { onSave(title, artist, album, genre) },
                 modifier = Modifier.testTag("edit_track_save_button")
             ) {
-                Text(stringResource(R.string.btn_save))
+                Text(if (isSaving) stringResource(R.string.saving) else stringResource(R.string.btn_save))
             }
         },
         dismissButton = {

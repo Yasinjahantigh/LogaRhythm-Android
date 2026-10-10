@@ -18,12 +18,14 @@ import com.example.musicplayer.domain.model.SourceType
 import com.example.musicplayer.domain.model.Track
 import com.example.musicplayer.domain.repository.TrackRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
-import java.io.File
+import androidx.room.withTransaction
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -33,6 +35,7 @@ class TrackRepositoryImpl @Inject constructor(
     private val localMusicSource: LocalMusicSource,
     private val musicDao: MusicDao,
     private val playlistDao: PlaylistDao,
+    private val musicDatabase: com.example.musicplayer.data.room.MusicDatabase,
     private val preferencesManager: PreferencesManager,
     private val audioFileTagWriter: AudioFileTagWriter
 ) : TrackRepository {
@@ -248,94 +251,109 @@ class TrackRepositoryImpl @Inject constructor(
         album: String,
         genre: String
     ): Track? = withContext(Dispatchers.IO) {
+        val existing = musicDao.getTrackByIdOnce(id) ?: return@withContext null
         val cleanTitle = title.trim().ifBlank { "Unknown Title" }
         val cleanArtist = artist.trim().ifBlank { "Unknown Artist" }
         val cleanAlbum = album.trim().ifBlank { "Unknown Album" }
         val cleanGenre = genre.trim().ifBlank { "Unknown Genre" }
 
-        val existingEntity = musicDao.getTrackByIdOnce(id)
+        // Do not mutate Room until the physical file's embedded tags have been written
+        // and read back. Remote/non-local tracks are not local file-tag targets.
+        val candidate = existing.copy(
+            title = cleanTitle,
+            artist = cleanArtist,
+            album = cleanAlbum,
+            genre = cleanGenre
+        ).toDomain()
+        withContext(NonCancellable) {
+            // Once the user-authorized file write begins, finish the file/Room commit pair
+            // despite navigation or cancellation so the UI cannot leave stale Room metadata.
+            val wroteAndVerified = audioFileTagWriter.writeTagsToFileAndMediaStore(
+                track = candidate,
+                title = cleanTitle,
+                artist = cleanArtist,
+                album = cleanAlbum,
+                genre = cleanGenre
+            )
+            if (!wroteAndVerified) return@withContext null
 
-        musicDao.updateTrackMetadata(id, cleanTitle, cleanArtist, cleanAlbum, cleanGenre)
-        val entity = musicDao.getTrackByIdOnce(id)
-        val updatedTrack = entity?.toDomain()
-
-        if (updatedTrack != null) {
-            try {
-                audioFileTagWriter.writeTagsToFileAndMediaStore(
-                    track = updatedTrack,
-                    title = cleanTitle,
-                    artist = cleanArtist,
-                    album = cleanAlbum,
-                    genre = cleanGenre
-                )
-            } catch (_: Exception) {
-            }
+            musicDao.updateTrackMetadata(id, cleanTitle, cleanArtist, cleanAlbum, cleanGenre)
+            musicDao.getTrackByIdOnce(id)?.toDomain()
         }
-
-        updatedTrack
     }
 
+    /**
+     * Delete through the MediaStore URI, not a stale DATA filesystem path. On modern
+     * Android the platform can surface recoverable consent as a SecurityException;
+     * callers receive false and the Room/playlist records are deliberately retained.
+     */
     override suspend fun deleteTrack(track: Track): Boolean = withContext(Dispatchers.IO) {
-        var fileDeleted = false
-        // 1. Try deleting physical file from disk if path can be resolved
-        val audioFilePath = resolveAudioFilePath(track)
-        if (!audioFilePath.isNullOrBlank()) {
-            try {
-                val file = File(audioFilePath)
-                if (file.exists()) {
-                    fileDeleted = file.delete()
-                }
-            } catch (_: Exception) {
-            }
-        }
-
-        // 2. Try deleting from MediaStore
-        if (track.id.startsWith("local:")) {
-            val mediaStoreId = track.id.removePrefix("local:").toLongOrNull()
-            if (mediaStoreId != null) {
-                try {
-                    val uri = Uri.withAppendedPath(
-                        MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
-                        mediaStoreId.toString()
-                    )
-                    context.contentResolver.delete(uri, null, null)
-                } catch (_: Exception) {
-                }
-            }
-        }
-
-        // 3. Remove track from Room database and all playlists
-        musicDao.deleteTracksByIds(listOf(track.id))
-        playlistDao.removeTrackFromAllPlaylists(track.id)
-
-        true
-    }
-
-    private fun resolveAudioFilePath(track: Track): String? {
-        if (!track.id.startsWith("local:")) return null
-        val mediaStoreId = track.id.removePrefix("local:").toLongOrNull() ?: return null
-
-        val projection = arrayOf(MediaStore.Audio.Media.DATA)
-        val selection = "${MediaStore.Audio.Media._ID} = ?"
-        val selectionArgs = arrayOf(mediaStoreId.toString())
+        if (!track.id.startsWith("local:")) return@withContext false
+        val mediaStoreId = track.id.removePrefix("local:").toLongOrNull() ?: return@withContext false
+        // Never reconstruct a URI from the numeric ID: IDs can be volume-scoped. Use the
+        // exact MediaStore URI carried by the track and refuse malformed/mismatched identities.
+        val uri = runCatching { Uri.parse(track.uri) }.getOrNull()
+            ?.takeIf {
+                it.scheme.equals("content", ignoreCase = true) &&
+                    it.authority.equals("media", ignoreCase = true) &&
+                    it.lastPathSegment?.toLongOrNull() == mediaStoreId
+            } ?: return@withContext false
 
         try {
-            val collectionUri = MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
-            context.contentResolver.query(
-                collectionUri,
-                projection,
-                selection,
-                selectionArgs,
-                null
-            )?.use { cursor ->
-                val dataCol = cursor.getColumnIndex(MediaStore.Audio.Media.DATA)
-                if (dataCol != -1 && cursor.moveToFirst()) {
-                    return cursor.getString(dataCol)
-                }
+            val initialCursor = context.contentResolver.query(
+                uri, arrayOf(MediaStore.Audio.Media._ID), null, null, null
+            ) ?: return@withContext false // Unknown provider/query state is not proof of absence.
+            val queriedBefore = initialCursor.use { cursor ->
+                if (!cursor.moveToFirst()) null else cursor.getLong(0)
             }
-        } catch (_: Exception) {
-        }
+            if (queriedBefore == null) {
+                // The underlying item is already gone; finish removing the stale app entry.
+                withContext(NonCancellable) {
+                    musicDatabase.withTransaction {
+                        musicDao.deleteTracksByIds(listOf(track.id))
+                        playlistDao.removeTrackFromAllPlaylists(track.id)
+                    }
+                }
+                return@withContext true
+            }
+            if (queriedBefore != mediaStoreId) return@withContext false
 
-        return null
+            // Once deletion starts, complete the verify-and-DB-commit section even if the
+            // caller navigates away or its coroutine is cancelled. Otherwise a successful
+            // provider delete could leave a stale Room row/playlist reference.
+            withContext(NonCancellable) deleteAndCommit@ {
+                // Some providers can throw after changing the item. Don't infer the final
+                // state from the exception alone; query the exact URI and clean Room only if
+                // absence is confirmed.
+                runCatching { context.contentResolver.delete(uri, null, null) }
+                val remains = try {
+                    context.contentResolver.query(
+                        uri,
+                        arrayOf(MediaStore.Audio.Media._ID),
+                        null,
+                        null,
+                        null
+                    )?.use { it.moveToFirst() }
+                } catch (_: Exception) {
+                    null
+                } ?: return@deleteAndCommit false // Unknown is not the same as deleted.
+                if (remains) return@deleteAndCommit false
+
+                // Storage deletion is verified. Only now remove the track and playlist refs.
+                musicDatabase.withTransaction {
+                    musicDao.deleteTracksByIds(listOf(track.id))
+                    playlistDao.removeTrackFromAllPlaylists(track.id)
+                }
+                true
+            }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: SecurityException) {
+            // Permission/consent wasn't granted. Preserve local records for a retry.
+            false
+        } catch (_: Exception) {
+            false
+        }
     }
+
 }

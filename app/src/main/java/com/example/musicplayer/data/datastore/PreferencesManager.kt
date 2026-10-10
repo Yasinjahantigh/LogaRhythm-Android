@@ -1,5 +1,7 @@
 package com.example.musicplayer.data.datastore
 
+import android.content.Context
+import android.util.Log
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
@@ -8,7 +10,12 @@ import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.withContext
+import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -20,9 +27,11 @@ data class SavedQueueState(
 
 @Singleton
 class PreferencesManager @Inject constructor(
-    private val dataStore: DataStore<Preferences>
+    private val dataStore: DataStore<Preferences>,
+    @ApplicationContext private val context: Context
 ) {
     private val keyDarkTheme = booleanPreferencesKey("key_dark_theme")
+    private val keyAppLanguage = stringPreferencesKey("key_app_language")
     private val keyThemeMode = stringPreferencesKey("key_theme_mode")
     private val keyColorSource = stringPreferencesKey("key_color_source")
     private val keyCornerRoundness = stringPreferencesKey("key_corner_roundness")
@@ -39,6 +48,48 @@ class PreferencesManager @Inject constructor(
     private val keyEqualizerBandLevels = stringPreferencesKey("key_equalizer_band_levels")
     private val keyBassBoostStrength = intPreferencesKey("key_bass_boost_strength")
     private val keyVirtualizerStrength = intPreferencesKey("key_virtualizer_strength")
+
+
+    /** App locale override: "system", "en", or "fa". */
+    val appLanguage: Flow<String> = dataStore.data.map { preferences ->
+        preferences[keyAppLanguage] ?: "system"
+    }
+
+    suspend fun setAppLanguage(language: String) {
+        val normalized = language.takeIf { it in setOf("system", "en", "fa") } ?: "system"
+        // attachBaseContext runs before DataStore/Hilt are ready, so keep this small bootstrap
+        // preference in sync with DataStore. The activity is recreated only after this method returns.
+        val bootstrap = context.getSharedPreferences("music_settings", Context.MODE_PRIVATE)
+        val previousBootstrap = bootstrap.getString("app_locale_override", null)
+        try {
+            withContext(Dispatchers.IO) {
+                check(bootstrap.edit().putString("app_locale_override", normalized).commit()) {
+                    "Could not persist the startup language preference"
+                }
+            }
+            dataStore.edit { preferences -> preferences[keyAppLanguage] = normalized }
+        } catch (cancelled: CancellationException) {
+            rollbackBootstrapLanguage(bootstrap, previousBootstrap)
+            throw cancelled
+        } catch (failure: Exception) {
+            rollbackBootstrapLanguage(bootstrap, previousBootstrap)
+            throw failure
+        }
+    }
+
+    private suspend fun rollbackBootstrapLanguage(
+        bootstrap: android.content.SharedPreferences,
+        previousLanguage: String?
+    ) {
+        withContext(NonCancellable + Dispatchers.IO) {
+            val editor = bootstrap.edit()
+            if (previousLanguage == null) editor.remove("app_locale_override")
+            else editor.putString("app_locale_override", previousLanguage)
+            if (!editor.commit()) {
+                Log.e("PreferencesManager", "Could not roll back the startup language preference")
+            }
+        }
+    }
 
     val themeMode: Flow<String> = dataStore.data.map { preferences ->
         preferences[keyThemeMode] ?: "system"

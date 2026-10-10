@@ -157,18 +157,28 @@ class LibraryViewModel @Inject constructor(
         onDone: (Track?) -> Unit = {}
     ) {
         viewModelScope.launch {
-            val updated = trackRepository.updateTrackMetadata(id, title, artist, album, genre)
-            if (updated != null) {
-                playerController.updateTrackInPlayback(updated)
+            val updated = try {
+                trackRepository.updateTrackMetadata(id, title, artist, album, genre)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                null
             }
+            if (updated != null) playerController.updateTrackInPlayback(updated)
             onDone(updated)
         }
     }
 
-    fun deleteTrack(track: Track, onDone: () -> Unit = {}) {
+    fun deleteTrack(track: Track, onDone: (Boolean) -> Unit = {}) {
         viewModelScope.launch {
-            trackRepository.deleteTrack(track)
-            onDone()
+            val deleted = try {
+                trackRepository.deleteTrack(track)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                false
+            }
+            onDone(deleted)
         }
     }
 

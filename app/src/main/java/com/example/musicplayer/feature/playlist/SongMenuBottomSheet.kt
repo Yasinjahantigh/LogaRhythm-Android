@@ -3,7 +3,7 @@ package com.example.musicplayer.feature.playlist
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
-import android.provider.MediaStore
+import android.os.Build
 import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -69,7 +69,6 @@ import coil.request.ImageRequest
 import com.example.R
 import com.example.musicplayer.core.utils.TimeUtils
 import com.example.musicplayer.domain.model.Track
-import java.io.File
 import java.net.URLEncoder
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -113,7 +112,6 @@ fun SongMenuBottomSheet(
                     onClick = {
                         showDeleteConfirmDialog = false
                         onDeleteTrack?.invoke()
-                        deleteAudioFile(context, track)
                         onDismissRequest()
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
@@ -312,7 +310,15 @@ fun SongMenuBottomSheet(
                 title = stringResource(R.string.action_delete_song),
                 tag = "menu_delete_song",
                 iconTint = MaterialTheme.colorScheme.error,
-                onClick = { showDeleteConfirmDialog = true }
+                onClick = {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                        // MediaStore's system confirmation is the authoritative prompt.
+                        onDeleteTrack?.invoke()
+                        onDismissRequest()
+                    } else {
+                        showDeleteConfirmDialog = true
+                    }
+                }
             )
         }
     }
@@ -425,55 +431,4 @@ private fun shareAudioTrack(context: Context, track: Track) {
     } catch (_: Exception) {
         Toast.makeText(context, "Cannot share file", Toast.LENGTH_SHORT).show()
     }
-}
-
-private fun deleteAudioFile(context: Context, track: Track) {
-    try {
-        val path = resolveFilePath(context, track)
-        if (!path.isNullOrBlank()) {
-            val file = java.io.File(path)
-            if (file.exists()) {
-                file.delete()
-            }
-        }
-    } catch (_: Exception) {
-    }
-
-    try {
-        if (track.id.startsWith("local:")) {
-            val id = track.id.removePrefix("local:").toLongOrNull()
-            if (id != null) {
-                val uri = Uri.withAppendedPath(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, id.toString())
-                context.contentResolver.delete(uri, null, null)
-            }
-        }
-    } catch (_: Exception) {
-    }
-
-    Toast.makeText(context, context.getString(R.string.song_deleted), Toast.LENGTH_SHORT).show()
-}
-
-private fun resolveFilePath(context: Context, track: Track): String? {
-    if (!track.id.startsWith("local:")) return track.uri
-    val mediaStoreId = track.id.removePrefix("local:").toLongOrNull() ?: return null
-    val projection = arrayOf(MediaStore.Audio.Media.DATA)
-    val selection = "${MediaStore.Audio.Media._ID} = ?"
-    val selectionArgs = arrayOf(mediaStoreId.toString())
-
-    try {
-        context.contentResolver.query(
-            MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
-            projection,
-            selection,
-            selectionArgs,
-            null
-        )?.use { cursor ->
-            val dataCol = cursor.getColumnIndex(MediaStore.Audio.Media.DATA)
-            if (dataCol != -1 && cursor.moveToFirst()) {
-                return cursor.getString(dataCol)
-            }
-        }
-    } catch (_: Exception) {
-    }
-    return null
 }
