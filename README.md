@@ -14,9 +14,16 @@ LogaRhythm is an offline-first Android music player built with Kotlin, Jetpack C
 - One-tap shuffle across the entire library, time-boxed 15/30/60-minute listening sessions, and a true Recently Added row driven by MediaStore's added timestamp
 - Safe library refreshes: a failed scan keeps the last successful index instead of treating the error as an empty library
 - Equalizer, bass boost, virtualizer, playback speed, and sleep timer where supported by the device
-- English and Persian UI with RTL support, localized search metadata, resilient artwork fallbacks, theme preferences, and a signature “Ink & Ember” palette with optional wallpaper and album-art color
+- English and Persian UI with an in-app language override, explicit RTL/LTR direction, localized search metadata, resilient artwork fallbacks, theme preferences, and a signature “Ink & Ember” palette with optional wallpaper and album-art color
 
 All personalization is computed on-device from your own play history; nothing is uploaded. Mood suggestions are intentionally lightweight and private. They infer approximate energy, mood, acoustic character, and similarity from local metadata; they do not perform signal-level audio analysis or send your listening library to a recommendation service. Radio deliberately replaces the current queue, keeps the currently playing song and seek position where possible, then sequences relevant tracks with artist/album diversity.
+
+## Storage and metadata support
+
+- Embedded audio-tag editing is currently limited to MP3 / ID3v2.3 text tags. Unsupported formats, ID3v2.4 tags, malformed/truncated tags, nonzero ID3v2.3 revisions, and tags with unsupported header/frame flags fail closed instead of claiming a database-only change succeeded.
+- User-initiated lyrics saves attempt to write an ID3 `USLT` frame into supported MP3 files and read it back for verification. If that fails, the lyrics may be retained in Room for LogaRhythm playback, but the file is not reported as updated. Companion `.lrc` reading/deletion is separate; an automatic sidecar write is not used as a silent fallback.
+- Android 11+ shared-file writes/deletes use the native MediaStore consent flow for supported items, and the app verifies the resulting file state before reporting success. The API 29 recoverable-consent flow and writes through arbitrary SAF document providers are not implemented yet.
+- The lyrics delete action hides cached lyrics in LogaRhythm and attempts to remove a sibling `.lrc`; it does not yet remove a pre-existing embedded `USLT` frame, and the UI warns that a file copy may remain.
 
 ## Build
 

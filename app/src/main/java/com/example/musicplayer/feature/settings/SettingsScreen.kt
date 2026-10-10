@@ -1,5 +1,9 @@
 package com.example.musicplayer.feature.settings
 
+import android.app.Activity
+import android.content.Context
+import android.content.ContextWrapper
+import android.widget.Toast
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -53,6 +57,7 @@ fun SettingsScreen(
     viewModel: SettingsViewModel = hiltViewModel()
 ) {
     val themeMode by viewModel.themeMode.collectAsStateWithLifecycle()
+    val appLanguage by viewModel.appLanguage.collectAsStateWithLifecycle()
     val colorSource by viewModel.colorSource.collectAsStateWithLifecycle()
     val cornerRoundness by viewModel.cornerRoundness.collectAsStateWithLifecycle()
     val isCompactMiniPlayer by viewModel.isCompactMiniPlayer.collectAsStateWithLifecycle()
@@ -60,12 +65,39 @@ fun SettingsScreen(
     val excludedFolders by viewModel.excludedFolders.collectAsStateWithLifecycle()
     val allFolders by viewModel.allFolders.collectAsStateWithLifecycle()
     val isLrclibEnabled by viewModel.isLrclibEnabled.collectAsStateWithLifecycle()
+    val context = androidx.compose.ui.platform.LocalContext.current
 
+    var showLanguageDialog by remember { mutableStateOf(false) }
     var showThemeDialog by remember { mutableStateOf(false) }
     var showColorSourceDialog by remember { mutableStateOf(false) }
     var showCornerDialog by remember { mutableStateOf(false) }
     var showMinLengthDialog by remember { mutableStateOf(false) }
     var showFoldersDialog by remember { mutableStateOf(false) }
+
+    if (showLanguageDialog) {
+        SingleChoiceDialog(
+            title = stringResource(R.string.settings_language_title),
+            options = listOf(
+                "system" to stringResource(R.string.settings_language_system),
+                "en" to stringResource(R.string.settings_language_english),
+                "fa" to stringResource(R.string.settings_language_persian)
+            ),
+            selectedKey = appLanguage,
+            onSelectKey = { language ->
+                viewModel.setAppLanguage(
+                    language = language,
+                    onSaved = {
+                        // Recreate only after both the bootstrap preference and DataStore commit.
+                        context.findActivity()?.recreate()
+                    },
+                    onFailure = {
+                        Toast.makeText(context, context.getString(R.string.settings_language_save_failed), Toast.LENGTH_LONG).show()
+                    }
+                )
+            },
+            onDismiss = { showLanguageDialog = false }
+        )
+    }
 
     if (showThemeDialog) {
         SingleChoiceDialog(
@@ -176,6 +208,20 @@ fun SettingsScreen(
             item { HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp)) }
 
             item { SettingsCategoryHeader(stringResource(R.string.settings_category_appearance)) }
+            item {
+                val languageLabel = when (appLanguage) {
+                    "en" -> stringResource(R.string.settings_language_english)
+                    "fa" -> stringResource(R.string.settings_language_persian)
+                    else -> stringResource(R.string.settings_language_system)
+                }
+                SettingsActionItem(
+                    title = stringResource(R.string.settings_language_title),
+                    subtitle = languageLabel,
+                    icon = Icons.Filled.Language,
+                    onClick = { showLanguageDialog = true },
+                    testTag = "settings_language_item"
+                )
+            }
             item {
                 val themeLabel = when (themeMode) {
                     "light" -> stringResource(R.string.settings_theme_light)
@@ -318,4 +364,11 @@ fun SettingsScreen(
             }
         }
     }
+}
+
+
+private tailrec fun Context.findActivity(): Activity? = when (this) {
+    is Activity -> this
+    is ContextWrapper -> baseContext.findActivity()
+    else -> null
 }

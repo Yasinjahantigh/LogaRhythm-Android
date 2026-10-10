@@ -52,7 +52,7 @@ class LyricsOvhLyricsSource @Inject constructor() : LyricsSource {
             if (connection.responseCode == HttpURLConnection.HTTP_OK) {
                 val responseText = connection.inputStream.bufferedReader().use(BufferedReader::readText)
                 val json = JSONObject(responseText)
-                val lyricsText = json.optString("lyrics", "").trim()
+                val lyricsText = LyricsResponseFields.text(json, "lyrics")
                 if (lyricsText.isNotBlank()) {
                     val parsed = LrcParser.parse(lyricsText)
                     if (!parsed.isEmpty) {

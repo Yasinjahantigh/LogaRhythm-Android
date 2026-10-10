@@ -113,7 +113,7 @@ class NeteaseLyricsSource @Inject constructor() : LyricsSource {
                 val responseText = connection.inputStream.bufferedReader().use(BufferedReader::readText)
                 val json = JSONObject(responseText)
                 val lrcObj = json.optJSONObject("lrc")
-                val lyricText = lrcObj?.optString("lyric", "")?.trim()
+                val lyricText = lrcObj?.let { LyricsResponseFields.text(it, "lyric") }
                 if (!lyricText.isNullOrEmpty() && lyricText != "[00:00.000] 纯音乐，请欣赏") {
                     return lyricText
                 }

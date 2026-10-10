@@ -60,6 +60,7 @@ import com.example.R
 import com.example.musicplayer.domain.ai.MusicAiEngine
 import com.example.musicplayer.domain.model.DailyMix
 import com.example.musicplayer.domain.model.Track
+import com.example.musicplayer.core.utils.rememberMediaStoreConsent
 import com.example.musicplayer.feature.library.TrackListItem
 import com.example.musicplayer.feature.player.EditTrackDialog
 import com.example.musicplayer.feature.playlist.AddToPlaylistDialog
@@ -90,10 +91,13 @@ fun HomeScreen(
     var selectedTrackForMenu by remember { mutableStateOf<Track?>(null) }
     var trackForAddToPlaylist by remember { mutableStateOf<Track?>(null) }
     var selectedTrackForEdit by remember { mutableStateOf<Track?>(null) }
+    var editTrackError by remember { mutableStateOf(false) }
+    var editTrackSaving by remember { mutableStateOf(false) }
     var selectedMixForDetail by remember { mutableStateOf<DailyMix?>(null) }
     val snackbarHostState = remember { SnackbarHostState() }
     val coroutineScope = rememberCoroutineScope()
     val context = androidx.compose.ui.platform.LocalContext.current
+    val mediaStoreConsent = rememberMediaStoreConsent()
     val emptyMoodMessage = stringResource(R.string.ai_mood_empty)
     val sessionUnavailableMessage = stringResource(R.string.home_session_unavailable)
 
@@ -365,7 +369,17 @@ fun HomeScreen(
                 trackForAddToPlaylist = track
             },
             onDeleteTrack = {
-                viewModel.deleteTrack(track)
+                mediaStoreConsent.delete(track, onApproved = { approvedTrack ->
+                    viewModel.deleteTrack(approvedTrack) { deleted ->
+                        coroutineScope.launch {
+                            snackbarHostState.showSnackbar(
+                                context.getString(if (deleted) R.string.song_deleted else R.string.track_delete_failed)
+                            )
+                        }
+                    }
+                }, onCancelled = {
+                    coroutineScope.launch { snackbarHostState.showSnackbar(context.getString(R.string.track_delete_failed)) }
+                })
                 selectedTrackForMenu = null
             },
             onEditTrack = {
@@ -378,13 +392,25 @@ fun HomeScreen(
     selectedTrackForEdit?.let { track ->
         EditTrackDialog(
             track = track,
-            onDismiss = { selectedTrackForEdit = null },
+            onDismiss = { selectedTrackForEdit = null; editTrackError = false; editTrackSaving = false },
+            errorMessage = if (editTrackError) context.getString(R.string.track_metadata_write_failed) else null,
+            isSaving = editTrackSaving,
             onSave = { newTitle, newArtist, newAlbum, newGenre ->
-                viewModel.updateTrackMetadata(track.id, newTitle, newArtist, newAlbum, newGenre) {
-                    selectedTrackForEdit = null
-                    coroutineScope.launch {
-                        snackbarHostState.showSnackbar(context.getString(R.string.track_updated_toast))
-                    }
+                if (!editTrackSaving) {
+                    editTrackSaving = true
+                    editTrackError = false
+                    mediaStoreConsent.write(track, onApproved = {
+                        viewModel.updateTrackMetadata(track.id, newTitle, newArtist, newAlbum, newGenre) { updated ->
+                            editTrackSaving = false
+                            if (updated != null) {
+                                selectedTrackForEdit = null
+                                coroutineScope.launch { snackbarHostState.showSnackbar(context.getString(R.string.track_updated_toast)) }
+                            } else editTrackError = true
+                        }
+                    }, onCancelled = {
+                        editTrackSaving = false
+                        editTrackError = true
+                    })
                 }
             }
         )

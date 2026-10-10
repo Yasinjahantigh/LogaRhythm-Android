@@ -47,6 +47,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.R
 import com.example.musicplayer.core.utils.PermissionUtils
 import com.example.musicplayer.domain.model.Track
+import com.example.musicplayer.core.utils.rememberMediaStoreConsent
 import com.example.musicplayer.feature.player.EditTrackDialog
 import com.example.musicplayer.feature.playlist.AddToPlaylistDialog
 import com.example.musicplayer.feature.playlist.PlaylistsTabContent
@@ -72,6 +73,7 @@ fun LibraryScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     val context = androidx.compose.ui.platform.LocalContext.current
+    val mediaStoreConsent = rememberMediaStoreConsent()
 
     LaunchedEffect(viewModel) {
         viewModel.scanErrors.collect {
@@ -88,6 +90,8 @@ fun LibraryScreen(
     var selectedTrackForMenu by remember { mutableStateOf<Track?>(null) }
     var selectedTrackForAddToPlaylist by remember { mutableStateOf<Track?>(null) }
     var selectedTrackForEdit by remember { mutableStateOf<Track?>(null) }
+    var editTrackError by remember { mutableStateOf(false) }
+    var editTrackSaving by remember { mutableStateOf(false) }
     var showSortSheet by remember { mutableStateOf(false) }
 
     val permissionLauncher = rememberLauncherForActivityResult(
@@ -145,7 +149,19 @@ fun LibraryScreen(
                 }
             },
             onAddToPlaylist = { selectedTrackForAddToPlaylist = track },
-            onDeleteTrack = { viewModel.deleteTrack(track) },
+            onDeleteTrack = {
+                mediaStoreConsent.delete(track, onApproved = { approvedTrack ->
+                    viewModel.deleteTrack(approvedTrack) { deleted ->
+                        scope.launch {
+                            snackbarHostState.showSnackbar(
+                                context.getString(if (deleted) R.string.song_deleted else R.string.track_delete_failed)
+                            )
+                        }
+                    }
+                }, onCancelled = {
+                    scope.launch { snackbarHostState.showSnackbar(context.getString(R.string.track_delete_failed)) }
+                })
+            },
             onEditTrack = { selectedTrackForEdit = track },
             onGoToAlbum = if (track.album.isNotBlank() && track.album != "Unknown Album") {
                 { onNavigateToAlbum(track.album) }
@@ -159,13 +175,25 @@ fun LibraryScreen(
     selectedTrackForEdit?.let { track ->
         EditTrackDialog(
             track = track,
-            onDismiss = { selectedTrackForEdit = null },
+            onDismiss = { selectedTrackForEdit = null; editTrackError = false; editTrackSaving = false },
+            errorMessage = if (editTrackError) context.getString(R.string.track_metadata_write_failed) else null,
+            isSaving = editTrackSaving,
             onSave = { newTitle, newArtist, newAlbum, newGenre ->
-                viewModel.updateTrackMetadata(track.id, newTitle, newArtist, newAlbum, newGenre) {
-                    selectedTrackForEdit = null
-                    scope.launch {
-                        snackbarHostState.showSnackbar(context.getString(R.string.track_updated_toast))
-                    }
+                if (!editTrackSaving) {
+                    editTrackSaving = true
+                    editTrackError = false
+                    mediaStoreConsent.write(track, onApproved = {
+                        viewModel.updateTrackMetadata(track.id, newTitle, newArtist, newAlbum, newGenre) { updated ->
+                            editTrackSaving = false
+                            if (updated != null) {
+                                selectedTrackForEdit = null
+                                scope.launch { snackbarHostState.showSnackbar(context.getString(R.string.track_updated_toast)) }
+                            } else editTrackError = true
+                        }
+                    }, onCancelled = {
+                        editTrackSaving = false
+                        editTrackError = true
+                    })
                 }
             }
         )

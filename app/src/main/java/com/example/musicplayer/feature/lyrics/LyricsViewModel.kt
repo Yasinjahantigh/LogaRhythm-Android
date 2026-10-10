@@ -12,6 +12,7 @@ import com.example.musicplayer.domain.repository.LyricsRepository
 import com.example.musicplayer.playback.PlayerController
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
@@ -53,6 +54,9 @@ class LyricsViewModel @Inject constructor(
 
     private val _showCandidatePicker = MutableStateFlow(false)
     val showCandidatePicker: StateFlow<Boolean> = _showCandidatePicker.asStateFlow()
+
+    private val _saveMessage = MutableStateFlow<String?>(null)
+    val saveMessage: StateFlow<String?> = _saveMessage.asStateFlow()
 
     private var loadJob: Job? = null
 
@@ -105,43 +109,95 @@ class LyricsViewModel @Inject constructor(
         _isManualEditOpen.value = open
     }
 
-    fun saveManualLyrics(content: String) {
-        val track = currentTrack.value ?: return
+    fun saveManualLyrics(content: String, targetTrack: Track? = currentTrack.value) {
+        val track = targetTrack ?: return
+        val trimmed = content.trim()
+        if (trimmed.isBlank()) {
+            _saveMessage.value = "failed"
+            return
+        }
         viewModelScope.launch(Dispatchers.IO) {
-            if (content.isNotBlank()) {
-                lyricsRepository.saveLyrics(track, content.trim(), "user_manual")
+            _isLoading.value = true
+            val embedded: Boolean? = try {
+                lyricsRepository.saveLyrics(track, trimmed, "user_manual")
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                null // A thrown cache write is not a successful cache-only save.
+            } finally {
+                _isLoading.value = false
             }
-            _isManualEditOpen.value = false
+            _saveMessage.value = when (embedded) {
+                true -> "embedded"
+                false -> "cached_only"
+                null -> "failed"
+            }
+            if (embedded != null) _isManualEditOpen.value = false
         }
     }
 
-    fun deleteLyrics() {
-        val track = currentTrack.value ?: return
+    fun deleteLyrics(targetTrack: Track? = currentTrack.value) {
+        val track = targetTrack ?: return
         viewModelScope.launch(Dispatchers.IO) {
-            lyricsRepository.deleteLyrics(track)
+            try {
+                lyricsRepository.deleteLyrics(track)
+                // Deletion hides lyrics inside LogaRhythm and removes the companion file when
+                // possible; existing embedded audio tags cannot yet be removed by this action.
+                _saveMessage.value = "hidden"
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                _saveMessage.value = "delete_failed"
+            }
         }
     }
 
-    fun pasteAndSaveLyrics(clipboardText: String) {
-        val track = currentTrack.value ?: return
+    fun pasteAndSaveLyrics(clipboardText: String, targetTrack: Track? = currentTrack.value) {
+        val track = targetTrack ?: return
         val trimmed = clipboardText.trim()
-        if (trimmed.isBlank()) return
+        if (trimmed.isBlank()) {
+            _saveMessage.value = "failed"
+            return
+        }
         viewModelScope.launch(Dispatchers.IO) {
-            lyricsRepository.saveLyrics(track, trimmed, "user_clipboard")
+            _isLoading.value = true
+            val embedded: Boolean? = try {
+                lyricsRepository.saveLyrics(track, trimmed, "user_clipboard")
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                null
+            } finally {
+                _isLoading.value = false
+            }
+            _saveMessage.value = when (embedded) {
+                true -> "embedded"
+                false -> "cached_only"
+                null -> "failed"
+            }
         }
     }
 
-    fun importLyricsFromUri(uri: Uri) {
-        val track = currentTrack.value ?: return
+    fun importLyricsFromUri(uri: Uri, targetTrack: Track? = currentTrack.value) {
+        val track = targetTrack ?: return
         viewModelScope.launch(Dispatchers.IO) {
+            _isLoading.value = true
             try {
                 val content = context.contentResolver.openInputStream(uri)?.use { stream ->
                     stream.bufferedReader().readText()
                 }
                 if (!content.isNullOrBlank()) {
-                    lyricsRepository.saveLyrics(track, content.trim(), "imported_file")
+                    val embedded = lyricsRepository.saveLyrics(track, content.trim(), "imported_file")
+                    _saveMessage.value = if (embedded) "embedded" else "cached_only"
+                } else {
+                    _saveMessage.value = "failed"
                 }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
             } catch (_: Exception) {
+                _saveMessage.value = "failed"
+            } finally {
+                _isLoading.value = false
             }
         }
     }
@@ -185,6 +241,8 @@ class LyricsViewModel @Inject constructor(
             try {
                 val results = lyricsRepository.searchLyricsCandidates(title, artist)
                 _lyricsCandidates.value = results
+            } catch (cancelled: CancellationException) {
+                throw cancelled
             } catch (_: Exception) {
                 _lyricsCandidates.value = emptyList()
             } finally {
@@ -193,36 +251,70 @@ class LyricsViewModel @Inject constructor(
         }
     }
 
-    fun selectCandidate(candidate: com.example.musicplayer.domain.model.LyricsCandidate) {
-        val track = currentTrack.value ?: return
-        viewModelScope.launch(Dispatchers.IO) {
-            val content = if (candidate.lyrics.isSynced) {
-                candidate.lyrics.lines.joinToString("\n") { line ->
-                    val min = line.timestampMs / 60_000L
-                    val sec = (line.timestampMs % 60_000L) / 1_000L
-                    val frac = (line.timestampMs % 1_000L) / 10L
-                    String.format("[%02d:%02d.%02d]%s", min, sec, frac, line.text)
-                }
-            } else {
-                candidate.lyrics.plainText.orEmpty()
+    fun selectCandidate(
+        candidate: com.example.musicplayer.domain.model.LyricsCandidate,
+        targetTrack: Track? = currentTrack.value
+    ) {
+        val track = targetTrack ?: return
+        val content = if (candidate.lyrics.isSynced) {
+            candidate.lyrics.lines.joinToString("\n") { line ->
+                val min = line.timestampMs / 60_000L
+                val sec = (line.timestampMs % 60_000L) / 1_000L
+                val frac = (line.timestampMs % 1_000L) / 10L
+                String.format("[%02d:%02d.%02d]%s", min, sec, frac, line.text)
             }
-            lyricsRepository.saveLyrics(track, content, candidate.sourceName)
-            _showCandidatePicker.value = false
+        } else {
+            candidate.lyrics.plainText.orEmpty()
+        }.trim()
+        if (content.isBlank()) {
+            _saveMessage.value = "failed"
+            return
         }
+        viewModelScope.launch(Dispatchers.IO) {
+            _isLoading.value = true
+            val embedded: Boolean? = try {
+                lyricsRepository.saveLyrics(track, content, candidate.sourceName)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                null
+            } finally {
+                _isLoading.value = false
+            }
+            _saveMessage.value = when (embedded) {
+                true -> "embedded"
+                false -> "cached_only"
+                null -> "failed"
+            }
+            if (embedded != null) _showCandidatePicker.value = false
+        }
+    }
+
+    fun reportSaveFailure() {
+        _saveMessage.value = "failed"
+    }
+
+    fun consumeSaveMessage() {
+        _saveMessage.value = null
     }
 
     fun dismissCandidatePicker() {
         _showCandidatePicker.value = false
     }
 
-    fun resetLyricsToDefault() {
-        val track = currentTrack.value ?: return
-        viewModelScope.launch {
+    fun resetLyricsToDefault(targetTrack: Track? = currentTrack.value) {
+        val track = targetTrack ?: return
+        viewModelScope.launch(Dispatchers.IO) {
             _isLoading.value = true
             try {
-                lyricsRepository.deleteLyrics(track)
-                // Reload clean state
+                // Reset is not deletion: remove the Room override/tombstone so local embedded
+                // or companion lyrics can be discovered again.
+                lyricsRepository.resetLyricsToDefault(track.id)
                 lyricsRepository.loadLyrics(track)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                _saveMessage.value = "reset_failed"
             } finally {
                 _isLoading.value = false
             }
@@ -235,6 +327,10 @@ class LyricsViewModel @Inject constructor(
             _isLoading.value = true
             try {
                 lyricsRepository.fetchOnlineLyrics(track)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                // Empty/error UI state is preferable to crashing the lyrics screen.
             } finally {
                 _isLoading.value = false
             }
@@ -252,6 +348,8 @@ class LyricsViewModel @Inject constructor(
             try {
                 val found = lyricsRepository.fetchOnlineLyricsWithCustomQuery(track, title, artist)
                 onComplete(found != null && !found.isEmpty)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
             } catch (_: Exception) {
                 onComplete(false)
             } finally {

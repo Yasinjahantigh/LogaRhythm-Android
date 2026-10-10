@@ -205,6 +205,12 @@
     <string name="settings_category_appearance">ظاهر و پوسته</string>
     <string name="settings_category_library">کتابخانه و اسکن</string>
     <string name="settings_category_audio">صدا و جلوه‌ها</string>
+    <string name="settings_language_save_failed">ذخیره تنظیم زبان انجام نشد، دوباره تلاش کنید</string>
+    <string name="settings_language_title">زبان برنامه</string>
+    <string name="settings_language_desc">زبان فارسی یا انگلیسی را انتخاب کنید، برنامه برای اعمال تغییر دوباره راه‌اندازی می‌شود</string>
+    <string name="settings_language_system">پیروی از زبان دستگاه</string>
+    <string name="settings_language_english">انگلیسی</string>
+    <string name="settings_language_persian">فارسی</string>
     <string name="settings_theme_title">پوسته</string>
     <string name="settings_theme_system">پیروی از سیستم</string>
     <string name="settings_theme_light">روشن</string>
@@ -268,6 +274,10 @@
     <string name="cd_rewind_10">۱۰ ثانیه به عقب</string>
     <string name="cd_forward_10">۱۰ ثانیه به جلو</string>
     <string name="offline_audio_badge">فایل محلی</string>
+    <string name="player_style_vinyl">وینیل</string>
+    <string name="player_style_artwork">کاور</string>
+    <string name="player_groovy_vibe">✨ حال‌وهوای موزیک 🎵</string>
+    <string name="player_paused">💤 متوقف</string>
     <string name="equalizer_bands_title">باندهای فرکانسی</string>
     <string name="audio_effects_title">افکت‌های صوتی</string>
     <string name="bass_boost_label">تقویت بیس (Bass Boost)</string>
@@ -295,6 +305,9 @@
     <string name="action_delete_lyrics">حذف متن آهنگ</string>
     <string name="dialog_delete_lyrics_title">حذف متن آهنگ</string>
     <string name="dialog_delete_lyrics_confirm">آیا مطمئن هستید که می‌خواهید متن آهنگ «%1$s» را حذف کنید؟</string>
+    <string name="lyrics_delete_failed">پنهان‌کردن متن ترانه در LogaRhythm انجام نشد، دوباره تلاش کنید</string>
+    <string name="lyrics_reset_failed">بازنشانی متن ترانه به منبع پیش‌فرض انجام نشد</string>
+    <string name="lyrics_hidden_in_app">متن ترانه در LogaRhythm پنهان شد، اما ممکن است نسخه‌ای داخل فایل صوتی یا فایل جانبی باقی مانده باشد</string>
     <string name="lyrics_deleted">متن آهنگ حذف شد</string>
     <string name="action_paste_lyrics">جای‌گذاری از کلیپ‌بورد</string>
     <string name="clipboard_empty">کلیپ‌بورد خالی است</string>
@@ -367,4 +380,10 @@
     <string name="lyrics_search_candidates_btn">جستجو و انتخاب از نتایج آنلاین</string>
     <string name="lyrics_synced_badge">همگام‌سازی شده (LRC)</string>
     <string name="lyrics_plain_badge">متن ساده</string>
+    <string name="track_delete_failed">حذف فایل آهنگ ممکن نشد، دسترسی را بررسی کنید و دوباره تلاش کنید</string>
+    <string name="lyrics_embedded_success">متن ترانه داخل فایل MP3 ذخیره شد</string>
+    <string name="lyrics_cached_only">متن ترانه در LogaRhythm ذخیره شد، اما داخل فایل صوتی قرار نگرفت (فقط فایل‌های MP3 پشتیبانی می‌شوند)</string>
+    <string name="lyrics_embed_failed">ذخیره متن ترانه داخل فایل ممکن نشد، در صورت وجود نسخه کش‌شده در LogaRhythm باقی می‌ماند</string>
+    <string name="saving">در حال ذخیره…</string>
+    <string name="track_metadata_write_failed">به‌روزرسانی فایل صوتی ممکن نشد، فعلاً فقط فایل MP3 با دسترسی نوشتن پشتیبانی می‌شود</string>
 </resources>

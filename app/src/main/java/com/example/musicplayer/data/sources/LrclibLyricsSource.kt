@@ -87,10 +87,13 @@ class LrclibLyricsSource @Inject constructor() : LyricsSource {
                     val item = array.getJSONObject(i)
                     val lyrics = parseLyricsFromJson(item)
                     if (lyrics != null && !lyrics.isEmpty) {
-                        val id = item.optString("id", "${results.size}")
-                        val trackName = item.optString("trackName", cleanTitle)
-                        val artistName = item.optString("artistName", cleanArtist)
-                        val albumName = item.optString("albumName", "")
+                        // JSONObject.optString can stringify JSON null as the literal "null".
+                        // Read optional fields defensively before they reach the picker UI.
+                        val id = LyricsResponseFields.text(item, "id").ifBlank { "${results.size}" }
+                        val trackName = LyricsResponseFields.text(item, "trackName").ifBlank { cleanTitle }
+                        val artistName = LyricsResponseFields.text(item, "artistName").ifBlank { cleanArtist }
+                        val albumName = LyricsResponseFields.text(item, "albumName")
+                        if (trackName.isBlank() || artistName.equals("null", ignoreCase = true)) continue
                         val duration = (item.optDouble("duration", 0.0) * 1000).toLong()
                         results.add(
                             com.example.musicplayer.domain.model.LyricsCandidate(
@@ -183,8 +186,8 @@ class LrclibLyricsSource @Inject constructor() : LyricsSource {
     }
 
     private fun parseLyricsFromJson(json: JSONObject): Lyrics? {
-        val synced = json.optString("syncedLyrics", "").trim()
-        val plain = json.optString("plainLyrics", "").trim()
+        val synced = LyricsResponseFields.text(json, "syncedLyrics")
+        val plain = LyricsResponseFields.text(json, "plainLyrics")
 
         val textToParse = when {
             synced.isNotBlank() -> synced

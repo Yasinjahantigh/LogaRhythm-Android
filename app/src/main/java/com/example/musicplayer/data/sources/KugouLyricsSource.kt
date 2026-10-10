@@ -81,8 +81,8 @@ class KugouLyricsSource @Inject constructor() : LyricsSource {
                 val candidates = json.optJSONArray("candidates") ?: return null
                 if (candidates.length() > 0) {
                     val first = candidates.getJSONObject(0)
-                    val id = first.optString("id", "")
-                    val accessKey = first.optString("accesskey", "")
+                    val id = LyricsResponseFields.text(first, "id")
+                    val accessKey = LyricsResponseFields.text(first, "accesskey")
                     if (id.isNotBlank() && accessKey.isNotBlank()) {
                         return Pair(id, accessKey)
                     }
@@ -110,7 +110,7 @@ class KugouLyricsSource @Inject constructor() : LyricsSource {
             if (connection.responseCode == HttpURLConnection.HTTP_OK) {
                 val responseText = connection.inputStream.bufferedReader().use(BufferedReader::readText)
                 val json = JSONObject(responseText)
-                val base64Content = json.optString("content", "")
+                val base64Content = LyricsResponseFields.text(json, "content")
                 if (base64Content.isNotBlank()) {
                     val decodedBytes = Base64.decode(base64Content, Base64.DEFAULT)
                     return String(decodedBytes, Charsets.UTF_8)

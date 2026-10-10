@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.musicplayer.data.datastore.PreferencesManager
 import com.example.musicplayer.domain.repository.TrackRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.map
@@ -17,6 +18,9 @@ class SettingsViewModel @Inject constructor(
     private val preferencesManager: PreferencesManager,
     private val trackRepository: TrackRepository
 ) : ViewModel() {
+
+    val appLanguage: StateFlow<String> = preferencesManager.appLanguage
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "system")
 
     val themeMode: StateFlow<String> = preferencesManager.themeMode
         .stateIn(
@@ -74,6 +78,23 @@ class SettingsViewModel @Inject constructor(
             started = SharingStarted.WhileSubscribed(5000),
             initialValue = false
         )
+
+    fun setAppLanguage(
+        language: String,
+        onSaved: () -> Unit = {},
+        onFailure: () -> Unit = {}
+    ) {
+        viewModelScope.launch {
+            try {
+                preferencesManager.setAppLanguage(language)
+                onSaved()
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                onFailure()
+            }
+        }
+    }
 
     fun setThemeMode(mode: String) {
         viewModelScope.launch {

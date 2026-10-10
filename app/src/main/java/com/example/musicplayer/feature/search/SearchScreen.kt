@@ -35,6 +35,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.R
 import com.example.musicplayer.domain.model.Track
+import com.example.musicplayer.core.utils.rememberMediaStoreConsent
 import com.example.musicplayer.feature.player.EditTrackDialog
 import com.example.musicplayer.feature.playlist.AddToPlaylistDialog
 import com.example.musicplayer.feature.playlist.PlaylistViewModel
@@ -55,10 +56,13 @@ fun SearchScreen(
     val playlists by playlistViewModel.playlists.collectAsStateWithLifecycle()
     val focusManager = LocalFocusManager.current
     val context = LocalContext.current
+    val mediaStoreConsent = rememberMediaStoreConsent()
 
     var selectedTrackForMenu by remember { mutableStateOf<Track?>(null) }
     var showAddToPlaylistDialog by remember { mutableStateOf(false) }
     var selectedTrackForEdit by remember { mutableStateOf<Track?>(null) }
+    var editTrackError by remember { mutableStateOf(false) }
+    var editTrackSaving by remember { mutableStateOf(false) }
 
     if (selectedTrackForMenu != null) {
         val menuTrack = selectedTrackForMenu!!
@@ -68,7 +72,20 @@ fun SearchScreen(
             onPlayNext = { viewModel.playNext(menuTrack) },
             onAddToQueue = { viewModel.addToQueue(menuTrack) },
             onAddToPlaylist = { showAddToPlaylistDialog = true },
-            onDeleteTrack = { viewModel.deleteTrack(menuTrack) },
+            onDeleteTrack = {
+                mediaStoreConsent.delete(menuTrack, onApproved = { approvedTrack ->
+                    viewModel.deleteTrack(approvedTrack) { deleted ->
+                        Toast.makeText(
+                            context,
+                            context.getString(if (deleted) R.string.song_deleted else R.string.track_delete_failed),
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    }
+                }, onCancelled = {
+                    Toast.makeText(context, context.getString(R.string.track_delete_failed), Toast.LENGTH_SHORT).show()
+                })
+                selectedTrackForMenu = null
+            },
             onEditTrack = { selectedTrackForEdit = menuTrack },
             onGoToAlbum = if (menuTrack.album.isNotBlank() && menuTrack.album != "Unknown Album") {
                 { onNavigateToAlbum(menuTrack.album) }
@@ -82,11 +99,25 @@ fun SearchScreen(
     selectedTrackForEdit?.let { track ->
         EditTrackDialog(
             track = track,
-            onDismiss = { selectedTrackForEdit = null },
+            onDismiss = { selectedTrackForEdit = null; editTrackError = false; editTrackSaving = false },
+            errorMessage = if (editTrackError) context.getString(R.string.track_metadata_write_failed) else null,
+            isSaving = editTrackSaving,
             onSave = { newTitle, newArtist, newAlbum, newGenre ->
-                viewModel.updateTrackMetadata(track.id, newTitle, newArtist, newAlbum, newGenre) {
-                    selectedTrackForEdit = null
-                    Toast.makeText(context, context.getString(R.string.track_updated_toast), Toast.LENGTH_SHORT).show()
+                if (!editTrackSaving) {
+                    editTrackSaving = true
+                    editTrackError = false
+                    mediaStoreConsent.write(track, onApproved = {
+                        viewModel.updateTrackMetadata(track.id, newTitle, newArtist, newAlbum, newGenre) { updated ->
+                            editTrackSaving = false
+                            if (updated != null) {
+                                selectedTrackForEdit = null
+                                Toast.makeText(context, context.getString(R.string.track_updated_toast), Toast.LENGTH_SHORT).show()
+                            } else editTrackError = true
+                        }
+                    }, onCancelled = {
+                        editTrackSaving = false
+                        editTrackError = true
+                    })
                 }
             }
         )

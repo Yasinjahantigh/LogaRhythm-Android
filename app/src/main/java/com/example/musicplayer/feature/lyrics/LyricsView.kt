@@ -88,6 +88,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.R
 import com.example.musicplayer.domain.model.Lyrics
+import com.example.musicplayer.core.utils.rememberMediaStoreConsent
 import kotlinx.coroutines.launch
 import java.net.URLEncoder
 import kotlin.math.roundToInt
@@ -108,10 +109,38 @@ fun LyricsView(
     val showCandidatePicker by viewModel.showCandidatePicker.collectAsStateWithLifecycle()
     val lyricsCandidates by viewModel.lyricsCandidates.collectAsStateWithLifecycle()
     val isSearchingCandidates by viewModel.isSearchingCandidates.collectAsStateWithLifecycle()
+    val saveMessage by viewModel.saveMessage.collectAsStateWithLifecycle()
 
     var showDeleteConfirmDialog by remember { mutableStateOf(false) }
+    var trackForLyricsDeletion by remember { mutableStateOf<com.example.musicplayer.domain.model.Track?>(null) }
 
     val context = LocalContext.current
+    val mediaStoreConsent = rememberMediaStoreConsent()
+    val requestLyricsWrite: ((com.example.musicplayer.domain.model.Track) -> Unit) -> Unit = { action ->
+        val targetTrack = currentTrack
+        if (targetTrack != null) {
+            mediaStoreConsent.write(
+                track = targetTrack,
+                onApproved = { action(targetTrack) }, // Bind the consent to the exact requested track.
+                onCancelled = { viewModel.reportSaveFailure() }
+            )
+        } else viewModel.reportSaveFailure()
+    }
+    LaunchedEffect(saveMessage) {
+        val message = when (saveMessage) {
+            "embedded" -> context.getString(R.string.lyrics_embedded_success)
+            "cached_only" -> context.getString(R.string.lyrics_cached_only)
+            "failed" -> context.getString(R.string.lyrics_embed_failed)
+            "hidden" -> context.getString(R.string.lyrics_hidden_in_app)
+            "delete_failed" -> context.getString(R.string.lyrics_delete_failed)
+            "reset_failed" -> context.getString(R.string.lyrics_reset_failed)
+            else -> null
+        }
+        if (message != null) {
+            Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+            viewModel.consumeSaveMessage()
+        }
+    }
     val clipboardManager = LocalClipboardManager.current
     val coroutineScope = rememberCoroutineScope()
     val swipeOffsetX = remember { Animatable(0f) }
@@ -120,7 +149,7 @@ fun LyricsView(
         contract = ActivityResultContracts.OpenDocument()
     ) { uri: Uri? ->
         if (uri != null) {
-            viewModel.importLyricsFromUri(uri)
+            requestLyricsWrite { track -> viewModel.importLyricsFromUri(uri, track) }
         }
     }
 
@@ -145,8 +174,7 @@ fun LyricsView(
     val onPasteFromClipboard: () -> Unit = {
         val clipText = clipboardManager.getText()?.text
         if (!clipText.isNullOrBlank()) {
-            viewModel.pasteAndSaveLyrics(clipText)
-            Toast.makeText(context, context.getString(R.string.lyrics_saved_to_file), Toast.LENGTH_SHORT).show()
+            requestLyricsWrite { track -> viewModel.pasteAndSaveLyrics(clipText, track) }
         } else {
             Toast.makeText(context, context.getString(R.string.clipboard_empty), Toast.LENGTH_SHORT).show()
         }
@@ -160,16 +188,16 @@ fun LyricsView(
                 Text(
                     text = stringResource(
                         R.string.dialog_delete_lyrics_confirm,
-                        currentTrack?.title.orEmpty()
+                        trackForLyricsDeletion?.title.orEmpty()
                     )
                 )
             },
             confirmButton = {
                 Button(
                     onClick = {
-                        viewModel.deleteLyrics()
+                        viewModel.deleteLyrics(trackForLyricsDeletion)
                         showDeleteConfirmDialog = false
-                        Toast.makeText(context, context.getString(R.string.lyrics_deleted), Toast.LENGTH_SHORT).show()
+                        trackForLyricsDeletion = null
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
                 ) {
@@ -197,7 +225,7 @@ fun LyricsView(
                 } else it.plainText.orEmpty()
             }.orEmpty(),
             onDismiss = { viewModel.setManualEditOpen(false) },
-            onSave = { text -> viewModel.saveManualLyrics(text) },
+            onSave = { text -> requestLyricsWrite { track -> viewModel.saveManualLyrics(text, track) } },
             onSearchGoogle = onSearchGoogleLyrics,
             onPasteClipboard = {
                 val clipText = clipboardManager.getText()?.text
@@ -217,13 +245,11 @@ fun LyricsView(
             onDismiss = viewModel::dismissCandidatePicker,
             onSearch = { title, artist -> viewModel.searchCandidatesOnline(title, artist) },
             onSelectCandidate = { candidate ->
-                viewModel.selectCandidate(candidate)
-                Toast.makeText(context, context.getString(R.string.lyrics_applied_toast), Toast.LENGTH_SHORT).show()
+                requestLyricsWrite { track -> viewModel.selectCandidate(candidate, track) }
             },
             onResetToDefault = {
-                viewModel.resetLyricsToDefault()
+                viewModel.resetLyricsToDefault(currentTrack)
                 viewModel.dismissCandidatePicker()
-                Toast.makeText(context, context.getString(R.string.lyrics_deleted), Toast.LENGTH_SHORT).show()
             }
         )
     }
@@ -369,7 +395,10 @@ fun LyricsView(
                     }
 
                     IconButton(
-                        onClick = { showDeleteConfirmDialog = true },
+                        onClick = {
+                            trackForLyricsDeletion = currentTrack
+                            showDeleteConfirmDialog = trackForLyricsDeletion != null
+                        },
                         modifier = Modifier.testTag("lyrics_delete_button")
                     ) {
                         Icon(

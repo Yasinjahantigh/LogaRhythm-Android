@@ -205,6 +205,12 @@
     <string name="settings_category_appearance">Appearance</string>
     <string name="settings_category_library">Library &amp; Scanning</string>
     <string name="settings_category_audio">Audio &amp; Sound</string>
+    <string name="settings_language_save_failed">Could not save the language preference. Please try again.</string>
+    <string name="settings_language_title">App language</string>
+    <string name="settings_language_desc">Choose English or Persian. The app restarts to apply the change.</string>
+    <string name="settings_language_system">Follow device language</string>
+    <string name="settings_language_english">English</string>
+    <string name="settings_language_persian">Persian</string>
     <string name="settings_theme_title">Theme</string>
     <string name="settings_theme_system">Follow System</string>
     <string name="settings_theme_light">Light</string>
@@ -268,6 +274,10 @@
     <string name="cd_rewind_10">Rewind 10 seconds</string>
     <string name="cd_forward_10">Forward 10 seconds</string>
     <string name="offline_audio_badge">Offline Audio</string>
+    <string name="player_style_vinyl">Vinyl</string>
+    <string name="player_style_artwork">Artwork</string>
+    <string name="player_groovy_vibe">✨ Groovy Vibe 🎵</string>
+    <string name="player_paused">💤 Paused</string>
     <string name="equalizer_bands_title">Frequency Bands</string>
     <string name="audio_effects_title">Audio Effects</string>
     <string name="bass_boost_label">Bass Boost</string>
@@ -295,6 +305,9 @@
     <string name="action_delete_lyrics">Delete Lyrics</string>
     <string name="dialog_delete_lyrics_title">Delete Lyrics</string>
     <string name="dialog_delete_lyrics_confirm">Are you sure you want to remove lyrics for \"%1$s\"?</string>
+    <string name="lyrics_delete_failed">Could not hide the lyrics in LogaRhythm. Please try again.</string>
+    <string name="lyrics_reset_failed">Could not reset lyrics to the default source.</string>
+    <string name="lyrics_hidden_in_app">Lyrics are hidden in LogaRhythm. Embedded audio tags or companion files may still contain a copy.</string>
     <string name="lyrics_deleted">Lyrics removed</string>
     <string name="action_paste_lyrics">Paste from Clipboard</string>
     <string name="clipboard_empty">Clipboard is empty</string>
@@ -367,4 +380,10 @@
     <string name="lyrics_search_candidates_btn">Search &amp; Pick Lyrics</string>
     <string name="lyrics_synced_badge">Synced (LRC)</string>
     <string name="lyrics_plain_badge">Plain Text</string>
+    <string name="track_delete_failed">Could not delete the audio file. Check access and try again.</string>
+    <string name="lyrics_embedded_success">Lyrics embedded in the MP3 file</string>
+    <string name="lyrics_cached_only">Lyrics saved in LogaRhythm, but not embedded in the audio file (MP3 files only).</string>
+    <string name="lyrics_embed_failed">Lyrics could not be embedded. They remain available in LogaRhythm when cached.</string>
+    <string name="saving">Saving…</string>
+    <string name="track_metadata_write_failed">Could not update the audio file. Only MP3 files with available write access are supported right now.</string>
 </resources>
