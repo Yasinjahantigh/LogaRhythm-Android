@@ -58,8 +58,10 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.R
 import com.example.musicplayer.domain.ai.MusicAiEngine
+import com.example.musicplayer.domain.model.DailyMix
 import com.example.musicplayer.domain.model.Track
 import com.example.musicplayer.feature.library.TrackListItem
+import com.example.musicplayer.feature.player.EditTrackDialog
 import com.example.musicplayer.feature.playlist.AddToPlaylistDialog
 import com.example.musicplayer.feature.playlist.SongMenuBottomSheet
 import com.example.musicplayer.ui.theme.DisplayFontFamily
@@ -87,8 +89,11 @@ fun HomeScreen(
 
     var selectedTrackForMenu by remember { mutableStateOf<Track?>(null) }
     var trackForAddToPlaylist by remember { mutableStateOf<Track?>(null) }
+    var selectedTrackForEdit by remember { mutableStateOf<Track?>(null) }
+    var selectedMixForDetail by remember { mutableStateOf<DailyMix?>(null) }
     val snackbarHostState = remember { SnackbarHostState() }
     val coroutineScope = rememberCoroutineScope()
+    val context = androidx.compose.ui.platform.LocalContext.current
     val emptyMoodMessage = stringResource(R.string.ai_mood_empty)
     val sessionUnavailableMessage = stringResource(R.string.home_session_unavailable)
 
@@ -256,6 +261,7 @@ fun HomeScreen(
                             items(dailyMixes, key = { it.id }) { mix ->
                                 DailyMixCard(
                                     mix = mix,
+                                    onClick = { selectedMixForDetail = mix },
                                     onPlayMix = { viewModel.playTracks(mix.tracks, 0) }
                                 )
                             }
@@ -357,6 +363,29 @@ fun HomeScreen(
             onAddToPlaylist = {
                 selectedTrackForMenu = null
                 trackForAddToPlaylist = track
+            },
+            onDeleteTrack = {
+                viewModel.deleteTrack(track)
+                selectedTrackForMenu = null
+            },
+            onEditTrack = {
+                selectedTrackForMenu = null
+                selectedTrackForEdit = track
+            }
+        )
+    }
+
+    selectedTrackForEdit?.let { track ->
+        EditTrackDialog(
+            track = track,
+            onDismiss = { selectedTrackForEdit = null },
+            onSave = { newTitle, newArtist, newAlbum, newGenre ->
+                viewModel.updateTrackMetadata(track.id, newTitle, newArtist, newAlbum, newGenre) {
+                    selectedTrackForEdit = null
+                    coroutineScope.launch {
+                        snackbarHostState.showSnackbar(context.getString(R.string.track_updated_toast))
+                    }
+                }
             }
         )
     }
@@ -372,6 +401,16 @@ fun HomeScreen(
             onCreatePlaylist = { name ->
                 viewModel.createPlaylist(name)
             }
+        )
+    }
+
+    selectedMixForDetail?.let { mix ->
+        DailyMixDetailBottomSheet(
+            mix = mix,
+            onDismiss = { selectedMixForDetail = null },
+            onPlayAll = { viewModel.playTracks(mix.tracks, 0) },
+            onShufflePlay = { viewModel.playTracks(mix.tracks.shuffled(), 0) },
+            onTrackClick = { index -> viewModel.playTracks(mix.tracks, index) }
         )
     }
 }

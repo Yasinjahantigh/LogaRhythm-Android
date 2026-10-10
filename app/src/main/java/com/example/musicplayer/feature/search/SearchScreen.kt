@@ -35,6 +35,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.R
 import com.example.musicplayer.domain.model.Track
+import com.example.musicplayer.feature.player.EditTrackDialog
 import com.example.musicplayer.feature.playlist.AddToPlaylistDialog
 import com.example.musicplayer.feature.playlist.PlaylistViewModel
 import com.example.musicplayer.feature.playlist.SongMenuBottomSheet
@@ -57,6 +58,7 @@ fun SearchScreen(
 
     var selectedTrackForMenu by remember { mutableStateOf<Track?>(null) }
     var showAddToPlaylistDialog by remember { mutableStateOf(false) }
+    var selectedTrackForEdit by remember { mutableStateOf<Track?>(null) }
 
     if (selectedTrackForMenu != null) {
         val menuTrack = selectedTrackForMenu!!
@@ -66,12 +68,27 @@ fun SearchScreen(
             onPlayNext = { viewModel.playNext(menuTrack) },
             onAddToQueue = { viewModel.addToQueue(menuTrack) },
             onAddToPlaylist = { showAddToPlaylistDialog = true },
+            onDeleteTrack = { viewModel.deleteTrack(menuTrack) },
+            onEditTrack = { selectedTrackForEdit = menuTrack },
             onGoToAlbum = if (menuTrack.album.isNotBlank() && menuTrack.album != "Unknown Album") {
                 { onNavigateToAlbum(menuTrack.album) }
             } else null,
             onGoToArtist = if (menuTrack.artist.isNotBlank() && menuTrack.artist != "Unknown Artist") {
                 { onNavigateToArtist(menuTrack.artist) }
             } else null
+        )
+    }
+
+    selectedTrackForEdit?.let { track ->
+        EditTrackDialog(
+            track = track,
+            onDismiss = { selectedTrackForEdit = null },
+            onSave = { newTitle, newArtist, newAlbum, newGenre ->
+                viewModel.updateTrackMetadata(track.id, newTitle, newArtist, newAlbum, newGenre) {
+                    selectedTrackForEdit = null
+                    Toast.makeText(context, context.getString(R.string.track_updated_toast), Toast.LENGTH_SHORT).show()
+                }
+            }
         )
     }
 

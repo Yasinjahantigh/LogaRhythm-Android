@@ -54,4 +54,5 @@ interface PlayerController {
     fun setBassBoostStrength(strength: Short)
     fun setVirtualizerStrength(strength: Short)
     fun resetEqualizer()
+    fun updateTrackInPlayback(updatedTrack: Track)
 }

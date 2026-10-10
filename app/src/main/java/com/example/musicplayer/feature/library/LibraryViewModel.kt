@@ -44,6 +44,8 @@ class LibraryViewModel @Inject constructor(
     val uiState: StateFlow<LibraryUiState> = _uiState.asStateFlow()
     private val scanErrorChannel = Channel<Unit>(Channel.BUFFERED)
     val scanErrors: Flow<Unit> = scanErrorChannel.receiveAsFlow()
+    private val scanSuccessChannel = Channel<Int>(Channel.BUFFERED)
+    val scanSuccess: Flow<Int> = scanSuccessChannel.receiveAsFlow()
 
     val currentTrack: StateFlow<Track?> = playerController.currentTrack
     val isPlaying: StateFlow<Boolean> = playerController.isPlaying
@@ -146,6 +148,30 @@ class LibraryViewModel @Inject constructor(
         viewModelScope.launch { playlistRepository.addTrackToPlaylist(playlistId, trackId) }
     }
 
+    fun updateTrackMetadata(
+        id: String,
+        title: String,
+        artist: String,
+        album: String,
+        genre: String,
+        onDone: (Track?) -> Unit = {}
+    ) {
+        viewModelScope.launch {
+            val updated = trackRepository.updateTrackMetadata(id, title, artist, album, genre)
+            if (updated != null) {
+                playerController.updateTrackInPlayback(updated)
+            }
+            onDone(updated)
+        }
+    }
+
+    fun deleteTrack(track: Track, onDone: () -> Unit = {}) {
+        viewModelScope.launch {
+            trackRepository.deleteTrack(track)
+            onDone()
+        }
+    }
+
     fun createPlaylist(name: String) {
         viewModelScope.launch { playlistRepository.createPlaylist(name) }
     }
@@ -164,12 +190,11 @@ class LibraryViewModel @Inject constructor(
 
     fun refresh(isPullToRefresh: Boolean = true) {
         viewModelScope.launch {
-            _uiState.update {
-                if (isPullToRefresh) it.copy(isRefreshing = true)
-                else it.copy(isLoading = it.tracks.isEmpty())
-            }
+            _uiState.update { it.copy(isRefreshing = true) }
             try {
                 trackRepository.refreshTracks()
+                val count = _uiState.value.tracks.size
+                scanSuccessChannel.trySend(count)
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (_: SecurityException) {

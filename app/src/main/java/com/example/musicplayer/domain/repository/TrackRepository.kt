@@ -26,4 +26,6 @@ interface TrackRepository {
     fun getArtistByName(artist: String): Flow<Artist?>
     fun getGenreByName(genre: String): Flow<Genre?>
     suspend fun refreshTracks()
+    suspend fun updateTrackMetadata(id: String, title: String, artist: String, album: String, genre: String): Track?
+    suspend fun deleteTrack(track: Track): Boolean
 }

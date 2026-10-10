@@ -23,12 +23,7 @@ class LocalMusicSource @Inject constructor(
 
     companion object {
         val DEFAULT_EXCLUDED_FOLDERS = setOf(
-            "WhatsApp Audio",
             "WhatsApp Voice Notes",
-            "Telegram Audio",
-            "Telegram",
-            "Recordings",
-            "Voice Recorder",
             "Call Recordings",
             "Ringtones",
             "Notifications",
@@ -38,7 +33,7 @@ class LocalMusicSource @Inject constructor(
 
     override val sourceType: SourceType = SourceType.LOCAL
 
-    var minDurationMs: Long = 60_000L
+    var minDurationMs: Long = 15_000L
 
     override fun getTracks(): Flow<List<Track>> = flow {
         emit(scanTracks())
@@ -50,11 +45,7 @@ class LocalMusicSource @Inject constructor(
     ): List<Track> = withContext(Dispatchers.IO) {
         val effectiveExcludedFolders = if (excludedFolders.isEmpty()) DEFAULT_EXCLUDED_FOLDERS else excludedFolders
         val tracks = mutableListOf<Track>()
-        val collection = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            MediaStore.Audio.Media.getContentUri(MediaStore.VOLUME_EXTERNAL)
-        } else {
-            MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
-        }
+        val collection = MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
 
         val projection = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             arrayOf(
@@ -81,7 +72,8 @@ class LocalMusicSource @Inject constructor(
             )
         }
 
-        val selection = "${MediaStore.Audio.Media.IS_MUSIC} != 0 AND ${MediaStore.Audio.Media.DURATION} >= ?"
+        // Include audio tracks reliably even if the device scanner set IS_MUSIC to 0 or null
+        val selection = "(${MediaStore.Audio.Media.IS_MUSIC} != 0 OR ${MediaStore.Audio.Media.IS_MUSIC} IS NULL OR ${MediaStore.Audio.Media.DURATION} > 30000) AND ${MediaStore.Audio.Media.DURATION} >= ?"
         val selectionArgs = arrayOf(minDurationMs.toString())
         val sortOrder = "${MediaStore.Audio.Media.TITLE} COLLATE NOCASE ASC"
 

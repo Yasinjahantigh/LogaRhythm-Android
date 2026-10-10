@@ -1,5 +1,9 @@
 package com.example.musicplayer.feature.player
 
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -23,8 +27,11 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -121,13 +128,26 @@ fun FullPlayerControls(
                 Icon(
                     imageVector = Icons.Default.SkipPrevious,
                     contentDescription = stringResource(R.string.cd_skip_prev),
+                    tint = MaterialTheme.colorScheme.onSurface,
                     modifier = Modifier.size(40.dp)
                 )
             }
 
+            val playInteractionSource = remember { MutableInteractionSource() }
+            val isPressed by playInteractionSource.collectIsPressedAsState()
+            val playButtonScale by animateFloatAsState(
+                targetValue = if (isPressed) 0.88f else (if (isPlaying) 1.04f else 1.0f),
+                animationSpec = spring(dampingRatio = 0.5f, stiffness = 300f),
+                label = "squishy_play_button"
+            )
+
             FilledIconButton(
                 onClick = onTogglePlayPause,
-                modifier = Modifier.size(76.dp).testTag("player_play_pause_button"),
+                interactionSource = playInteractionSource,
+                modifier = Modifier
+                    .size(76.dp)
+                    .scale(playButtonScale)
+                    .testTag("player_play_pause_button"),
                 colors = IconButtonDefaults.filledIconButtonColors(
                     containerColor = MaterialTheme.colorScheme.primary,
                     contentColor = MaterialTheme.colorScheme.onPrimary
@@ -147,6 +167,7 @@ fun FullPlayerControls(
                 Icon(
                     imageVector = Icons.Default.SkipNext,
                     contentDescription = stringResource(R.string.cd_skip_next),
+                    tint = MaterialTheme.colorScheme.onSurface,
                     modifier = Modifier.size(40.dp)
                 )
             }

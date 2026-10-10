@@ -212,6 +212,30 @@ class HomeViewModel @Inject constructor(
         }
     }
 
+    fun updateTrackMetadata(
+        id: String,
+        title: String,
+        artist: String,
+        album: String,
+        genre: String,
+        onSuccess: () -> Unit = {}
+    ) {
+        viewModelScope.launch {
+            val updated = trackRepository.updateTrackMetadata(id, title, artist, album, genre)
+            if (updated != null) {
+                playerController.updateTrackInPlayback(updated)
+                onSuccess()
+            }
+        }
+    }
+
+    fun deleteTrack(track: Track, onDone: () -> Unit = {}) {
+        viewModelScope.launch {
+            trackRepository.deleteTrack(track)
+            onDone()
+        }
+    }
+
     fun playAiMoodPlaylist(mood: MusicAiEngine.AiMood, onEmpty: () -> Unit = {}) {
         viewModelScope.launch {
             // A tap should create one playlist from the current library snapshot. Keeping a

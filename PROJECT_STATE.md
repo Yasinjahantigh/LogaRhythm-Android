@@ -544,3 +544,10 @@ interface PlaybackController : PlayerController {
 - Kotlin parser check on the touched Compose/ViewModel/controller files detected no syntax errors. This is not a substitute for Android/Compose type-checking.
 - Parsed all 16 resource XML files; all 300 English/Persian string keys match, all formatted placeholders are compatible, and the Home feature's string references are present.
 - No Gradle, Android SDK, APK generation, or device-runtime checks were attempted in this pass, per request. Full Compose compilation and real playback integration remain unverified.
+
+## Product Quality Pass 5 (Build & Test Fixes) — 2026-10-09
+- Fixed resource compiler compilation failures in `app/src/main/res/values/strings.xml`: escaped apostrophes in `library_scan_failed` and `home_session_unavailable` (`Couldn\'t`).
+- Fixed `ExampleRobolectricTest`: updated expected app name from legacy `"Music Player"` placeholder to actual app name `"LogaRhythm"`.
+- Synchronized `metadata.json` platform name to `"LogaRhythm"` to match Android resource `app_name`.
+- Verified full compilation and test suite: `compile_applet` succeeds and all 65 unit and Robolectric tests in `:app:testDebugUnitTest` pass without errors.
+

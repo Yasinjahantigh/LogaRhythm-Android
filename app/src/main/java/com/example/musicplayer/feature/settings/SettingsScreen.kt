@@ -42,6 +42,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.R
+import com.example.musicplayer.ui.designsystem.LocalPlaybackBottomPadding
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -132,6 +133,8 @@ fun SettingsScreen(
         )
     }
 
+    val playbackBottomPadding = LocalPlaybackBottomPadding.current
+
     Scaffold(
         modifier = modifier.fillMaxSize().testTag("settings_screen"),
         topBar = {
@@ -148,7 +151,7 @@ fun SettingsScreen(
     ) { innerPadding ->
         LazyColumn(
             modifier = Modifier.fillMaxSize().padding(innerPadding),
-            contentPadding = PaddingValues(bottom = 32.dp)
+            contentPadding = PaddingValues(bottom = playbackBottomPadding + 48.dp)
         ) {
             item { SettingsCategoryHeader(stringResource(R.string.settings_category_audio)) }
             item {

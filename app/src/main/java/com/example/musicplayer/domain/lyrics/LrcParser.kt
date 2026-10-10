@@ -13,7 +13,7 @@ import java.util.regex.Pattern
  * - Unsynced plain text fallback
  */
 object LrcParser {
-    private val TIMESTAMP_PATTERN = Pattern.compile("\\[(\\d+):(\\d{2})(?:[.:](\\d{1,3}))?\\]")
+    private val TIMESTAMP_PATTERN = Pattern.compile("\\[(\\d{1,3}):(\\d{1,2})(?:[.:](\\d{1,3}))?\\]")
     private val OFFSET_PATTERN = Pattern.compile("^\\[offset:\\s*([+-]?\\d+)\\s*\\]", Pattern.CASE_INSENSITIVE)
     private val METADATA_TAG_PATTERN = Pattern.compile("^\\[[a-zA-Z]{1,10}:.*\\]")
 
@@ -22,7 +22,13 @@ object LrcParser {
             return Lyrics()
         }
 
-        val rawLines = content.lines()
+        val cleaned = content
+            .replace("\uFEFF", "")
+            .replace("\u0000", "")
+            .replace("\r\n", "\n")
+            .replace("\r", "\n")
+
+        val rawLines = cleaned.lines()
         var offsetMs = 0L
 
         // Pass 1: Extract global [offset:xxx] tag if present

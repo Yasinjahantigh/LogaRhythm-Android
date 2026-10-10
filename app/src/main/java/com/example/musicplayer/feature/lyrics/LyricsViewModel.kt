@@ -45,6 +45,15 @@ class LyricsViewModel @Inject constructor(
     private val _isManualEditOpen = MutableStateFlow(false)
     val isManualEditOpen: StateFlow<Boolean> = _isManualEditOpen.asStateFlow()
 
+    private val _lyricsCandidates = MutableStateFlow<List<com.example.musicplayer.domain.model.LyricsCandidate>>(emptyList())
+    val lyricsCandidates: StateFlow<List<com.example.musicplayer.domain.model.LyricsCandidate>> = _lyricsCandidates.asStateFlow()
+
+    private val _isSearchingCandidates = MutableStateFlow(false)
+    val isSearchingCandidates: StateFlow<Boolean> = _isSearchingCandidates.asStateFlow()
+
+    private val _showCandidatePicker = MutableStateFlow(false)
+    val showCandidatePicker: StateFlow<Boolean> = _showCandidatePicker.asStateFlow()
+
     private var loadJob: Job? = null
 
     // Reactive flow of lyrics for the currently active track
@@ -163,12 +172,88 @@ class LyricsViewModel @Inject constructor(
         }
     }
 
+    fun searchCandidatesOnline(
+        customTitle: String? = null,
+        customArtist: String? = null
+    ) {
+        val track = currentTrack.value ?: return
+        val title = customTitle?.ifBlank { null } ?: track.title
+        val artist = customArtist?.ifBlank { null } ?: track.artist
+        viewModelScope.launch {
+            _isSearchingCandidates.value = true
+            _showCandidatePicker.value = true
+            try {
+                val results = lyricsRepository.searchLyricsCandidates(title, artist)
+                _lyricsCandidates.value = results
+            } catch (_: Exception) {
+                _lyricsCandidates.value = emptyList()
+            } finally {
+                _isSearchingCandidates.value = false
+            }
+        }
+    }
+
+    fun selectCandidate(candidate: com.example.musicplayer.domain.model.LyricsCandidate) {
+        val track = currentTrack.value ?: return
+        viewModelScope.launch(Dispatchers.IO) {
+            val content = if (candidate.lyrics.isSynced) {
+                candidate.lyrics.lines.joinToString("\n") { line ->
+                    val min = line.timestampMs / 60_000L
+                    val sec = (line.timestampMs % 60_000L) / 1_000L
+                    val frac = (line.timestampMs % 1_000L) / 10L
+                    String.format("[%02d:%02d.%02d]%s", min, sec, frac, line.text)
+                }
+            } else {
+                candidate.lyrics.plainText.orEmpty()
+            }
+            lyricsRepository.saveLyrics(track, content, candidate.sourceName)
+            _showCandidatePicker.value = false
+        }
+    }
+
+    fun dismissCandidatePicker() {
+        _showCandidatePicker.value = false
+    }
+
+    fun resetLyricsToDefault() {
+        val track = currentTrack.value ?: return
+        viewModelScope.launch {
+            _isLoading.value = true
+            try {
+                lyricsRepository.deleteLyrics(track)
+                // Reload clean state
+                lyricsRepository.loadLyrics(track)
+            } finally {
+                _isLoading.value = false
+            }
+        }
+    }
+
     fun fetchOnlineLyrics() {
         val track = currentTrack.value ?: return
         viewModelScope.launch {
             _isLoading.value = true
             try {
                 lyricsRepository.fetchOnlineLyrics(track)
+            } finally {
+                _isLoading.value = false
+            }
+        }
+    }
+
+    fun searchCustomOnlineLyrics(
+        title: String,
+        artist: String,
+        onComplete: (Boolean) -> Unit = {}
+    ) {
+        val track = currentTrack.value ?: return
+        viewModelScope.launch {
+            _isLoading.value = true
+            try {
+                val found = lyricsRepository.fetchOnlineLyricsWithCustomQuery(track, title, artist)
+                onComplete(found != null && !found.isEmpty)
+            } catch (_: Exception) {
+                onComplete(false)
             } finally {
                 _isLoading.value = false
             }

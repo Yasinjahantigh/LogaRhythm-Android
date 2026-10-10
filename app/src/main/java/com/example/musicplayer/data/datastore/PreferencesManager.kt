@@ -94,7 +94,7 @@ class PreferencesManager @Inject constructor(
     }
 
     val minTrackLengthSec: Flow<Int> = dataStore.data.map { preferences ->
-        preferences[keyMinTrackLengthSec] ?: 60
+        preferences[keyMinTrackLengthSec] ?: 15
     }
 
     suspend fun setMinTrackLengthSec(seconds: Int) {

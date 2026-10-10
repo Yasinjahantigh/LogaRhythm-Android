@@ -7,6 +7,7 @@ import com.example.musicplayer.data.sources.LocalFileLyricsSource
 import com.example.musicplayer.data.sources.LrclibLyricsSource
 import com.example.musicplayer.data.sources.LyricsOvhLyricsSource
 import com.example.musicplayer.data.sources.NeteaseLyricsSource
+import com.example.musicplayer.data.sources.KugouLyricsSource
 import com.example.musicplayer.domain.lyrics.LrcParser
 import com.example.musicplayer.domain.model.Lyrics
 import com.example.musicplayer.domain.model.Track
@@ -42,6 +43,7 @@ class LyricsRepositoryImpl @Inject constructor(
     private val localFileLyricsSource: LocalFileLyricsSource,
     private val lrclibLyricsSource: LrclibLyricsSource,
     private val neteaseLyricsSource: NeteaseLyricsSource,
+    private val kugouLyricsSource: KugouLyricsSource,
     private val lyricsOvhLyricsSource: LyricsOvhLyricsSource,
     private val preferencesManager: PreferencesManager
 ) : LyricsRepository {
@@ -98,11 +100,37 @@ class LyricsRepositoryImpl @Inject constructor(
         null
     }
 
+    override suspend fun fetchOnlineLyricsWithCustomQuery(
+        track: Track,
+        title: String,
+        artist: String
+    ): Lyrics? = withContext(Dispatchers.IO) {
+        val queryTrack = track.copy(title = title.trim(), artist = artist.trim())
+        val foundLyrics = searchAllOnlineSources(queryTrack)
+        if (foundLyrics != null && !foundLyrics.lyrics.isEmpty) {
+            cacheLyrics(track.id, foundLyrics.lyrics, foundLyrics.sourceName)
+            localFileLyricsSource.saveCompanionLrc(track, formatLyricsToLrc(foundLyrics.lyrics))
+            return@withContext foundLyrics.lyrics
+        }
+        null
+    }
+
+    override suspend fun searchLyricsCandidates(
+        title: String,
+        artist: String
+    ): List<com.example.musicplayer.domain.model.LyricsCandidate> = withContext(Dispatchers.IO) {
+        try {
+            lrclibLyricsSource.searchCandidates(title, artist)
+        } catch (_: Exception) {
+            emptyList()
+        }
+    }
+
     private data class LyricsSearchResult(val lyrics: Lyrics, val sourceName: String)
 
     /**
      * Searches multiple online lyrics banks with strict priority:
-     * 1. High priority: SYNCED lyrics (LRCLIB, Netease)
+     * 1. High priority: SYNCED lyrics (LRCLIB, Netease, Kugou)
      * 2. Low priority: PLAIN/UNSYNCED lyrics (LRCLIB plain, Lyrics.ovh)
      */
     private suspend fun searchAllOnlineSources(track: Track): LyricsSearchResult? {
@@ -134,12 +162,25 @@ class LyricsRepositoryImpl @Inject constructor(
         } catch (_: Exception) {
         }
 
+        // --- Bank 3: Kugou Music (Massive synced LRC bank) ---
+        try {
+            val kugouRes = kugouLyricsSource.getLyrics(track)
+            if (kugouRes != null && !kugouRes.isEmpty) {
+                if (kugouRes.isSynced) {
+                    return LyricsSearchResult(kugouRes, "kugou")
+                } else if (fallbackPlainLyrics == null) {
+                    fallbackPlainLyrics = LyricsSearchResult(kugouRes, "kugou")
+                }
+            }
+        } catch (_: Exception) {
+        }
+
         // If synced lyrics found, we already returned. If not, return plain lyrics if any bank had them
         if (fallbackPlainLyrics != null) {
             return fallbackPlainLyrics
         }
 
-        // --- Bank 3: Lyrics.ovh (Plain lyrics fallback) ---
+        // --- Bank 4: Lyrics.ovh (Plain lyrics fallback) ---
         try {
             val ovhRes = lyricsOvhLyricsSource.getLyrics(track)
             if (ovhRes != null && !ovhRes.isEmpty) {
