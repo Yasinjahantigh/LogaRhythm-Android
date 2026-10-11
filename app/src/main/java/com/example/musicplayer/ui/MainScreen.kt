@@ -18,6 +18,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.Modifier
@@ -48,8 +50,16 @@ fun MainScreen(
 
     val currentTrack by playerViewModel.currentTrack.collectAsStateWithLifecycle()
     val isPlaying by playerViewModel.isPlaying.collectAsStateWithLifecycle()
-    val positionMs by playerViewModel.position.collectAsStateWithLifecycle()
-    val durationMs by playerViewModel.duration.collectAsStateWithLifecycle()
+    // Kept as State objects (never read here) so the 500 ms position ticks only invalidate the
+    // mini player's progress line instead of recomposing the whole app shell.
+    val positionState = playerViewModel.position.collectAsStateWithLifecycle()
+    val durationState = playerViewModel.duration.collectAsStateWithLifecycle()
+    val miniProgress: () -> Float = remember(positionState, durationState) {
+        {
+            val d = durationState.value
+            if (d > 0L) (positionState.value.toFloat() / d.toFloat()).coerceIn(0f, 1f) else 0f
+        }
+    }
     val isExpanded by playerViewModel.isExpanded.collectAsStateWithLifecycle()
     val isCompact by playerViewModel.isCompactMiniPlayer.collectAsStateWithLifecycle()
     val isDismissed by playerViewModel.isDismissed.collectAsStateWithLifecycle()
@@ -100,7 +110,7 @@ fun MainScreen(
                             ) {
                                 currentTrack?.let { track ->
                                     MiniPlayer(
-                                        track = track, isPlaying = isPlaying, positionMs = positionMs, durationMs = durationMs,
+                                        track = track, isPlaying = isPlaying, progress = miniProgress,
                                         onTogglePlayPause = playerViewModel::togglePlayPause, onNext = playerViewModel::next,
                                         onPrevious = playerViewModel::previous, onExpand = playerViewModel::expand,
                                         isCompact = isCompact, onDismiss = playerViewModel::dismissMiniPlayer,
@@ -125,7 +135,7 @@ fun MainScreen(
                     ) {
                         currentTrack?.let { track ->
                             MiniPlayer(
-                                track = track, isPlaying = isPlaying, positionMs = positionMs, durationMs = durationMs,
+                                track = track, isPlaying = isPlaying, progress = miniProgress,
                                 onTogglePlayPause = playerViewModel::togglePlayPause, onNext = playerViewModel::next,
                                 onPrevious = playerViewModel::previous, onExpand = playerViewModel::expand,
                                 isCompact = isCompact, onDismiss = playerViewModel::dismissMiniPlayer,

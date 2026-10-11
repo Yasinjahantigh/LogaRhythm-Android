@@ -77,6 +77,24 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.unit.LayoutDirection
+import androidx.compose.ui.semantics.setProgress
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.progressBarRangeInfo
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.ProgressBarRangeInfo
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.State
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.Canvas
+import androidx.compose.animation.core.animateFloatAsState
 import com.example.R
 import com.example.musicplayer.core.utils.ArtworkColorExtractor
 import com.example.musicplayer.core.utils.FileUtils
@@ -120,7 +138,8 @@ fun FullPlayerScreen(
 
     val currentTrack by viewModel.currentTrack.collectAsStateWithLifecycle()
     val isPlaying by viewModel.isPlaying.collectAsStateWithLifecycle()
-    val positionMs by viewModel.position.collectAsStateWithLifecycle()
+    // Deliberately NOT read here: position ticks twice a second and would recompose this whole screen.
+    val positionState = viewModel.position.collectAsStateWithLifecycle()
     val durationMs by viewModel.duration.collectAsStateWithLifecycle()
     val shuffle by viewModel.shuffle.collectAsStateWithLifecycle()
     val repeatMode by viewModel.repeatMode.collectAsStateWithLifecycle()
@@ -140,11 +159,8 @@ fun FullPlayerScreen(
     var editTrackError by remember { mutableStateOf(false) }
     var editTrackSaving by remember { mutableStateOf(false) }
     var isVinylMode by remember { mutableStateOf(false) }
-    var isDragging by remember { mutableStateOf(false) }
-    var dragPositionMs by remember { mutableFloatStateOf(0f) }
     var showRemainingTime by remember { mutableStateOf(false) }
 
-    val activePositionMs = if (isDragging) dragPositionMs.toLong() else positionMs
     val track = currentTrack
     val context = LocalContext.current
     val mediaStoreConsent = rememberMediaStoreConsent()
@@ -483,20 +499,11 @@ fun FullPlayerScreen(
                             }
 
                             PlaybackTimeline(
-                                activePositionMs = activePositionMs,
+                                positionState = positionState,
                                 durationMs = durationMs,
-                                isDragging = isDragging,
-                                dragPositionMs = dragPositionMs,
                                 showRemainingTime = showRemainingTime,
                                 onRemainingTimeClick = { showRemainingTime = !showRemainingTime },
-                                onDragging = {
-                                    isDragging = true
-                                    dragPositionMs = it
-                                },
-                                onSeekFinished = {
-                                    isDragging = false
-                                    viewModel.seekTo(dragPositionMs.toLong())
-                                }
+                                onSeek = viewModel::seekTo
                             )
 
                             FullPlayerControls(
@@ -508,8 +515,8 @@ fun FullPlayerScreen(
                                 onNext = viewModel::next,
                                 onToggleShuffle = viewModel::toggleShuffle,
                                 onCycleRepeat = viewModel::cycleRepeat,
-                                onRewind10 = { viewModel.seekTo((activePositionMs - 10_000L).coerceAtLeast(0L)) },
-                                onFastForward10 = { viewModel.seekTo((activePositionMs + 10_000L).coerceAtMost(durationMs)) },
+                                onRewind10 = { viewModel.seekTo((positionState.value - 10_000L).coerceAtLeast(0L)) },
+                                onFastForward10 = { viewModel.seekTo((positionState.value + 10_000L).coerceAtMost(durationMs)) },
                                 modifier = Modifier.padding(top = 8.dp)
                             )
                         }
@@ -660,20 +667,11 @@ fun FullPlayerScreen(
                     }
 
                     PlaybackTimeline(
-                        activePositionMs = activePositionMs,
+                        positionState = positionState,
                         durationMs = durationMs,
-                        isDragging = isDragging,
-                        dragPositionMs = dragPositionMs,
                         showRemainingTime = showRemainingTime,
                         onRemainingTimeClick = { showRemainingTime = !showRemainingTime },
-                        onDragging = {
-                            isDragging = true
-                            dragPositionMs = it
-                        },
-                        onSeekFinished = {
-                            isDragging = false
-                            viewModel.seekTo(dragPositionMs.toLong())
-                        }
+                        onSeek = viewModel::seekTo
                     )
 
                     FullPlayerControls(
@@ -685,8 +683,8 @@ fun FullPlayerScreen(
                         onNext = viewModel::next,
                         onToggleShuffle = viewModel::toggleShuffle,
                         onCycleRepeat = viewModel::cycleRepeat,
-                        onRewind10 = { viewModel.seekTo((activePositionMs - 10_000L).coerceAtLeast(0L)) },
-                        onFastForward10 = { viewModel.seekTo((activePositionMs + 10_000L).coerceAtMost(durationMs)) },
+                        onRewind10 = { viewModel.seekTo((positionState.value - 10_000L).coerceAtLeast(0L)) },
+                        onFastForward10 = { viewModel.seekTo((positionState.value + 10_000L).coerceAtMost(durationMs)) },
                         modifier = Modifier.padding(bottom = 8.dp)
                     )
                 }
@@ -759,61 +757,134 @@ fun TrackIdentityAndActions(
     }
 }
 
+/**
+ * LogaRhythm's scrubber: a thin ember thread with a glowing playhead that swells while you hold it.
+ *
+ * It owns its own drag state and reads [positionState] lazily (draw phase for the thread, a tiny
+ * local recomposition for the clock), so playback ticks never recompose the surrounding player.
+ * Always laid out left-to-right, like a tape: elapsed time on the left, in every UI language.
+ */
 @Composable
 fun PlaybackTimeline(
-    activePositionMs: Long,
+    positionState: State<Long>,
     durationMs: Long,
-    isDragging: Boolean,
-    dragPositionMs: Float,
     showRemainingTime: Boolean,
     onRemainingTimeClick: () -> Unit,
-    onDragging: (Float) -> Unit,
-    onSeekFinished: () -> Unit,
+    onSeek: (Long) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Column(modifier = modifier.fillMaxWidth()) {
-        val maxRange = durationMs.coerceAtLeast(1L).toFloat()
-        val currentValue = if (isDragging) dragPositionMs else activePositionMs.toFloat()
-
-        Slider(
-            value = currentValue.coerceIn(0f, maxRange),
-            onValueChange = onDragging,
-            onValueChangeFinished = onSeekFinished,
-            valueRange = 0f..maxRange,
-            colors = SliderDefaults.colors(
-                thumbColor = MaterialTheme.colorScheme.primary,
-                activeTrackColor = MaterialTheme.colorScheme.primary,
-                inactiveTrackColor = MaterialTheme.colorScheme.surfaceVariant
-            ),
-            modifier = Modifier
-                .fillMaxWidth()
-                .testTag("player_seek_bar")
+    CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+        val duration = durationMs.coerceAtLeast(1L)
+        var dragFraction by remember { mutableStateOf<Float?>(null) }
+        val dragging = dragFraction != null
+        val swell by animateFloatAsState(
+            targetValue = if (dragging) 1f else 0f,
+            animationSpec = spring(),
+            label = "timeline_swell"
         )
+        val active = MaterialTheme.colorScheme.primary
+        val thread = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.14f)
+        val currentOnSeek by rememberUpdatedState(onSeek)
+        val haptic = LocalHapticFeedback.current
 
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 4.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = TimeUtils.formatDuration(activePositionMs),
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+        val shownMs = dragFraction?.let { (it * duration).toLong() } ?: positionState.value
+        val progressForSemantics = (shownMs.toFloat() / duration).coerceIn(0f, 1f)
+        val description = stringResource(R.string.cd_seek_bar)
 
-            Text(
-                text = if (showRemainingTime) {
-                    val remaining = (durationMs - activePositionMs).coerceAtLeast(0L)
-                    "-${TimeUtils.formatDuration(remaining)}"
-                } else {
-                    TimeUtils.formatDuration(durationMs)
-                },
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.clickable(onClick = onRemainingTimeClick)
-            )
+        Column(modifier = modifier.fillMaxWidth()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(40.dp)
+                    .testTag("player_seek_bar")
+                    .semantics {
+                        contentDescription = description
+                        progressBarRangeInfo = ProgressBarRangeInfo(progressForSemantics, 0f..1f)
+                        setProgress { target ->
+                            currentOnSeek((target.coerceIn(0f, 1f) * duration).toLong())
+                            true
+                        }
+                    }
+                    .pointerInput(duration) {
+                        detectTapGestures { offset ->
+                            val f = (offset.x / size.width.coerceAtLeast(1)).coerceIn(0f, 1f)
+                            currentOnSeek((f * duration).toLong())
+                        }
+                    }
+                    .pointerInput(duration) {
+                        detectHorizontalDragGestures(
+                            onDragStart = { offset ->
+                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                dragFraction = (offset.x / size.width.coerceAtLeast(1)).coerceIn(0f, 1f)
+                            },
+                            onDragEnd = {
+                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                dragFraction?.let { currentOnSeek((it * duration).toLong()) }
+                                dragFraction = null
+                            },
+                            onDragCancel = { dragFraction = null },
+                            onHorizontalDrag = { change, _ ->
+                                change.consume()
+                                dragFraction = (change.position.x / size.width.coerceAtLeast(1)).coerceIn(0f, 1f)
+                            }
+                        )
+                    }
+            ) {
+                Canvas(modifier = Modifier.fillMaxSize()) {
+                    val fraction = dragFraction ?: (positionState.value.toFloat() / duration).coerceIn(0f, 1f)
+                    val thickness = 4.dp.toPx() + 2.dp.toPx() * swell
+                    val radius = thickness / 2f
+                    val cy = size.height / 2f
+                    val x = (size.width * fraction).coerceIn(radius, size.width - radius)
+                    drawRoundRect(
+                        color = thread,
+                        topLeft = Offset(0f, cy - radius),
+                        size = Size(size.width, thickness),
+                        cornerRadius = CornerRadius(radius, radius)
+                    )
+                    drawRoundRect(
+                        color = active,
+                        topLeft = Offset(0f, cy - radius),
+                        size = Size(x + radius, thickness),
+                        cornerRadius = CornerRadius(radius, radius)
+                    )
+                    drawCircle(
+                        color = active.copy(alpha = 0.18f + 0.10f * swell),
+                        radius = 10.dp.toPx() + 8.dp.toPx() * swell,
+                        center = Offset(x, cy)
+                    )
+                    drawCircle(
+                        color = active,
+                        radius = 5.dp.toPx() + 2.dp.toPx() * swell,
+                        center = Offset(x, cy)
+                    )
+                }
+            }
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 4.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = TimeUtils.formatDuration(shownMs),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = if (dragging) active else MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontWeight = if (dragging) FontWeight.SemiBold else FontWeight.Medium
+                )
+                Text(
+                    text = if (showRemainingTime) {
+                        "-${TimeUtils.formatDuration((durationMs - shownMs).coerceAtLeast(0L))}"
+                    } else {
+                        TimeUtils.formatDuration(durationMs)
+                    },
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.clickable(onClick = onRemainingTimeClick)
+                )
+            }
         }
     }
 }

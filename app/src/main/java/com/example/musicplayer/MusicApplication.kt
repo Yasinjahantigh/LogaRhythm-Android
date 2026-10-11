@@ -3,6 +3,7 @@ package com.example.musicplayer
 import android.app.Application
 import coil.ImageLoader
 import coil.ImageLoaderFactory
+import coil.memory.MemoryCache
 import com.example.musicplayer.core.utils.AudioArtworkFetcher
 import dagger.hilt.android.HiltAndroidApp
 
@@ -14,7 +15,8 @@ class MusicApplication : Application(), ImageLoaderFactory {
             .components {
                 add(AudioArtworkFetcher.Factory(this@MusicApplication))
             }
-            .crossfade(true)
+            .memoryCache { MemoryCache.Builder(this).maxSizePercent(0.15).build() }
+            .crossfade(150)
             .build()
     }
 }

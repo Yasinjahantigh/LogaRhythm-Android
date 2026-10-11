@@ -62,8 +62,7 @@ import kotlin.math.roundToInt
 fun MiniPlayer(
     track: Track,
     isPlaying: Boolean,
-    positionMs: Long,
-    durationMs: Long,
+    progress: () -> Float,
     onTogglePlayPause: () -> Unit,
     onNext: () -> Unit,
     onPrevious: () -> Unit,
@@ -72,12 +71,6 @@ fun MiniPlayer(
     isCompact: Boolean = false,
     onDismiss: (() -> Unit)? = null
 ) {
-    val progress = if (durationMs > 0L) {
-        (positionMs.toFloat() / durationMs.toFloat()).coerceIn(0f, 1f)
-    } else {
-        0f
-    }
-
     val coroutineScope = rememberCoroutineScope()
     val dragOffsetX = remember { Animatable(0f) }
 
@@ -257,7 +250,7 @@ fun MiniPlayer(
             // Subtle linear progress bar
             Box(modifier = Modifier.fillMaxWidth()) {
                 LinearProgressIndicator(
-                    progress = { progress },
+                    progress = progress,
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(2.5.dp),
@@ -285,8 +278,7 @@ private fun MiniPlayerPreview() {
                 uri = "uri"
             ),
             isPlaying = true,
-            positionMs = 70_000L,
-            durationMs = 210_000L,
+            progress = { 0.3333f },
             onTogglePlayPause = {},
             onNext = {},
             onPrevious = {},
@@ -311,8 +303,7 @@ private fun MiniPlayerDarkPreview() {
                 uri = "uri"
             ),
             isPlaying = false,
-            positionMs = 30_000L,
-            durationMs = 180_000L,
+            progress = { 0.1667f },
             onTogglePlayPause = {},
             onNext = {},
             onPrevious = {},

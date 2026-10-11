@@ -20,10 +20,11 @@ All personalization is computed on-device from your own play history; nothing is
 
 ## Storage and metadata support
 
-- Embedded audio-tag editing is currently limited to MP3 / ID3v2.3 text tags. Unsupported formats, ID3v2.4 tags, malformed/truncated tags, nonzero ID3v2.3 revisions, and tags with unsupported header/frame flags fail closed instead of claiming a database-only change succeeded.
-- User-initiated lyrics saves attempt to write an ID3 `USLT` frame into supported MP3 files and read it back for verification. If that fails, the lyrics may be retained in Room for LogaRhythm playback, but the file is not reported as updated. Companion `.lrc` reading/deletion is separate; an automatic sidecar write is not used as a silent fallback.
-- Android 11+ shared-file writes/deletes use the native MediaStore consent flow for supported items, and the app verifies the resulting file state before reporting success. The API 29 recoverable-consent flow and writes through arbitrary SAF document providers are not implemented yet.
-- The lyrics delete action hides cached lyrics in LogaRhythm and attempts to remove a sibling `.lrc`; it does not yet remove a pre-existing embedded `USLT` frame, and the UI warns that a file copy may remain.
+- Embedded tag editing (title, artist, album, genre, lyrics) works for **MP3 (ID3v2.2/2.3/2.4), FLAC, M4A/MP4 and Ogg Vorbis/Opus** through a pure-JVM engine in `data/tagger/engine`. Artwork and every tag LogaRhythm does not edit are preserved; audio bytes are never re-encoded. Other containers (WAV, WMA, ADTS AAC) fail closed with an honest message.
+- Every write is staged, re-parsed, streamed back, compared byte-for-byte, and rolled back from a backup if anything fails. Fields the user did not change are not rewritten, and placeholders such as "Unknown Artist" are never written into files.
+- Lyrics are saved to and deleted from the file itself (ID3 `USLT`, Vorbis `LYRICS`, MP4 `©lyr`). If the user declines file access, deletion falls back to hiding the lyrics in-app and says so.
+- Android 11+ uses the native MediaStore write/delete consent sheet (reusing grants already held); Android 10 and older request `WRITE_EXTERNAL_STORAGE` on first use. SAF document-provider files are still not supported.
+- The library is indexed whenever the app comes to the foreground and when Android's media index changes, not only while the Library tab is open.
 
 ## Build
 

@@ -132,7 +132,7 @@ class PlayerControllerImpl @Inject constructor(
     private fun startPositionTracker() {
         scope.launch {
             while (isActive) {
-                delay(500L)
+                delay(if (_isPlaying.value) 500L else 1_000L)
                 val controller = mediaController ?: continue
                 val playing = controller.isPlaying
                 _isPlaying.value = playing

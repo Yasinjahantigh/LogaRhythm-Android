@@ -259,17 +259,11 @@ class TrackRepositoryImpl @Inject constructor(
 
         // Do not mutate Room until the physical file's embedded tags have been written
         // and read back. Remote/non-local tracks are not local file-tag targets.
-        val candidate = existing.copy(
-            title = cleanTitle,
-            artist = cleanArtist,
-            album = cleanAlbum,
-            genre = cleanGenre
-        ).toDomain()
         withContext(NonCancellable) {
             // Once the user-authorized file write begins, finish the file/Room commit pair
             // despite navigation or cancellation so the UI cannot leave stale Room metadata.
             val wroteAndVerified = audioFileTagWriter.writeTagsToFileAndMediaStore(
-                track = candidate,
+                track = existing.toDomain(), // diffed against the file's current values
                 title = cleanTitle,
                 artist = cleanArtist,
                 album = cleanAlbum,

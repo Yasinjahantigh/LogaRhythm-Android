@@ -8,14 +8,11 @@ import com.example.musicplayer.domain.model.Lyrics
 import com.example.musicplayer.domain.model.Track
 import com.example.musicplayer.domain.source.LyricsSource
 import com.example.musicplayer.data.tagger.AudioFileTagWriter
-import com.example.musicplayer.data.tagger.Id3UsltCodec
+import com.example.musicplayer.data.tagger.TagWriteOutcome
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import java.io.DataInputStream
 import java.io.File
-import java.io.FileInputStream
-import java.io.InputStream
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -51,7 +48,7 @@ class LocalFileLyricsSource @Inject constructor(
         }
 
         // 2. Check embedded ID3 lyrics directly from the file/URI stream.
-        val embedded = extractEmbeddedLyrics(track, audioFilePath)
+        val embedded = extractEmbeddedLyrics(track)
         if (embedded != null && !embedded.isEmpty) {
             return@withContext embedded.copy(source = "embedded")
         }
@@ -59,77 +56,10 @@ class LocalFileLyricsSource @Inject constructor(
         null
     }
 
-    private fun extractEmbeddedLyrics(track: Track, filePath: String?): Lyrics? {
-        // Read only the ID3 header and tag payload. Never stage/copy the full song just to
-        // find lyrics; large music files should not cause large transient cache copies.
-        return try {
-            val raw = filePath?.let(::File)?.takeIf { it.isFile && it.canRead() }?.let { file ->
-                FileInputStream(file).use(::extractId3LyricsFromStream)
-            } ?: run {
-                if (!track.uri.startsWith("content://", ignoreCase = true)) return null
-                context.contentResolver.openInputStream(Uri.parse(track.uri))?.use(::extractId3LyricsFromStream)
-            }
-            val parsed = raw?.let(LrcParser::parse) ?: return null
-            parsed.takeUnless { it.isEmpty }
-        } catch (_: Exception) {
-            null
-        }
-    }
-
-    /** Parse a real ID3 frame table; never search artwork/audio bytes for the string "USLT". */
-    private fun extractId3LyricsFromStream(input: InputStream): String? {
-        return try {
-            DataInputStream(input).use { stream ->
-                val header = ByteArray(10)
-                stream.readFully(header)
-                if (String(header, 0, 3, Charsets.ISO_8859_1) != "ID3") return null
-                val version = header[3].toInt() and 0xff
-                val flags = header[5].toInt() and 0xff
-                if (version !in 3..4) return null
-                // Global unsynchronisation and extended headers need transforms we do not
-                // implement. A false negative is safer than decoding misaligned bytes.
-                if ((version == 3 && flags and 0xE0 != 0) || (version == 4 && flags and 0xD0 != 0)) return null
-                if ((6..9).any { (header[it].toInt() and 0x80) != 0 }) return null
-                val tagSize = ((header[6].toInt() and 0x7f) shl 21) or ((header[7].toInt() and 0x7f) shl 14) or
-                    ((header[8].toInt() and 0x7f) shl 7) or (header[9].toInt() and 0x7f)
-                if (tagSize !in 1..(8 * 1024 * 1024)) return null
-                val tag = ByteArray(tagSize)
-                stream.readFully(tag) // Truncated tags are rejected by EOFException.
-                var offset = 0
-                while (offset + 10 <= tag.size) {
-                    if (tag[offset] == 0.toByte()) return null // padding / malformed tail
-                    val id = String(tag, offset, 4, Charsets.ISO_8859_1)
-                    if (!id.all { it in 'A'..'Z' || it in '0'..'9' }) return null
-                    val frameSize = if (version == 4) {
-                        if ((4..7).any { (tag[offset + it].toInt() and 0x80) != 0 }) return null
-                        ((tag[offset + 4].toInt() and 0x7f) shl 21) or ((tag[offset + 5].toInt() and 0x7f) shl 14) or
-                            ((tag[offset + 6].toInt() and 0x7f) shl 7) or (tag[offset + 7].toInt() and 0x7f)
-                    } else {
-                        ((tag[offset + 4].toInt() and 0xff) shl 24) or ((tag[offset + 5].toInt() and 0xff) shl 16) or
-                            ((tag[offset + 6].toInt() and 0xff) shl 8) or (tag[offset + 7].toInt() and 0xff)
-                    }
-                    if (frameSize < 0) return null
-                    val frameStart = offset + 10
-                    val frameEndLong = frameStart.toLong() + frameSize.toLong()
-                    if (frameEndLong > tag.size.toLong()) return null
-                    val frameEnd = frameEndLong.toInt()
-                    if (id == "USLT") {
-                        val statusFlags = tag[offset + 8].toInt() and 0xff
-                        val formatFlags = tag[offset + 9].toInt() and 0xff
-                        // We only decode plain USLT payloads. Preserve valid status semantics,
-                        // but reject reserved status bits and every format flag (compression,
-                        // encryption, grouping, per-frame unsync, or a data-length indicator).
-                        val reservedStatusMask = if (version == 3) 0x1F else 0x8F
-                        if ((statusFlags and reservedStatusMask) != 0 || formatFlags != 0) return null
-                        return Id3UsltCodec.decodePayload(tag.copyOfRange(frameStart, frameEnd))
-                    }
-                    offset = frameEnd
-                }
-                null
-            }
-        } catch (_: Exception) {
-            null
-        }
+    private suspend fun extractEmbeddedLyrics(track: Track): Lyrics? {
+        val raw = audioFileTagWriter.readEmbeddedTags(track)?.lyrics ?: return null
+        val parsed = LrcParser.parse(raw)
+        return parsed.takeUnless { it.isEmpty }
     }
 
     private fun decodeLrcFileContent(file: File): String {
@@ -166,9 +96,16 @@ class LocalFileLyricsSource @Inject constructor(
         return false
     }
 
-    /** Writes lyrics into the MP3's ID3 USLT frame. Companion files are a separate fallback. */
+    /** Writes lyrics into the audio file's own tags (ID3 USLT, Vorbis LYRICS, MP4 ©lyr). */
     suspend fun saveEmbeddedLyrics(track: Track, content: String): Boolean =
         audioFileTagWriter.writeEmbeddedLyrics(track, content)
+
+    /** Removes lyrics embedded in the audio file. Succeeds trivially when nothing is embedded. */
+    suspend fun clearEmbeddedLyrics(track: Track): TagWriteOutcome {
+        val existing = audioFileTagWriter.readEmbeddedTags(track)
+        if (existing != null && existing.lyrics.isNullOrBlank()) return TagWriteOutcome.Success
+        return audioFileTagWriter.clearEmbeddedLyrics(track)
+    }
 
     /** Writes a sibling .lrc file. This is not embedded audio metadata. */
     suspend fun saveCompanionLrc(track: Track, content: String): Boolean = withContext(Dispatchers.IO) {

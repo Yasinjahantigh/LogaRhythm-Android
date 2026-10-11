@@ -134,6 +134,7 @@ fun LyricsView(
             "embedded" -> context.getString(R.string.lyrics_embedded_success)
             "cached_only" -> context.getString(R.string.lyrics_cached_only)
             "failed" -> context.getString(R.string.lyrics_embed_failed)
+            "deleted" -> context.getString(R.string.lyrics_deleted)
             "hidden" -> context.getString(R.string.lyrics_hidden_in_app)
             "delete_failed" -> context.getString(R.string.lyrics_delete_failed)
             "reset_failed" -> context.getString(R.string.lyrics_reset_failed)
@@ -198,9 +199,17 @@ fun LyricsView(
             confirmButton = {
                 Button(
                     onClick = {
-                        viewModel.deleteLyrics(trackForLyricsDeletion)
+                        val doomed = trackForLyricsDeletion
                         showDeleteConfirmDialog = false
                         trackForLyricsDeletion = null
+                        if (doomed != null) {
+                            // Removing the copy inside the file needs the same system consent as saving.
+                            mediaStoreConsent.write(
+                                track = doomed,
+                                onApproved = { viewModel.deleteLyrics(doomed, removeFromFile = true) },
+                                onCancelled = { viewModel.deleteLyrics(doomed, removeFromFile = false) }
+                            )
+                        }
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
                 ) {
