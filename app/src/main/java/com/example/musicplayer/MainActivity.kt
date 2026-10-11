@@ -16,6 +16,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Color
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.musicplayer.core.library.LibrarySync
 import com.example.musicplayer.core.utils.ArtworkColorExtractor
 import com.example.musicplayer.data.datastore.PreferencesManager
 import com.example.musicplayer.feature.onboarding.OnboardingScreen
@@ -34,6 +35,19 @@ class MainActivity : ComponentActivity() {
 
     @Inject
     lateinit var playerController: PlayerController
+
+    @Inject
+    lateinit var librarySync: LibrarySync
+
+    override fun onStart() {
+        super.onStart()
+        librarySync.onForeground()
+    }
+
+    override fun onStop() {
+        librarySync.onBackground()
+        super.onStop()
+    }
 
     override fun attachBaseContext(newBase: Context) {
         // This preference lives in SharedPreferences so it is available before Hilt/DataStore
@@ -56,6 +70,13 @@ class MainActivity : ComponentActivity() {
             newBase.createConfigurationContext(config)
         }
         super.attachBaseContext(configured)
+    }
+
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        // We handle configuration changes ourselves (so pending system dialogs and playback UI survive
+        // rotation); re-apply the edge-to-edge bar styling so it follows a light/dark switch.
+        enableEdgeToEdge()
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -95,6 +116,8 @@ class MainActivity : ComponentActivity() {
                             onFinish = {
                                 scope.launch {
                                     preferencesManager.setOnboardingCompleted(true)
+                                    // Permission was just answered in onboarding; index the library now.
+                                    librarySync.requestRefresh()
                                 }
                             }
                         )

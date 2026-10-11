@@ -305,10 +305,10 @@
     <string name="action_delete_lyrics">Delete Lyrics</string>
     <string name="dialog_delete_lyrics_title">Delete Lyrics</string>
     <string name="dialog_delete_lyrics_confirm">Are you sure you want to remove lyrics for \"%1$s\"?</string>
-    <string name="lyrics_delete_failed">Could not hide the lyrics in LogaRhythm. Please try again.</string>
+    <string name="lyrics_delete_failed">Could not remove the lyrics. Please try again.</string>
     <string name="lyrics_reset_failed">Could not reset lyrics to the default source.</string>
-    <string name="lyrics_hidden_in_app">Lyrics are hidden in LogaRhythm. Embedded audio tags or companion files may still contain a copy.</string>
-    <string name="lyrics_deleted">Lyrics removed</string>
+    <string name="lyrics_hidden_in_app">Lyrics hidden in LogaRhythm. A copy may still be stored inside the audio file.</string>
+    <string name="lyrics_deleted">Lyrics removed from LogaRhythm and from the audio file</string>
     <string name="action_paste_lyrics">Paste from Clipboard</string>
     <string name="clipboard_empty">Clipboard is empty</string>
     <string name="action_export_lrc">Export .lrc File</string>
@@ -381,11 +381,11 @@
     <string name="lyrics_synced_badge">Synced (LRC)</string>
     <string name="lyrics_plain_badge">Plain Text</string>
     <string name="track_delete_failed">Could not delete the audio file. Check access and try again.</string>
-    <string name="lyrics_embedded_success">Lyrics embedded in the MP3 file</string>
-    <string name="lyrics_cached_only">Lyrics saved in LogaRhythm, but not embedded in the audio file (MP3 files only).</string>
-    <string name="lyrics_embed_failed">Lyrics could not be embedded. They remain available in LogaRhythm when cached.</string>
+    <string name="lyrics_embedded_success">Lyrics saved inside the audio file</string>
+    <string name="lyrics_cached_only">Lyrics saved in LogaRhythm, but this file\'s format cannot hold embedded lyrics (supported: MP3, FLAC, M4A, OGG, Opus).</string>
+    <string name="lyrics_embed_failed">Lyrics could not be written into the file. They remain available in LogaRhythm when cached.</string>
     <string name="saving">Saving…</string>
-    <string name="track_metadata_write_failed">Could not update the audio file. Only MP3 files with available write access are supported right now.</string>
+    <string name="track_metadata_write_failed">Could not update the audio file. Tags can be edited in MP3, FLAC, M4A, OGG and Opus files, and Android must allow write access.</string>
     <string name="lyrics_source_embedded">Embedded (ID3)</string>
     <string name="lyrics_source_companion">Companion (.lrc)</string>
     <string name="lyrics_source_cached">Cached in app</string>
@@ -393,4 +393,5 @@
     <string name="lyrics_source_imported">Imported file</string>
     <string name="lyrics_source_clipboard">Clipboard</string>
     <string name="lyrics_source_online">Online (%1$s)</string>
+    <string name="home_rescan">Scan for music</string>
 </resources>

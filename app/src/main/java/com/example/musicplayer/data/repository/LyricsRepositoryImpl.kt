@@ -253,19 +253,14 @@ class LyricsRepositoryImpl @Inject constructor(
         )
     }
 
-    override suspend fun deleteLyrics(track: Track): Unit = withContext(Dispatchers.IO) {
+    override suspend fun deleteLyrics(track: Track, removeFromFile: Boolean): Boolean = withContext(Dispatchers.IO) {
+        // The tombstone keeps lyrics from being re-discovered online or from stale caches.
         lyricsDao.insertLyrics(
-            LyricsEntity(
-                trackId = track.id,
-                content = "",
-                isSynced = false,
-                source = "deleted"
-            )
+            LyricsEntity(trackId = track.id, content = "", isSynced = false, source = "deleted")
         )
-        // Lyrics metadata is a separate user asset; preserve the cache tombstone even
-        // when a provider denies companion-file deletion.
         localFileLyricsSource.deleteCompanionLrc(track)
-        Unit
+        if (!removeFromFile) return@withContext false
+        localFileLyricsSource.clearEmbeddedLyrics(track).isSuccess
     }
 
     /** Removes the app's override/tombstone so normal local/embedded/default lookup resumes. */

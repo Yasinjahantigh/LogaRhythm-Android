@@ -305,10 +305,10 @@
     <string name="action_delete_lyrics">حذف متن آهنگ</string>
     <string name="dialog_delete_lyrics_title">حذف متن آهنگ</string>
     <string name="dialog_delete_lyrics_confirm">آیا مطمئن هستید که می‌خواهید متن آهنگ «%1$s» را حذف کنید؟</string>
-    <string name="lyrics_delete_failed">پنهان‌کردن متن ترانه در LogaRhythm انجام نشد، دوباره تلاش کنید</string>
+    <string name="lyrics_delete_failed">حذف متن ترانه ممکن نشد، دوباره تلاش کنید</string>
     <string name="lyrics_reset_failed">بازنشانی متن ترانه به منبع پیش‌فرض انجام نشد</string>
-    <string name="lyrics_hidden_in_app">متن ترانه در LogaRhythm پنهان شد، اما ممکن است نسخه‌ای داخل فایل صوتی یا فایل جانبی باقی مانده باشد</string>
-    <string name="lyrics_deleted">متن آهنگ حذف شد</string>
+    <string name="lyrics_hidden_in_app">متن ترانه در LogaRhythm پنهان شد، اما ممکن است نسخه‌ای داخل فایل صوتی باقی مانده باشد</string>
+    <string name="lyrics_deleted">متن ترانه از LogaRhythm و از فایل صوتی حذف شد</string>
     <string name="action_paste_lyrics">جای‌گذاری از کلیپ‌بورد</string>
     <string name="clipboard_empty">کلیپ‌بورد خالی است</string>
     <string name="action_export_lrc">خروجی فایل .lrc</string>
@@ -381,11 +381,11 @@
     <string name="lyrics_synced_badge">همگام‌سازی شده (LRC)</string>
     <string name="lyrics_plain_badge">متن ساده</string>
     <string name="track_delete_failed">حذف فایل آهنگ ممکن نشد، دسترسی را بررسی کنید و دوباره تلاش کنید</string>
-    <string name="lyrics_embedded_success">متن ترانه داخل فایل MP3 ذخیره شد</string>
-    <string name="lyrics_cached_only">متن ترانه در LogaRhythm ذخیره شد، اما داخل فایل صوتی قرار نگرفت (فقط فایل‌های MP3 پشتیبانی می‌شوند)</string>
-    <string name="lyrics_embed_failed">ذخیره متن ترانه داخل فایل ممکن نشد، در صورت وجود نسخه کش‌شده در LogaRhythm باقی می‌ماند</string>
+    <string name="lyrics_embedded_success">متن ترانه داخل فایل صوتی ذخیره شد</string>
+    <string name="lyrics_cached_only">متن ترانه در LogaRhythm ذخیره شد، اما قالب این فایل از متن جاسازی‌شده پشتیبانی نمی‌کند (پشتیبانی: MP3، FLAC، M4A، OGG، Opus)</string>
+    <string name="lyrics_embed_failed">نوشتن متن ترانه داخل فایل ممکن نشد. در صورت ذخیره، نسخه‌ای در LogaRhythm باقی می‌ماند</string>
     <string name="saving">در حال ذخیره…</string>
-    <string name="track_metadata_write_failed">به‌روزرسانی فایل صوتی ممکن نشد، فعلاً فقط فایل MP3 با دسترسی نوشتن پشتیبانی می‌شود</string>
+    <string name="track_metadata_write_failed">به‌روزرسانی فایل صوتی ممکن نشد. ویرایش تگ در فایل‌های MP3، FLAC، M4A، OGG و Opus ممکن است و اندروید باید اجازه نوشتن بدهد</string>
     <string name="lyrics_source_embedded">تعبیه‌شده در فایل (ID3)</string>
     <string name="lyrics_source_companion">فایل همگام (.lrc)</string>
     <string name="lyrics_source_cached">ذخیره‌شده در برنامه</string>
@@ -393,4 +393,5 @@
     <string name="lyrics_source_imported">فایل وارد شده</string>
     <string name="lyrics_source_clipboard">از کلیپ‌بورد</string>
     <string name="lyrics_source_online">آنلاین (%1$s)</string>
+    <string name="home_rescan">جست‌وجوی موسیقی</string>
 </resources>

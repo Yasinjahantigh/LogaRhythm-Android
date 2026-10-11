@@ -136,14 +136,14 @@ class LyricsViewModel @Inject constructor(
         }
     }
 
-    fun deleteLyrics(targetTrack: Track? = currentTrack.value) {
+    fun deleteLyrics(targetTrack: Track? = currentTrack.value, removeFromFile: Boolean = true) {
         val track = targetTrack ?: return
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                lyricsRepository.deleteLyrics(track)
-                // Deletion hides lyrics inside LogaRhythm and removes the companion file when
-                // possible; existing embedded audio tags cannot yet be removed by this action.
-                _saveMessage.value = "hidden"
+                val fileClean = lyricsRepository.deleteLyrics(track, removeFromFile)
+                // "deleted": gone from LogaRhythm and from the audio file.
+                // "hidden": hidden in LogaRhythm, but a copy may still sit inside the file.
+                _saveMessage.value = if (fileClean) "deleted" else "hidden"
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (_: Exception) {

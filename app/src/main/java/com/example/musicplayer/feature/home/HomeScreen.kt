@@ -59,6 +59,12 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.R
+import com.example.musicplayer.core.utils.PermissionUtils
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.material3.TextButton
+import androidx.compose.material.icons.filled.Lock
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.compose.rememberLauncherForActivityResult
 import com.example.musicplayer.domain.ai.MusicAiEngine
 import com.example.musicplayer.domain.model.DailyMix
 import com.example.musicplayer.domain.model.Track
@@ -124,6 +130,15 @@ fun HomeScreen(
             .testTag("home_screen")
     ) { innerPadding ->
         if (isLibraryEmpty) {
+            var audioGranted by remember { mutableStateOf(PermissionUtils.hasAudioPermission(context)) }
+            var askedOnce by remember { mutableStateOf(false) }
+            val permissionLauncher = rememberLauncherForActivityResult(
+                ActivityResultContracts.RequestPermission()
+            ) { granted ->
+                audioGranted = granted
+                askedOnce = true
+                if (granted) viewModel.rescanLibrary()
+            }
             Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -133,29 +148,62 @@ fun HomeScreen(
                 verticalArrangement = Arrangement.Center
             ) {
                 Icon(
-                    imageVector = Icons.Filled.MusicNote,
+                    imageVector = if (audioGranted) Icons.Filled.MusicNote else Icons.Filled.Lock,
                     contentDescription = null,
                     modifier = Modifier.size(72.dp),
                     tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.6f)
                 )
                 Spacer(modifier = Modifier.height(16.dp))
                 Text(
-                    text = stringResource(id = R.string.home_title),
+                    text = stringResource(id = if (audioGranted) R.string.home_title else R.string.permission_audio_title),
                     style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.SemiBold
+                    fontWeight = FontWeight.SemiBold,
+                    textAlign = TextAlign.Center
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    text = stringResource(id = R.string.home_empty_message),
+                    text = stringResource(id = if (audioGranted) R.string.home_empty_message else R.string.permission_audio_desc),
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center
                 )
                 Spacer(modifier = Modifier.height(24.dp))
-                Button(
-                    onClick = onNavigateToLibrary,
-                    modifier = Modifier.testTag("home_browse_library_button")
-                ) {
-                    Text(text = stringResource(id = R.string.home_browse_library))
+                if (!audioGranted) {
+                    Button(
+                        onClick = {
+                            if (askedOnce) {
+                                // Android stops showing the prompt after a refusal; only Settings can grant it now.
+                                context.startActivity(
+                                    android.content.Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                                        data = android.net.Uri.fromParts("package", context.packageName, null)
+                                    }
+                                )
+                            } else {
+                                permissionLauncher.launch(PermissionUtils.getRequiredAudioPermission())
+                            }
+                        },
+                        modifier = Modifier.testTag("home_grant_permission_button")
+                    ) {
+                        Text(
+                            text = stringResource(
+                                id = if (askedOnce) R.string.permission_open_settings else R.string.permission_grant_button
+                            )
+                        )
+                    }
+                } else {
+                    Button(
+                        onClick = viewModel::rescanLibrary,
+                        modifier = Modifier.testTag("home_rescan_button")
+                    ) {
+                        Text(text = stringResource(id = R.string.home_rescan))
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    TextButton(
+                        onClick = onNavigateToLibrary,
+                        modifier = Modifier.testTag("home_browse_library_button")
+                    ) {
+                        Text(text = stringResource(id = R.string.home_browse_library))
+                    }
                 }
             }
         } else {

@@ -1,26 +1,20 @@
-# LogaRhythm Product State & Engineering Limitations — 2026-10-10
+# LogaRhythm Product State - 2026-10-11
 
-## Verified & Implemented Upgrades
-- **Full Kotlin & Android Compilation:** Validated successful compilation of the entire Android codebase via `compile_applet`.
-- **Landscape & Adaptive Layout:** Designed an intentional two-pane landscape Now Playing interface. The left pane provides balanced album artwork or full-height interactive lyrics without vertical overflow or clipping; the right pane organizes track details, time scrubbing slider, full playback controls, and quick action shortcuts.
-- **Responsive Wide-Screen Layouts:** Bound `HomeScreen`, `SearchScreen`, `QueueScreen`, `PlaylistDetailScreen`, and `SettingsScreen` within centered adaptive containers (`widthIn(max = 840.dp)`), eliminating awkward horizontal stretching across tablets, foldables, and landscape orientations.
-- **Adaptive Shell & NavigationRail:** Restructured `MainScreen` in landscape/tablet mode so the NavigationRail sits cleanly beside content without phantom touch-blocking overlays.
-- **Adaptive Library Grids:** Updated album browsing in `AlbumsTabContent` to `GridCells.Adaptive(minSize = 150.dp)`, scaling smoothly across phones, foldables, and landscape screens.
-- **Adaptive Landscape Lyrics:** Refined `SyncedLyricsContent` and `PlainLyricsContent` padding, line spacing, and scrolling in landscape orientation so verses are prominently displayed without vertical cramping.
-- **Bilingual & BiDi Text Direction:** Added explicit `TextDirection.Content` to lyrics rendering, ensuring Persian, Arabic, and mixed-script verses render correct punctuation placement and reading direction.
-- **Clean Lyrics Candidate Presentation:** Hardened candidate metadata in `LyricsCandidatePickerDialog` against literal `"null"` and `<unknown>` artifacts, added source provider badges (`LRCLIB`, `Netease`, `Kugou`), and provided clean fallback labels.
-- **First-Class Lyrics Source Transparency:** Lyrics explicitly present transparent status badges distinguishing whether lyrics are embedded in the audio file ID3 tag (`Embedded (ID3)`), loaded from a companion `.lrc` file (`Companion (.lrc)`), cached locally in Room (`Cached in app`), sourced online (`Online: LRCLIB / Netease / Kugou`), or authored manually.
-- **Artwork Color In-Memory Caching:** Implemented an LRU cache in `ArtworkColorExtractor` to avoid repeated bitmap decoding, allocation, and pixel sampling when switching tracks or rotating the screen.
-- **Zero-Tick Paused Animations:** Halted animation clock loops in both `CuteEqualizerVisualizer` and `CuteVinylTurntable` when playback is paused, preventing CPU wakeups and battery consumption.
-- **AutoMirrored Icons Parity:** Migrated legacy icons (`Icons.Default.QueueMusic` in `PlaylistDetailScreen`) to `Icons.AutoMirrored.Filled.QueueMusic` for proper RTL alignment.
-- **Complete Bilingual Polish (Persian & English):** All UI elements, badges, and actions have natural Persian translations in `res/values-fa/strings.xml`, respecting RTL layout orientation and mixed-script text presentation.
-- **Audio Tag & File Utilities:** Fixed type inference and non-local return mismatch in `AudioFileTagWriter.contentUriMatchesFile`, unified MediaStore track file path resolution in `FileUtils.resolveTrackPath`, and resolved missing imports in `SongMenuBottomSheet` and `CutePlayerDecorations`.
+## Done in this pass
+- **Tag engine** (`data/tagger/engine`): MP3 ID3v2.2/2.3/2.4, FLAC, M4A/MP4 (chunk-offset shifting), Ogg Vorbis/Opus. Verified against real ffmpeg-generated files with mutagen as an independent reader and decoded-audio hash comparison (audio identical, artwork kept). Unit tests: `TagEngineTest` (run and passing on a desktop JVM).
+- **AudioFileTagWriter** rebuilt on the engine: staged write, re-parse verification, byte-for-byte readback, rollback, MediaStore rescan. Unchanged fields and "Unknown ..." placeholders are no longer written into files.
+- **Lyrics**: embedded lyrics are read from all supported formats and can be truly removed from the file; delete flow asks for consent and degrades to "hidden in app" if declined.
+- **Permissions/consent**: unified `rememberMediaStoreConsent` (API 30+ MediaStore sheet with grant reuse; API 26-29 runtime WRITE_EXTERNAL_STORAGE). Manifest handles configuration changes so a rotation cannot drop a pending system dialog.
+- **Library sync** (`core/library/LibrarySync`): indexes on foreground and on MediaStore changes; fixes empty Home after first-run permission grant. Home empty state is permission-aware (grant / open settings / rescan).
+- **Performance**: playback position no longer recomposes the app shell or the 900-line full player; mini player progress is read in the draw phase; custom `PlaybackTimeline` scrubber (own drag state, LTR in every language, accessible).
 
-## Remaining Engineering Limitations
-- **Embedded tags:** Actual tag writing remains intentionally limited to MP3 / ID3v2.3 text tags. Existing ID3v2.4 tags, unsupported global/frame flags, nonzero ID3v2.3 revisions, malformed/truncated tags, metadata tags above 2 MiB, and lyrics tags above 8 MiB fail closed rather than being rewritten.
-- **Lyrics removal:** Saving embedded USLT lyrics is supported, but the delete action hides lyrics inside LogaRhythm and attempts to remove the companion `.lrc`; it does not remove an existing embedded USLT frame from the audio file. The UI explicitly informs the user that a copy in the file may remain.
-- **Storage compatibility:** Android 11+ uses single-item MediaStore consent for supported shared MP3 writes and track deletion. Android 10 `RecoverableSecurityException` consent flow, SAF document provider writes, and multi-file bulk consent are not implemented.
-- **Consent lifecycle:** Pending approval callbacks live in the active Compose composition. If Android destroys the activity while the system consent dialog is open, the operation fails safely and must be retried.
-- **MediaStore index:** Platform MediaStore metadata columns (title, artist, album, genre) are indexed by Android. LogaRhythm updates its local Room database immediately upon successful embedded write verification, but the system MediaStore scanner may take additional time to refresh its global index.
-- **Companion LRC:** Companion-file access depends on MediaStore exposing a usable filesystem path. Providers without an accessible `DATA` path use the content URI for embedded writes.
-- **Testing status:** Incremental compilation and type validation have been executed via the build system. Broad device corpus testing across diverse physical OEM storage implementations remains recommended for future release cycles.
+- **Lighter image pipeline**: album art is decoded at the size the screen needs (list rows no longer decode 512px thumbnails; oversized embedded pictures are down-sampled), the image memory cache is capped at 15% of app memory, and the scrubber gives a light haptic on grab/release.
+
+## Not verified here
+- The Android/Compose layer could not be compiled in this environment (no Android SDK / Maven access). Pure-Kotlin logic was compiled and tested; the writer was type-checked against android.jar; Compose files were syntax-checked only. Run `./gradlew assembleDebug :app:testDebugUnitTest` first and report any compile error.
+- No on-device testing of consent flows on Android 10 or older.
+
+## Known limits
+- No tag writing for WAV/WMA/ADTS, SAF providers, or multi-file bulk consent.
+- Companion `.lrc` read/delete needs a filesystem path from MediaStore (unavailable under scoped storage on many devices).
+- Multiplexed/chained Ogg and fragmented MP4 are refused.

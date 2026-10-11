@@ -2,6 +2,7 @@ package com.example.musicplayer.feature.home
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.musicplayer.core.library.LibrarySync
 import com.example.musicplayer.domain.ai.MusicAiEngine
 import com.example.musicplayer.domain.discovery.Discovery
 import com.example.musicplayer.domain.mix.DailyMixGenerator
@@ -36,8 +37,13 @@ class HomeViewModel @Inject constructor(
     statsRepository: StatsRepository,
     private val trackRepository: TrackRepository,
     private val playlistRepository: PlaylistRepository,
-    private val playerController: PlayerController
+    private val playerController: PlayerController,
+    private val librarySync: LibrarySync
 ) : ViewModel() {
+
+    /** Index the device's music now (after permission is granted or on a manual rescan). */
+    fun rescanLibrary() = librarySync.requestRefresh()
+
 
     private val dailyMixGenerator = DailyMixGenerator()
 
