@@ -83,4 +83,10 @@ interface PlaylistDao {
         }
         insertPlaylistTracks(entities)
     }
+
+    @Query("SELECT * FROM playlists")
+    suspend fun getAllPlaylistEntitiesOnce(): List<PlaylistEntity>
+
+    @Query("SELECT * FROM playlist_tracks ORDER BY playlistId ASC, orderIndex ASC")
+    suspend fun getAllPlaylistTracksOnce(): List<PlaylistTrackEntity>
 }

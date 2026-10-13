@@ -74,9 +74,9 @@ interface MusicDao {
     fun searchGenres(query: String, normalizedQuery: String): Flow<List<GenreQueryResult>>
 
     @Query("""
-        SELECT album, artist, COUNT(*) AS trackCount, MIN(artworkUri) AS artworkUri 
+        SELECT album, COALESCE(NULLIF(albumArtist, ''), artist) AS artist, COUNT(*) AS trackCount, MIN(artworkUri) AS artworkUri 
         FROM tracks 
-        GROUP BY album, artist 
+        GROUP BY album, COALESCE(NULLIF(albumArtist, ''), artist) 
         ORDER BY album COLLATE NOCASE ASC
     """)
     fun getAllAlbums(): Flow<List<AlbumQueryResult>>
@@ -120,10 +120,10 @@ interface MusicDao {
     fun getTracksByGenre(genre: String): Flow<List<TrackEntity>>
 
     @Query("""
-        SELECT album, artist, COUNT(*) AS trackCount, MIN(artworkUri) AS artworkUri 
+        SELECT album, COALESCE(NULLIF(albumArtist, ''), artist) AS artist, COUNT(*) AS trackCount, MIN(artworkUri) AS artworkUri 
         FROM tracks 
         WHERE album = :album
-        GROUP BY album, artist 
+        GROUP BY album, COALESCE(NULLIF(albumArtist, ''), artist) 
         LIMIT 1
     """)
     fun getAlbumByName(album: String): Flow<AlbumQueryResult?>
@@ -253,4 +253,27 @@ interface MusicDao {
         LIMIT :limit
     """)
     fun getMostPlayedTracks(limit: Int = 20): Flow<List<TrackEntity>>
+
+    // ---- one-shot reads used by backup/restore, duplicates and playback helpers ----
+
+    @Query("SELECT * FROM tracks")
+    suspend fun getAllTracksOnce(): List<TrackEntity>
+
+    @Query("SELECT * FROM play_events")
+    suspend fun getAllPlayEventsOnce(): List<PlayEventEntity>
+
+    @Insert
+    suspend fun insertPlayEvents(events: List<PlayEventEntity>)
+
+    @Query("SELECT * FROM resume_positions")
+    suspend fun getAllResumePositionsOnce(): List<ResumePositionEntity>
+
+    @Query("SELECT * FROM resume_positions WHERE trackId = :trackId")
+    suspend fun getResumePosition(trackId: String): ResumePositionEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertResumePosition(entity: ResumePositionEntity)
+
+    @Query("DELETE FROM resume_positions WHERE trackId = :trackId")
+    suspend fun clearResumePosition(trackId: String)
 }

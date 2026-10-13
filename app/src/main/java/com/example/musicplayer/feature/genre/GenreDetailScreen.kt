@@ -50,6 +50,8 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
+import androidx.compose.foundation.layout.WindowInsets
+import com.example.musicplayer.ui.components.DetailHero
 import com.example.R
 import com.example.musicplayer.core.utils.TimeUtils
 import com.example.musicplayer.domain.model.Track
@@ -105,19 +107,7 @@ fun GenreDetailScreen(
 
     Scaffold(
         modifier = modifier.fillMaxSize().testTag("genre_detail_screen"),
-        topBar = {
-            TopAppBar(
-                title = { Text(text = viewModel.genreName, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                navigationIcon = {
-                    IconButton(onClick = onNavigateBack, modifier = Modifier.testTag("genre_back_button")) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = stringResource(R.string.cd_back)
-                        )
-                    }
-                }
-            )
-        }
+        contentWindowInsets = WindowInsets(0.dp, 0.dp, 0.dp, 0.dp),
     ) { innerPadding ->
         val bottomPadding = com.example.musicplayer.ui.designsystem.LocalPlaybackBottomPadding.current
         LazyColumn(
@@ -125,89 +115,19 @@ fun GenreDetailScreen(
             modifier = Modifier.fillMaxSize().padding(innerPadding)
         ) {
             item {
-                Column(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 16.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    val firstArtwork = tracks.firstOrNull { !it.artworkUri.isNullOrBlank() }?.artworkUri
-                    if (!firstArtwork.isNullOrBlank()) {
-                        AsyncImage(
-                            model = firstArtwork,
-                            contentDescription = viewModel.genreName,
-                            modifier = Modifier
-                                .size(160.dp)
-                                .clip(RoundedCornerShape(24.dp))
-                                .background(MaterialTheme.colorScheme.surfaceVariant),
-                            contentScale = ContentScale.Crop,
-                            placeholder = painterResource(id = R.drawable.ic_music_placeholder),
-                            error = painterResource(id = R.drawable.ic_music_placeholder)
-                        )
-                    } else {
-                        Box(
-                            modifier = Modifier
-                                .size(160.dp)
-                                .clip(RoundedCornerShape(24.dp))
-                                .background(MaterialTheme.colorScheme.primaryContainer),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.MusicNote,
-                                contentDescription = null,
-                                modifier = Modifier.size(72.dp),
-                                tint = MaterialTheme.colorScheme.onPrimaryContainer
-                            )
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    Text(
-                        text = viewModel.genreName,
-                        style = MaterialTheme.typography.headlineSmall,
-                        fontWeight = FontWeight.Bold,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-
-                    Spacer(modifier = Modifier.height(4.dp))
-
-                    val trackCount = genre?.trackCount ?: tracks.size
-                    val totalDuration = tracks.sumOf { it.durationMs }
-                    Text(
-                        text = "$trackCount songs • ${TimeUtils.formatDuration(totalDuration)}",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-
-                    Spacer(modifier = Modifier.height(20.dp))
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        Button(
-                            onClick = viewModel::playAll,
-                            modifier = Modifier.weight(1f).testTag("genre_play_button"),
-                            enabled = tracks.isNotEmpty(),
-                            contentPadding = ButtonDefaults.ContentPadding
-                        ) {
-                            Icon(imageVector = Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(18.dp))
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(stringResource(R.string.btn_play))
-                        }
-
-                        FilledTonalButton(
-                            onClick = viewModel::shuffleAll,
-                            modifier = Modifier.weight(1f).testTag("genre_shuffle_button"),
-                            enabled = tracks.isNotEmpty(),
-                            contentPadding = ButtonDefaults.ContentPadding
-                        ) {
-                            Icon(imageVector = Icons.Default.Shuffle, contentDescription = null, modifier = Modifier.size(18.dp))
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(stringResource(R.string.btn_shuffle))
-                        }
-                    }
-                }
+                DetailHero(
+                    title = viewModel.genreName,
+                    meta = stringResource(R.string.genre_track_count, genre?.trackCount ?: tracks.size) +
+                        " • " + TimeUtils.formatDuration(tracks.sumOf { it.durationMs }),
+                    artworkUri = tracks.firstOrNull { !it.artworkUri.isNullOrBlank() }?.artworkUri,
+                    onBack = onNavigateBack,
+                    onPlay = viewModel::playAll,
+                    onShuffle = viewModel::shuffleAll,
+                    actionsEnabled = tracks.isNotEmpty(),
+                    backTag = "genre_back_button",
+                    playTag = "genre_play_button",
+                    shuffleTag = "genre_shuffle_button"
+                )
             }
 
             if (tracks.isEmpty()) {

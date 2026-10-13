@@ -11,9 +11,11 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         PlayEventEntity::class,
         PlaylistEntity::class,
         PlaylistTrackEntity::class,
-        LyricsEntity::class
+        LyricsEntity::class,
+        LyricsOffsetEntity::class,
+        ResumePositionEntity::class
     ],
-    version = 7,
+    version = 8,
     exportSchema = false
 )
 abstract class MusicDatabase : RoomDatabase() {
@@ -22,6 +24,27 @@ abstract class MusicDatabase : RoomDatabase() {
     abstract fun lyricsDao(): LyricsDao
 
     companion object {
+        /**
+         * Indices for the group-by / filter queries behind Library, Artist, Album and Stats, the
+         * album-artist and file-path columns, per-song lyrics offsets and long-audio resume points.
+         * Index names follow Room's `index_<table>_<column>` convention or schema validation fails.
+         */
+        val MIGRATION_7_8: Migration = object : Migration(7, 8) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE tracks ADD COLUMN albumArtist TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE tracks ADD COLUMN filePath TEXT NOT NULL DEFAULT ''")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_tracks_artist ON tracks (artist)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_tracks_album ON tracks (album)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_tracks_folder ON tracks (folder)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_tracks_genre ON tracks (genre)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_tracks_dateAdded ON tracks (dateAdded)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_play_events_trackId ON play_events (trackId)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_play_events_timestamp ON play_events (timestamp)")
+                db.execSQL("CREATE TABLE IF NOT EXISTS lyrics_offsets (trackId TEXT NOT NULL, offsetMs INTEGER NOT NULL, PRIMARY KEY(trackId))")
+                db.execSQL("CREATE TABLE IF NOT EXISTS resume_positions (trackId TEXT NOT NULL, positionMs INTEGER NOT NULL, updatedAt INTEGER NOT NULL, PRIMARY KEY(trackId))")
+            }
+        }
+
         /** Adds skip tracking; every existing event was a completed play, so it defaults to 0. */
         val MIGRATION_6_7: Migration = object : Migration(6, 7) {
             override fun migrate(db: SupportSQLiteDatabase) {

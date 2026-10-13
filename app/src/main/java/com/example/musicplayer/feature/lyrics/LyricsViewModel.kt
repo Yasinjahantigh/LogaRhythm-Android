@@ -7,6 +7,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.musicplayer.data.datastore.PreferencesManager
 import com.example.musicplayer.domain.model.LyricLine
 import com.example.musicplayer.domain.model.Lyrics
+import com.example.musicplayer.domain.lyrics.LyricsMismatch
 import com.example.musicplayer.domain.model.Track
 import com.example.musicplayer.domain.repository.LyricsRepository
 import com.example.musicplayer.playback.PlayerController
@@ -68,10 +69,29 @@ class LyricsViewModel @Inject constructor(
     val isOnlineEnabled: StateFlow<Boolean> = preferencesManager.isLrclibEnabled
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
 
+    /** Live playback position; only the active karaoke line collects it. */
+    val livePositionMs: StateFlow<Long> = positionMs
+
+    /** The user's timing correction for the current song (positive = lyrics appear earlier). */
+    val offsetMs: StateFlow<Long> = currentTrack.flatMapLatest { track ->
+        if (track == null) flowOf(0L) else lyricsRepository.getOffset(track.id)
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0L)
+
+    /** True when the song's lyrics were hidden by the user; the UI then offers "Restore". */
+    val isHidden: StateFlow<Boolean> = combine(currentTrack, lyricsRepository.getHiddenTrackIds()) { track, hidden ->
+        track != null && track.id in hidden
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+
+    /** Synced lyrics whose timestamps cannot fit this song's length: probably the wrong song. */
+    val lyricsMismatch: StateFlow<Boolean> = combine(currentLyrics, currentTrack) { lyrics, track ->
+        lyrics != null && lyrics.isSynced && track != null &&
+            LyricsMismatch.isLikely(lyrics.lines, track.durationMs)
+    }.distinctUntilChanged().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+
     // Derived active line index based on live player position
-    val activeLineIndex: StateFlow<Int> = combine(currentLyrics, positionMs) { lyrics, pos ->
+    val activeLineIndex: StateFlow<Int> = combine(currentLyrics, positionMs, offsetMs) { lyrics, pos, offset ->
         if (lyrics != null && lyrics.isSynced && lyrics.lines.isNotEmpty()) {
-            findActiveLineIndex(lyrics.lines, pos)
+            findActiveLineIndex(lyrics.lines, pos + offset)
         } else {
             -1
         }
@@ -98,6 +118,26 @@ class LyricsViewModel @Inject constructor(
             } finally {
                 _isLoading.value = false
             }
+        }
+    }
+
+    fun nudgeOffset(deltaMs: Long) {
+        val track = currentTrack.value ?: return
+        val next = (offsetMs.value + deltaMs).coerceIn(-10_000L, 10_000L)
+        viewModelScope.launch(Dispatchers.IO) { lyricsRepository.setOffset(track.id, next) }
+    }
+
+    fun resetOffset() {
+        val track = currentTrack.value ?: return
+        viewModelScope.launch(Dispatchers.IO) { lyricsRepository.setOffset(track.id, 0L) }
+    }
+
+    /** Un-hides lyrics and looks them up again, so wrong lyrics never trap the user. */
+    fun restoreLyrics() {
+        val track = currentTrack.value ?: return
+        viewModelScope.launch(Dispatchers.IO) {
+            lyricsRepository.resetLyricsToDefault(track.id)
+            loadLyricsForTrack(track)
         }
     }
 

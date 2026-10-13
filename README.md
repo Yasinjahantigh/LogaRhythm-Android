@@ -4,7 +4,7 @@ LogaRhythm is an offline-first Android music player built with Kotlin, Jetpack C
 
 ## Product capabilities
 
-- Local audio library with song, album, artist, folder, and genre browsing
+- Local audio library with song, album, artist, folder, genre and playlist browsing from a single Library screen (category rail with live counts), with search one tap away from Home and Library
 - Background playback through Media3, with a persistent mini player, full player, queue, and home-screen widget
 - Playlists, favorites, sorting, search history, and listening statistics
 - Synced lyrics from local files and optional online sources, plus manual editing and `.lrc` export
@@ -17,6 +17,21 @@ LogaRhythm is an offline-first Android music player built with Kotlin, Jetpack C
 - English and Persian UI with an in-app language override, explicit RTL/LTR direction, localized search metadata, resilient artwork fallbacks, theme preferences, and a signature “Ink & Ember” palette with optional wallpaper and album-art color
 
 All personalization is computed on-device from your own play history; nothing is uploaded. Mood suggestions are intentionally lightweight and private. They infer approximate energy, mood, acoustic character, and similarity from local metadata; they do not perform signal-level audio analysis or send your listening library to a recommendation service. Radio deliberately replaces the current queue, keeps the currently playing song and seek position where possible, then sequences relevant tracks with artist/album diversity.
+
+## What is new in 1.3
+
+- **Playback**: fade between songs, ReplayGain (read from the file's own tags), skip silence, resume after the headphones you just unplugged come back, per-file position memory for recordings over 20 minutes, a gentle fade at the end of the sleep timer, short buffers and a CPU wake lock for screen-off playback.
+- **Lyrics**: per-song timing offset, word-by-word highlight for enhanced LRC, a warning when synced lyrics cannot fit the song's length, and a Hidden lyrics list in Settings (plus a Restore button on the song) so wrong lyrics never trap you.
+- **Library**: split multi-artist tags with editable separators, album-artist grouping, duplicate finder, missing-tags view, M3U import/export, one-file backup and restore of playlists, favourites, listening history and edited lyrics.
+- **Speed and size**: indexed Room queries, scans skipped when Android's media index is unchanged, a real decoded waveform cached on disk, a baseline profile, English/Persian-only resources, no Firebase or build-time secrets.
+
+## Screenshots
+
+Add screenshots to `docs/screenshots/` and link them here (Home, Library, Now Playing, Lyrics, Settings).
+
+## Releases
+
+Pushing a tag such as `v1.3.0` runs `.github/workflows/release.yml`: unit tests, a signed release APK and a GitHub Release. Add the repository secrets `KEYSTORE_BASE64`, `STORE_PASSWORD`, `KEY_ALIAS` and `KEY_PASSWORD`; without them the APK is signed with the debug key.
 
 ## Storage and metadata support
 

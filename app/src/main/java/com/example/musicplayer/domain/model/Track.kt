@@ -17,5 +17,9 @@ data class Track(
     val folder: String = "",
     val genre: String = "",
     /** MediaStore's original added timestamp, in seconds since epoch. */
-    val dateAdded: Long = 0L
+    val dateAdded: Long = 0L,
+    /** Album-artist tag when the platform exposes it (Android 11+); empty otherwise. */
+    val albumArtist: String = "",
+    /** Absolute file path reported by MediaStore, used for M3U export and duplicate hints. */
+    val filePath: String = ""
 )

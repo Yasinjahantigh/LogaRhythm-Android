@@ -7,13 +7,13 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.defaultMinSize
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -24,29 +24,30 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
-import coil.compose.AsyncImage
-import coil.request.ImageRequest
+import androidx.compose.ui.unit.dp
 import com.example.R
 import com.example.musicplayer.core.utils.TimeUtils
 import com.example.musicplayer.domain.model.SourceType
 import com.example.musicplayer.domain.model.Track
-import com.example.musicplayer.ui.designsystem.AppDimensions
-import com.example.musicplayer.ui.designsystem.AppShapes
-import com.example.musicplayer.ui.designsystem.AppSpacing
+import com.example.musicplayer.feature.player.CuteEqualizerVisualizer
+import com.example.musicplayer.ui.components.ArtworkImage
+import com.example.musicplayer.ui.components.cleanMetaOrNull
 import com.example.musicplayer.ui.theme.MusicPlayerTheme
 
 /**
- * Standard unified track row component across the entire app.
- * Guarantees fixed artwork size, consistent text offset, duration visibility,
- * and localized fallbacks for unknown metadata.
+ * The one track row used across the whole app.
+ *
+ * - Artwork always has something to show: real cover, or a gradient + monogram generated from the
+ *   title, so lists stay colourful even for untagged files.
+ * - The track that is playing is unmistakable: tinted row, accent-coloured title, and live
+ *   equaliser bars over its cover that stop when playback pauses.
+ * - Subtitle is "artist · album" (album only when known); duration sits next to the menu so it is
+ *   never pushed out by a long name.
  */
 @Composable
 fun TrackListItem(
@@ -57,130 +58,94 @@ fun TrackListItem(
     isPlaying: Boolean = false,
     onMenuClick: (() -> Unit)? = null
 ) {
-    val containerBg = if (isCurrentTrack) {
-        MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.25f)
-    } else {
-        Color.Transparent
-    }
+    val scheme = MaterialTheme.colorScheme
+    // Plain colour switch: hundreds of rows must not each own an animation object.
+    val container = if (isCurrentTrack) scheme.primaryContainer.copy(alpha = 0.55f) else Color.Transparent
 
-    val displayTitle = when {
-        track.title.isBlank() ||
-            track.title.equals("<unknown>", ignoreCase = true) ||
-            track.title.equals("unknown", ignoreCase = true) ||
-            track.title.equals("null", ignoreCase = true) -> stringResource(R.string.unknown_title)
-        else -> track.title
-    }
-
-    val displayArtist = when {
-        track.artist.isBlank() ||
-            track.artist.equals("<unknown>", ignoreCase = true) ||
-            track.artist.equals("unknown", ignoreCase = true) ||
-            track.artist.equals("null", ignoreCase = true) -> stringResource(R.string.unknown_artist)
-        else -> track.artist
-    }
+    val title = track.title.cleanMetaOrNull() ?: stringResource(R.string.unknown_title)
+    val artist = track.artist.cleanMetaOrNull() ?: stringResource(R.string.unknown_artist)
+    val album = track.album.cleanMetaOrNull()
+    val subtitle = if (album != null) "$artist · $album" else artist
 
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .defaultMinSize(minHeight = AppDimensions.minTouchTarget)
-            .background(containerBg)
+            .padding(horizontal = 8.dp, vertical = 1.dp)
+            .clip(RoundedCornerShape(22.dp))
+            .background(container)
+            .defaultMinSize(minHeight = 64.dp)
             .testTag("track_item_${track.id}")
             .clickable(onClick = onClick)
-            .padding(horizontal = AppSpacing.normal, vertical = AppSpacing.sm),
+            .padding(start = 8.dp, end = if (onMenuClick != null) 0.dp else 12.dp, top = 6.dp, bottom = 6.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // Fixed Artwork Thumbnail
-        Box(
-            modifier = Modifier
-                .size(AppDimensions.artworkRow)
-                .clip(AppShapes.roundedSm)
-                .background(MaterialTheme.colorScheme.surfaceContainerHighest),
-            contentAlignment = Alignment.Center
-        ) {
-            AsyncImage(
-                model = ImageRequest.Builder(LocalContext.current)
-                    .data(track.artworkUri)
-                    .crossfade(true)
-                    .build(),
-                contentDescription = stringResource(R.string.cd_artwork, displayTitle),
-                contentScale = ContentScale.Crop,
+        Box(modifier = Modifier.size(52.dp), contentAlignment = Alignment.Center) {
+            ArtworkImage(
+                uri = track.artworkUri,
+                fallbackKey = title,
                 modifier = Modifier.fillMaxSize(),
-                placeholder = painterResource(R.drawable.ic_music_placeholder),
-                error = painterResource(R.drawable.ic_music_placeholder)
+                shape = RoundedCornerShape(16.dp),
+                contentDescription = stringResource(R.string.cd_artwork, title)
             )
-
             if (isCurrentTrack) {
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .background(Color.Black.copy(alpha = 0.45f)),
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(Color.Black.copy(alpha = 0.48f)),
                     contentAlignment = Alignment.Center
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.GraphicEq,
-                        contentDescription = stringResource(R.string.now_playing),
-                        tint = MaterialTheme.colorScheme.primaryContainer,
-                        modifier = Modifier.size(AppDimensions.iconMd)
+                    CuteEqualizerVisualizer(
+                        isPlaying = isPlaying,
+                        barColor = Color.White,
+                        maxHeight = 20.dp,
+                        barCount = 4
                     )
                 }
             }
         }
 
-        Spacer(modifier = Modifier.width(AppSpacing.normal))
+        Spacer(modifier = Modifier.width(14.dp))
 
-        // Text details with duration guaranteed to be fully visible
-        Column(
-            modifier = Modifier.weight(1f)
-        ) {
+        Column(modifier = Modifier.weight(1f)) {
             Text(
-                text = displayTitle,
+                text = title,
                 style = MaterialTheme.typography.titleMedium,
-                fontWeight = if (isCurrentTrack) FontWeight.Bold else FontWeight.Medium,
-                color = if (isCurrentTrack) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                fontWeight = FontWeight.SemiBold,
+                color = if (isCurrentTrack) scheme.primary else scheme.onSurface,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = displayArtist,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = if (isCurrentTrack) MaterialTheme.colorScheme.primary.copy(alpha = 0.85f) else MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f, fill = false)
-                )
-
-                Text(
-                    text = " • ",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-
-                Text(
-                    text = TimeUtils.formatDuration(track.durationMs),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1
-                )
-            }
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.bodyMedium,
+                color = scheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
         }
+
+        Spacer(modifier = Modifier.width(8.dp))
+
+        Text(
+            text = TimeUtils.formatDuration(track.durationMs),
+            style = MaterialTheme.typography.labelMedium,
+            color = scheme.onSurfaceVariant,
+            maxLines = 1
+        )
 
         if (onMenuClick != null) {
             IconButton(
                 onClick = onMenuClick,
                 modifier = Modifier
-                    .size(AppDimensions.minTouchTarget)
+                    .size(44.dp)
                     .testTag("track_menu_button_${track.id}")
             ) {
                 Icon(
                     imageVector = Icons.Default.MoreVert,
-                    contentDescription = stringResource(R.string.cd_song_menu, displayTitle),
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(AppDimensions.iconMd)
+                    contentDescription = stringResource(R.string.cd_song_menu, title),
+                    tint = scheme.onSurfaceVariant,
+                    modifier = Modifier.size(22.dp)
                 )
             }
         }
@@ -195,7 +160,7 @@ private fun TrackListItemPreview() {
             track = Track(
                 id = "local:1",
                 title = "Bohemian Rhapsody",
-                artist = "Queen (A Night at the Opera Album Edition With Very Long Name)",
+                artist = "Queen",
                 album = "A Night at the Opera",
                 durationMs = 354_000L,
                 artworkUri = null,

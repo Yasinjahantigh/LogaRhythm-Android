@@ -1,0 +1,5 @@
+Fonts used by LogaRhythm
+------------------------
+Poppins (res/font/poppins_*.ttf) - Copyright Indian Type Foundry. SIL Open Font License 1.1.
+Vazirmatn (downloaded to this folder by the build) - Copyright Saber Rastikerdar. SIL Open Font License 1.1.
+https://openfontlicense.org
