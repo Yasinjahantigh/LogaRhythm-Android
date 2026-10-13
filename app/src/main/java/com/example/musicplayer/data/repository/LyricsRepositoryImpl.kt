@@ -263,6 +263,16 @@ class LyricsRepositoryImpl @Inject constructor(
         localFileLyricsSource.clearEmbeddedLyrics(track).isSuccess
     }
 
+    override fun getOffset(trackId: String): Flow<Long> =
+        lyricsDao.getOffset(trackId).map { it ?: 0L }
+
+    override suspend fun setOffset(trackId: String, offsetMs: Long) = withContext(Dispatchers.IO) {
+        if (offsetMs == 0L) lyricsDao.clearOffset(trackId)
+        else lyricsDao.setOffset(com.example.musicplayer.data.room.LyricsOffsetEntity(trackId, offsetMs))
+    }
+
+    override fun getHiddenTrackIds(): Flow<List<String>> = lyricsDao.getHiddenTrackIds()
+
     /** Removes the app's override/tombstone so normal local/embedded/default lookup resumes. */
     override suspend fun resetLyricsToDefault(trackId: String) = withContext(Dispatchers.IO) {
         lyricsDao.deleteLyricsForTrack(trackId)
@@ -282,11 +292,13 @@ class LyricsRepositoryImpl @Inject constructor(
 
     private fun formatLyricsToLrc(lyrics: Lyrics): String {
         return if (lyrics.isSynced) {
+            fun stamp(ms: Long) = String.format(
+                java.util.Locale.ROOT, "%02d:%02d.%02d", ms / 60_000L, (ms % 60_000L) / 1_000L, (ms % 1_000L) / 10L
+            )
             lyrics.lines.joinToString("\n") { line ->
-                val min = line.timestampMs / 60_000L
-                val sec = (line.timestampMs % 60_000L) / 1_000L
-                val frac = (line.timestampMs % 1_000L) / 10L
-                String.format("[%02d:%02d.%02d]%s", min, sec, frac, line.text)
+                val body = if (line.words.isEmpty()) line.text
+                else line.words.joinToString("") { "<${stamp(it.startMs)}>${it.text}" }
+                "[${stamp(line.timestampMs)}]$body"
             }
         } else {
             lyrics.plainText.orEmpty()

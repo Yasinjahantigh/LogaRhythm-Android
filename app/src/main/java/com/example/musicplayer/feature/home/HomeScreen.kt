@@ -4,6 +4,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -21,6 +22,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Surface
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Bedtime
@@ -35,6 +38,7 @@ import androidx.compose.material.icons.filled.Whatshot
 import androidx.compose.material.icons.filled.WbSunny
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -44,6 +48,7 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -83,6 +88,7 @@ fun HomeScreen(
     onNavigateToStats: () -> Unit,
     onNavigateToLibrary: () -> Unit,
     modifier: Modifier = Modifier,
+    onNavigateToSearch: () -> Unit = {},
     viewModel: HomeViewModel = hiltViewModel()
 ) {
     val dailyMixes by viewModel.dailyMixes.collectAsStateWithLifecycle()
@@ -111,20 +117,23 @@ fun HomeScreen(
 
     val isLibraryEmpty = allTracks.isEmpty() && dailyMixes.isEmpty() && recentlyPlayed.isEmpty() && mostPlayed.isEmpty()
 
+    var shelf by remember { mutableStateOf(JumpShelf.RECENT) }
+    val shelves: List<Pair<JumpShelf, List<Track>>> = listOf(
+        JumpShelf.RECENT to recentlyPlayed,
+        JumpShelf.NEW to recentlyAdded,
+        JumpShelf.REPEAT to onRepeat.ifEmpty { mostPlayed }
+    ).filter { it.second.isNotEmpty() }
+    val activeShelf = shelves.firstOrNull { it.first == shelf } ?: shelves.firstOrNull()
+
     Scaffold(
-        snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
-        topBar = {
-            TopAppBar(
-                title = {
-                    Text(
-                        text = rightNow?.let { greetingFor(it.daypart) }
-                            ?: stringResource(id = R.string.home_title),
-                        style = MaterialTheme.typography.headlineMedium,
-                        fontFamily = DisplayFontFamily
-                    )
-                }
+        snackbarHost = {
+            SnackbarHost(
+                hostState = snackbarHostState,
+                modifier = Modifier.padding(bottom = com.example.musicplayer.ui.designsystem.LocalPlaybackBottomPadding.current)
             )
         },
+        contentWindowInsets = WindowInsets(0.dp, 0.dp, 0.dp, 0.dp),
+        containerColor = MaterialTheme.colorScheme.surface,
         modifier = modifier
             .fillMaxSize()
             .testTag("home_screen")
@@ -221,192 +230,145 @@ fun HomeScreen(
                         .testTag("home_content_list"),
                     contentPadding = PaddingValues(bottom = bottomPadding + 24.dp)
                 ) {
-                rightNow?.takeIf { it.tracks.isNotEmpty() }?.let { now ->
-                    item {
-                        RightNowCard(rightNow = now, onPlay = viewModel::playRightNow)
+                    item(key = "header") {
+                        HomeHeader(
+                            title = rightNow?.let { greetingFor(it.daypart) }
+                                ?: stringResource(id = R.string.home_title),
+                            onSearchClick = onNavigateToSearch
+                        )
                     }
-                }
 
-                if (onRepeat.isNotEmpty()) {
-                    item {
-                        HomeSectionHeader(
-                            title = stringResource(R.string.home_on_repeat),
-                            icon = Icons.Filled.Autorenew
-                        )
+                    rightNow?.takeIf { it.tracks.isNotEmpty() }?.let { now ->
+                        item(key = "right_now") {
+                            RightNowCard(rightNow = now, onPlay = viewModel::playRightNow)
+                        }
                     }
-                    item {
-                        TrackShelf(
-                            tracks = onRepeat,
-                            tagPrefix = "on_repeat",
-                            onPlay = { list, index -> viewModel.playTracks(list, index) }
-                        )
-                    }
-                }
 
-                becauseYouPlayed?.let { because ->
-                    item {
-                        HomeSectionHeader(
-                            title = stringResource(R.string.home_because_played, because.seed.title),
-                            icon = Icons.Filled.Radio
-                        )
-                    }
-                    item {
-                        TrackShelf(
-                            tracks = because.tracks,
-                            tagPrefix = "because_played",
-                            onPlay = { list, index -> viewModel.playTracks(list, index) }
-                        )
-                    }
-                }
-
-                if (allTracks.isNotEmpty()) {
-                    item {
-                        ListeningSessionCard(
-                            onStartSession = { minutes ->
-                                viewModel.playListeningSession(minutes) {
-                                    coroutineScope.launch {
-                                        snackbarHostState.showSnackbar(sessionUnavailableMessage)
-                                    }
-                                }
-                            },
-                            onShuffleAll = viewModel::shuffleAllTracks
-                        )
-                    }
-                }
-
-                // AI Mood Radio / Smart Mixes
-                item {
-                    HomeSectionHeader(
-                        title = stringResource(R.string.home_ai_mood_title),
-                        icon = Icons.Filled.Psychology
-                    )
-                }
-                item {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .horizontalScroll(rememberScrollState())
-                            .padding(horizontal = 16.dp),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        MusicAiEngine.AiMood.entries.forEach { mood ->
-                            AiMoodChip(
-                                mood = mood,
-                                onClick = {
-                                    viewModel.playAiMoodPlaylist(mood) {
+                    if (allTracks.isNotEmpty()) {
+                        item(key = "quick_start") {
+                        Column {
+                            Spacer(modifier = Modifier.height(6.dp))
+                            ListeningSessionCard(
+                                onStartSession = { minutes ->
+                                    viewModel.playListeningSession(minutes) {
                                         coroutineScope.launch {
-                                            snackbarHostState.showSnackbar(emptyMoodMessage)
+                                            snackbarHostState.showSnackbar(sessionUnavailableMessage)
                                         }
                                     }
-                                }
+                                },
+                                onShuffleAll = viewModel::shuffleAllTracks
                             )
                         }
                     }
-                    Spacer(modifier = Modifier.height(8.dp))
-                }
-
-                if (dailyMixes.isNotEmpty()) {
-                    item {
-                        HomeSectionHeader(
-                            title = stringResource(R.string.home_daily_mixes),
-                            icon = Icons.Filled.AutoAwesome
-                        )
                     }
-                    item {
-                        LazyRow(
-                            contentPadding = PaddingValues(horizontal = 16.dp),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp),
-                            modifier = Modifier.testTag("daily_mixes_row")
+
+                    // One shelf instead of three: recently played / new / on repeat share a row.
+                    if (activeShelf != null) {
+                        item(key = "jump_back_in") {
+                        Column {
+                            HomeSectionHeader(title = stringResource(R.string.home_jump_back_in))
+                            if (shelves.size > 1) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .horizontalScroll(rememberScrollState())
+                                        .padding(start = 16.dp, end = 16.dp, bottom = 12.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    shelves.forEach { (kind, _) ->
+                                        FilterChip(
+                                            selected = kind == activeShelf.first,
+                                            onClick = { shelf = kind },
+                                            label = { Text(stringResource(kind.titleRes)) },
+                                            shape = CircleShape,
+                                            modifier = Modifier.testTag("home_shelf_${kind.name.lowercase()}")
+                                        )
+                                    }
+                                }
+                            }
+                            TrackShelf(
+                                tracks = activeShelf.second,
+                                tagPrefix = "home_shelf_${activeShelf.first.name.lowercase()}",
+                                onPlay = { list, index -> viewModel.playTracks(list, index) }
+                            )
+                        }
+                    }
+                    }
+
+                    becauseYouPlayed?.let { because ->
+                        item(key = "because_played") {
+                        Column {
+                            HomeSectionHeader(title = stringResource(R.string.home_because_played, because.seed.title))
+                            TrackShelf(
+                                tracks = because.tracks,
+                                tagPrefix = "because_played",
+                                onPlay = { list, index -> viewModel.playTracks(list, index) }
+                            )
+                        }
+                    }
+                    }
+
+                    if (dailyMixes.isNotEmpty()) {
+                        item(key = "daily_mixes") {
+                        Column {
+                            HomeSectionHeader(title = stringResource(R.string.home_daily_mixes))
+                            LazyRow(
+                                contentPadding = PaddingValues(horizontal = 16.dp),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                modifier = Modifier.testTag("daily_mixes_row")
+                            ) {
+                                items(dailyMixes, key = { it.id }) { mix ->
+                                    DailyMixCard(
+                                        mix = mix,
+                                        onClick = { selectedMixForDetail = mix },
+                                        onPlayMix = { viewModel.playTracks(mix.tracks, 0) }
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    }
+
+                    item(key = "moods") {
+                        Column {
+                        HomeSectionHeader(title = stringResource(R.string.home_ai_mood_title))
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .horizontalScroll(rememberScrollState())
+                                .padding(horizontal = 16.dp),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
-                            items(dailyMixes, key = { it.id }) { mix ->
-                                DailyMixCard(
-                                    mix = mix,
-                                    onClick = { selectedMixForDetail = mix },
-                                    onPlayMix = { viewModel.playTracks(mix.tracks, 0) }
+                            MusicAiEngine.AiMood.entries.forEach { mood ->
+                                AiMoodChip(
+                                    mood = mood,
+                                    onClick = {
+                                        viewModel.playAiMoodPlaylist(mood) {
+                                            coroutineScope.launch {
+                                                snackbarHostState.showSnackbar(emptyMoodMessage)
+                                            }
+                                        }
+                                    }
                                 )
                             }
                         }
                     }
-                }
-
-                if (recentlyPlayed.isNotEmpty()) {
-                    item {
-                        Spacer(modifier = Modifier.height(8.dp))
-                        HomeSectionHeader(
-                            title = stringResource(R.string.home_recently_played),
-                            icon = Icons.Filled.History
-                        )
                     }
-                    item {
-                        LazyRow(
-                            contentPadding = PaddingValues(horizontal = 16.dp),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp),
-                            modifier = Modifier.testTag("recently_played_row")
-                        ) {
-                            itemsIndexed(recentlyPlayed, key = { _, track -> track.id }) { index, track ->
-                                RecentlyPlayedCard(
-                                    track = track,
-                                    onClick = { viewModel.playTracks(recentlyPlayed, index) }
-                                )
-                            }
+
+                    if (totalTimeMs > 0L) {
+                        item(key = "stats") {
+                        Column {
+                            Spacer(modifier = Modifier.height(10.dp))
+                            HomeStatsBanner(
+                                totalTimeMs = totalTimeMs,
+                                onClick = onNavigateToStats
+                            )
                         }
                     }
-                }
-
-                if (recentlyAdded.isNotEmpty()) {
-                    item {
-                        Spacer(modifier = Modifier.height(8.dp))
-                        HomeSectionHeader(
-                            title = stringResource(R.string.home_recently_added),
-                            icon = Icons.Filled.MusicNote
-                        )
-                    }
-                    item {
-                        LazyRow(
-                            contentPadding = PaddingValues(horizontal = 16.dp),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp),
-                            modifier = Modifier.testTag("recently_added_row")
-                        ) {
-                            itemsIndexed(recentlyAdded, key = { _, track -> track.id }) { index, track ->
-                                RecentlyPlayedCard(
-                                    track = track,
-                                    onClick = { viewModel.playTracks(recentlyAdded, index) },
-                                    tagPrefix = "recently_added"
-                                )
-                            }
-                        }
                     }
                 }
-
-                if (mostPlayed.isNotEmpty()) {
-                    item {
-                        Spacer(modifier = Modifier.height(8.dp))
-                        HomeSectionHeader(
-                            title = stringResource(R.string.home_most_played),
-                            icon = Icons.Filled.Whatshot
-                        )
-                    }
-                    itemsIndexed(mostPlayed, key = { _, track -> track.id }) { index, track ->
-                        TrackListItem(
-                            track = track,
-                            onClick = { viewModel.playTracks(mostPlayed, index) },
-                            onMenuClick = { selectedTrackForMenu = track },
-                            modifier = Modifier.testTag("most_played_item_${track.id}")
-                        )
-                    }
-                }
-                if (totalTimeMs > 0L) {
-                    item {
-                        HomeStatsBanner(
-                            totalTimeMs = totalTimeMs,
-                            onClick = onNavigateToStats
-                        )
-                    }
-                }
-
             }
         }
-    }
     }
 
     selectedTrackForMenu?.let { track ->
@@ -498,22 +460,26 @@ fun HomeScreen(
     }
 }
 
+private enum class JumpShelf(@androidx.annotation.StringRes val titleRes: Int) {
+    RECENT(R.string.home_recently_played),
+    NEW(R.string.home_recently_added),
+    REPEAT(R.string.home_on_repeat)
+}
+
 @Composable
 private fun AiMoodChip(
     mood: MusicAiEngine.AiMood,
     onClick: () -> Unit
 ) {
-    Card(
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.secondaryContainer
-        ),
-        modifier = Modifier
-            .clickable(onClick = onClick)
-            .testTag("ai_mood_${mood.name.lowercase()}")
+    Surface(
+        shape = CircleShape,
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        onClick = onClick,
+        modifier = Modifier.testTag("ai_mood_${mood.name.lowercase()}")
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+            modifier = Modifier.padding(start = 12.dp, end = 16.dp, top = 9.dp, bottom = 9.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Icon(
@@ -525,8 +491,8 @@ private fun AiMoodChip(
                     MusicAiEngine.AiMood.ACOUSTIC_MORNING -> Icons.Filled.WbSunny
                 },
                 contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSecondaryContainer,
-                modifier = Modifier.size(16.dp)
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(18.dp)
             )
             Spacer(modifier = Modifier.width(8.dp))
             Text(
@@ -541,7 +507,7 @@ private fun AiMoodChip(
                 ),
                 style = MaterialTheme.typography.labelLarge,
                 fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onSecondaryContainer
+                color = MaterialTheme.colorScheme.onSurface
             )
         }
     }

@@ -117,7 +117,7 @@ class MainActivity : ComponentActivity() {
                                 scope.launch {
                                     preferencesManager.setOnboardingCompleted(true)
                                     // Permission was just answered in onboarding; index the library now.
-                                    librarySync.requestRefresh()
+                                    librarySync.requestRefresh(force = true)
                                 }
                             }
                         )

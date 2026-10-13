@@ -1,5 +1,6 @@
 package com.example.musicplayer.feature.home
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -31,6 +32,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
@@ -80,12 +83,20 @@ fun RightNowCard(
             .padding(horizontal = 16.dp, vertical = 8.dp)
             .testTag("home_right_now_card"),
         shape = RoundedCornerShape(32.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
+        colors = CardDefaults.cardColors(containerColor = Color.Transparent)
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(start = 22.dp, top = 20.dp, bottom = 20.dp, end = 18.dp),
+                .background(
+                    Brush.linearGradient(
+                        listOf(
+                            MaterialTheme.colorScheme.primaryContainer,
+                            MaterialTheme.colorScheme.tertiaryContainer
+                        )
+                    )
+                )
+                .padding(start = 22.dp, top = 22.dp, bottom = 22.dp, end = 18.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column(modifier = Modifier.weight(1f)) {
@@ -97,7 +108,7 @@ fun RightNowCard(
                 Text(
                     text = title,
                     style = MaterialTheme.typography.headlineMedium,
-                    fontFamily = DisplayFontFamily,
+                    
                     color = MaterialTheme.colorScheme.onPrimaryContainer
                 )
                 Spacer(modifier = Modifier.height(4.dp))
@@ -129,8 +140,8 @@ fun RightNowCard(
 /** Three overlapping covers: a glanceable preview of what the queue holds. */
 @Composable
 private fun ArtworkStack(tracks: List<Track>, modifier: Modifier = Modifier) {
-    val size = 72.dp
-    val step = 26.dp
+    val size = 84.dp
+    val step = 30.dp
     val count = tracks.size.coerceAtLeast(1)
     Box(modifier = modifier.width(size + step * (count - 1)).height(size)) {
         // Draw back-to-front so the first track sits on top.

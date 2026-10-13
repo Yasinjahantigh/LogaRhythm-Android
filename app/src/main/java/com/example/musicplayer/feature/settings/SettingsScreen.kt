@@ -5,6 +5,9 @@ import android.content.Context
 import android.content.ContextWrapper
 import android.widget.Toast
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -21,8 +24,19 @@ import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.ColorLens
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.FolderOff
+import androidx.compose.material.icons.filled.Backup
+import androidx.compose.material.icons.filled.CallSplit
 import androidx.compose.material.icons.filled.GraphicEq
+import androidx.compose.material.icons.filled.Headset
+import androidx.compose.material.icons.filled.LibraryMusic
+import androidx.compose.material.icons.filled.PlaylistAdd
+import androidx.compose.material.icons.filled.Restore
+import androidx.compose.material.icons.filled.SkipNext
+import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material.icons.filled.VolumeUp
+import androidx.compose.material.icons.filled.Upload
 import androidx.compose.material.icons.filled.Language
+import androidx.compose.material.icons.filled.Lyrics
 import androidx.compose.material.icons.filled.RoundedCorner
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material.icons.filled.ViewStream
@@ -34,7 +48,10 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -55,6 +72,7 @@ import com.example.musicplayer.ui.designsystem.LocalPlaybackBottomPadding
 fun SettingsScreen(
     onNavigateToStats: () -> Unit = {},
     onNavigateToEqualizer: () -> Unit = {},
+    onNavigateToLibraryTools: () -> Unit = {},
     modifier: Modifier = Modifier,
     viewModel: SettingsViewModel = hiltViewModel()
 ) {
@@ -67,8 +85,40 @@ fun SettingsScreen(
     val excludedFolders by viewModel.excludedFolders.collectAsStateWithLifecycle()
     val allFolders by viewModel.allFolders.collectAsStateWithLifecycle()
     val isLrclibEnabled by viewModel.isLrclibEnabled.collectAsStateWithLifecycle()
+    val fadeSec by viewModel.fadeSec.collectAsStateWithLifecycle()
+    val skipSilence by viewModel.skipSilence.collectAsStateWithLifecycle()
+    val replayGainMode by viewModel.replayGainMode.collectAsStateWithLifecycle()
+    val resumeOnHeadset by viewModel.resumeOnHeadset.collectAsStateWithLifecycle()
+    val splitArtists by viewModel.splitArtists.collectAsStateWithLifecycle()
+    val artistSeparators by viewModel.artistSeparators.collectAsStateWithLifecycle()
+    val hiddenLyrics by viewModel.hiddenLyricsTracks.collectAsStateWithLifecycle()
+    val message by viewModel.message.collectAsStateWithLifecycle()
     val context = androidx.compose.ui.platform.LocalContext.current
 
+    LaunchedEffect(message) {
+        message?.let {
+            Toast.makeText(context, context.getString(it.res, *it.args.toTypedArray()), Toast.LENGTH_LONG).show()
+            viewModel.consumeMessage()
+        }
+    }
+
+    val backupLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/json")
+    ) { uri -> uri?.let(viewModel::backupTo) }
+    val restoreLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri -> uri?.let(viewModel::restoreFrom) }
+    val exportPlaylistsLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocumentTree()
+    ) { uri -> uri?.let(viewModel::exportPlaylists) }
+    val importPlaylistsLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenMultipleDocuments()
+    ) { uris -> if (uris.isNotEmpty()) viewModel.importPlaylists(uris) }
+
+    var showFadeDialog by remember { mutableStateOf(false) }
+    var showReplayGainDialog by remember { mutableStateOf(false) }
+    var showSeparatorsDialog by remember { mutableStateOf(false) }
+    var showHiddenLyricsDialog by remember { mutableStateOf(false) }
     var showLanguageDialog by remember { mutableStateOf(false) }
     var showThemeDialog by remember { mutableStateOf(false) }
     var showColorSourceDialog by remember { mutableStateOf(false) }
@@ -167,21 +217,54 @@ fun SettingsScreen(
         )
     }
 
+    if (showFadeDialog) {
+        SingleChoiceDialog(
+            title = stringResource(R.string.settings_fade_title),
+            options = listOf(0, 2, 4, 6, 8, 10).map { sec ->
+                sec.toString() to if (sec == 0) stringResource(R.string.settings_off) else stringResource(R.string.settings_seconds_fmt, sec)
+            },
+            selectedKey = fadeSec.toString(),
+            onSelectKey = { viewModel.setFadeSec(it.toIntOrNull() ?: 0) },
+            onDismiss = { showFadeDialog = false }
+        )
+    }
+
+    if (showReplayGainDialog) {
+        SingleChoiceDialog(
+            title = stringResource(R.string.settings_replaygain_title),
+            options = listOf(
+                "off" to stringResource(R.string.settings_off),
+                "track" to stringResource(R.string.settings_replaygain_track),
+                "album" to stringResource(R.string.settings_replaygain_album)
+            ),
+            selectedKey = replayGainMode,
+            onSelectKey = viewModel::setReplayGainMode,
+            onDismiss = { showReplayGainDialog = false }
+        )
+    }
+
+    if (showSeparatorsDialog) {
+        SeparatorsDialog(
+            current = artistSeparators,
+            onSave = { viewModel.setArtistSeparators(it) },
+            onReset = { viewModel.setArtistSeparators(null) },
+            onDismiss = { showSeparatorsDialog = false }
+        )
+    }
+
+    if (showHiddenLyricsDialog) {
+        HiddenLyricsDialog(
+            tracks = hiddenLyrics,
+            onRestore = viewModel::restoreLyrics,
+            onDismiss = { showHiddenLyricsDialog = false }
+        )
+    }
+
     val playbackBottomPadding = LocalPlaybackBottomPadding.current
 
     Scaffold(
         modifier = modifier.fillMaxSize().testTag("settings_screen"),
-        topBar = {
-            TopAppBar(
-                title = {
-                    Text(
-                        text = stringResource(id = R.string.settings_title),
-                        style = MaterialTheme.typography.headlineMedium,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-            )
-        }
+        contentWindowInsets = WindowInsets(0.dp, 0.dp, 0.dp, 0.dp)
     ) { innerPadding ->
         Box(
             modifier = Modifier
@@ -193,190 +276,257 @@ fun SettingsScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .widthIn(max = 840.dp),
-                contentPadding = PaddingValues(bottom = playbackBottomPadding + 48.dp)
+                contentPadding = PaddingValues(bottom = playbackBottomPadding + 32.dp)
             ) {
-            item { SettingsCategoryHeader(stringResource(R.string.settings_category_audio)) }
-            item {
-                SettingsActionItem(
-                    title = stringResource(R.string.settings_equalizer_title),
-                    subtitle = stringResource(R.string.settings_equalizer_desc),
-                    icon = Icons.Filled.GraphicEq,
-                    onClick = onNavigateToEqualizer,
-                    testTag = "settings_equalizer_item"
-                )
-            }
-            item {
-                SettingsActionItem(
-                    title = stringResource(R.string.settings_stats_title),
-                    subtitle = stringResource(R.string.settings_stats_desc),
-                    icon = Icons.Filled.BarChart,
-                    onClick = onNavigateToStats,
-                    testTag = "settings_stats_item"
-                )
-            }
-
-            item { HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp)) }
-
-            item { SettingsCategoryHeader(stringResource(R.string.settings_category_appearance)) }
-            item {
-                val languageLabel = when (appLanguage) {
-                    "en" -> stringResource(R.string.settings_language_english)
-                    "fa" -> stringResource(R.string.settings_language_persian)
-                    else -> stringResource(R.string.settings_language_system)
-                }
-                SettingsActionItem(
-                    title = stringResource(R.string.settings_language_title),
-                    subtitle = languageLabel,
-                    icon = Icons.Filled.Language,
-                    onClick = { showLanguageDialog = true },
-                    testTag = "settings_language_item"
-                )
-            }
-            item {
-                val themeLabel = when (themeMode) {
-                    "light" -> stringResource(R.string.settings_theme_light)
-                    "dark" -> stringResource(R.string.settings_theme_dark)
-                    else -> stringResource(R.string.settings_theme_system)
-                }
-                SettingsActionItem(
-                    title = stringResource(R.string.settings_theme_title),
-                    subtitle = themeLabel,
-                    icon = Icons.Filled.DarkMode,
-                    onClick = { showThemeDialog = true },
-                    testTag = "settings_theme_item"
-                )
-            }
-            item {
-                val colorLabel = when (colorSource) {
-                    "album_art" -> stringResource(R.string.settings_color_album_art)
-                    "wallpaper" -> stringResource(R.string.settings_color_wallpaper)
-                    else -> stringResource(R.string.settings_color_fixed)
-                }
-                SettingsActionItem(
-                    title = stringResource(R.string.settings_color_source_title),
-                    subtitle = colorLabel,
-                    icon = Icons.Filled.ColorLens,
-                    onClick = { showColorSourceDialog = true },
-                    testTag = "settings_color_source_item"
-                )
-            }
-            item {
-                val cornerLabel = when (cornerRoundness) {
-                    "soft" -> stringResource(R.string.settings_corner_soft)
-                    "sharp" -> stringResource(R.string.settings_corner_sharp)
-                    else -> stringResource(R.string.settings_corner_standard)
-                }
-                SettingsActionItem(
-                    title = stringResource(R.string.settings_corner_title),
-                    subtitle = cornerLabel,
-                    icon = Icons.Filled.RoundedCorner,
-                    onClick = { showCornerDialog = true },
-                    testTag = "settings_corner_item"
-                )
-            }
-            item {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 14.dp)
-                        .testTag("settings_compact_player_item"),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.ViewStream,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(26.dp)
+                item {
+                    Text(
+                        text = stringResource(id = R.string.settings_title),
+                        style = MaterialTheme.typography.headlineLarge,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .statusBarsPadding()
+                            .padding(start = 28.dp, end = 20.dp, top = 14.dp, bottom = 12.dp)
                     )
-                    Spacer(modifier = Modifier.width(16.dp))
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = stringResource(R.string.settings_compact_mini_player_title),
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.SemiBold
+                }
+
+                // The two destinations people open most are big tiles, not list rows.
+                item {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        SettingsShortcutTile(
+                            title = stringResource(R.string.settings_equalizer_title),
+                            icon = Icons.Filled.GraphicEq,
+                            onClick = onNavigateToEqualizer,
+                            modifier = Modifier.weight(1f),
+                            testTag = "settings_equalizer_item"
                         )
-                        Text(
-                            text = stringResource(R.string.settings_compact_mini_player_desc),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        SettingsShortcutTile(
+                            title = stringResource(R.string.settings_stats_title),
+                            icon = Icons.Filled.BarChart,
+                            onClick = onNavigateToStats,
+                            modifier = Modifier.weight(1f),
+                            testTag = "settings_stats_item"
                         )
                     }
-                    Switch(
-                        checked = isCompactMiniPlayer,
-                        onCheckedChange = viewModel::setCompactMiniPlayer,
-                        modifier = Modifier.testTag("settings_compact_player_switch")
-                    )
                 }
-            }
 
-            item { HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp)) }
-
-            item { SettingsCategoryHeader(stringResource(R.string.settings_category_library)) }
-            item {
-                val lengthText = if (minTrackLengthSec == 0) {
-                    stringResource(R.string.settings_min_length_0s)
-                } else {
-                    "${minTrackLengthSec}s"
-                }
-                SettingsActionItem(
-                    title = stringResource(R.string.settings_min_track_length_title),
-                    subtitle = stringResource(R.string.settings_min_track_length_desc, lengthText),
-                    icon = Icons.Filled.Timer,
-                    onClick = { showMinLengthDialog = true },
-                    testTag = "settings_min_length_item"
-                )
-            }
-            item {
-                SettingsActionItem(
-                    title = stringResource(R.string.settings_excluded_folders_title),
-                    subtitle = stringResource(R.string.settings_excluded_folders_desc, excludedFolders.size),
-                    icon = Icons.Filled.FolderOff,
-                    onClick = { showFoldersDialog = true },
-                    testTag = "settings_excluded_folders_item"
-                )
-            }
-
-            item { HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp)) }
-
-            item {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 14.dp)
-                        .testTag("settings_lrclib_item"),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.Language,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(26.dp)
-                    )
-                    Spacer(modifier = Modifier.width(16.dp))
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = stringResource(id = R.string.settings_lrclib_title),
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.SemiBold
+                item {
+                    SettingsGroup(title = stringResource(R.string.settings_category_appearance)) {
+                        val languageLabel = when (appLanguage) {
+                            "en" -> stringResource(R.string.settings_language_english)
+                            "fa" -> stringResource(R.string.settings_language_persian)
+                            else -> stringResource(R.string.settings_language_system)
+                        }
+                        SettingsActionItem(
+                            title = stringResource(R.string.settings_language_title),
+                            subtitle = languageLabel,
+                            icon = Icons.Filled.Language,
+                            onClick = { showLanguageDialog = true },
+                            testTag = "settings_language_item"
                         )
-                        Text(
-                            text = stringResource(id = R.string.settings_lrclib_desc),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        val themeLabel = when (themeMode) {
+                            "light" -> stringResource(R.string.settings_theme_light)
+                            "dark" -> stringResource(R.string.settings_theme_dark)
+                            else -> stringResource(R.string.settings_theme_system)
+                        }
+                        SettingsActionItem(
+                            title = stringResource(R.string.settings_theme_title),
+                            subtitle = themeLabel,
+                            icon = Icons.Filled.DarkMode,
+                            onClick = { showThemeDialog = true },
+                            testTag = "settings_theme_item"
+                        )
+                        val colorLabel = when (colorSource) {
+                            "album_art" -> stringResource(R.string.settings_color_album_art)
+                            "wallpaper" -> stringResource(R.string.settings_color_wallpaper)
+                            else -> stringResource(R.string.settings_color_fixed)
+                        }
+                        SettingsActionItem(
+                            title = stringResource(R.string.settings_color_source_title),
+                            subtitle = colorLabel,
+                            icon = Icons.Filled.ColorLens,
+                            onClick = { showColorSourceDialog = true },
+                            testTag = "settings_color_source_item"
+                        )
+                        val cornerLabel = when (cornerRoundness) {
+                            "soft" -> stringResource(R.string.settings_corner_soft)
+                            "sharp" -> stringResource(R.string.settings_corner_sharp)
+                            else -> stringResource(R.string.settings_corner_standard)
+                        }
+                        SettingsActionItem(
+                            title = stringResource(R.string.settings_corner_title),
+                            subtitle = cornerLabel,
+                            icon = Icons.Filled.RoundedCorner,
+                            onClick = { showCornerDialog = true },
+                            testTag = "settings_corner_item"
+                        )
+                        SettingsSwitchItem(
+                            title = stringResource(R.string.settings_compact_mini_player_title),
+                            subtitle = stringResource(R.string.settings_compact_mini_player_desc),
+                            icon = Icons.Filled.ViewStream,
+                            checked = isCompactMiniPlayer,
+                            onCheckedChange = viewModel::setCompactMiniPlayer,
+                            rowTag = "settings_compact_player_item",
+                            switchTag = "settings_compact_player_switch"
                         )
                     }
-                    Switch(
-                        checked = isLrclibEnabled,
-                        onCheckedChange = viewModel::setLrclibEnabled,
-                        modifier = Modifier.testTag("settings_lrclib_switch")
-                    )
+                }
+
+                item {
+                    SettingsGroup(title = stringResource(R.string.settings_category_playback)) {
+                        SettingsActionItem(
+                            title = stringResource(R.string.settings_fade_title),
+                            subtitle = if (fadeSec == 0) stringResource(R.string.settings_off)
+                            else stringResource(R.string.settings_seconds_fmt, fadeSec),
+                            icon = Icons.Filled.VolumeUp,
+                            onClick = { showFadeDialog = true },
+                            testTag = "settings_fade_item"
+                        )
+                        SettingsActionItem(
+                            title = stringResource(R.string.settings_replaygain_title),
+                            subtitle = when (replayGainMode) {
+                                "track" -> stringResource(R.string.settings_replaygain_track)
+                                "album" -> stringResource(R.string.settings_replaygain_album)
+                                else -> stringResource(R.string.settings_off)
+                            },
+                            icon = Icons.Filled.GraphicEq,
+                            onClick = { showReplayGainDialog = true },
+                            testTag = "settings_replaygain_item"
+                        )
+                        SettingsSwitchItem(
+                            title = stringResource(R.string.settings_skip_silence_title),
+                            subtitle = stringResource(R.string.settings_skip_silence_desc),
+                            icon = Icons.Filled.SkipNext,
+                            checked = skipSilence,
+                            onCheckedChange = viewModel::setSkipSilence,
+                            rowTag = "settings_skip_silence_item",
+                            switchTag = "settings_skip_silence_switch"
+                        )
+                        SettingsSwitchItem(
+                            title = stringResource(R.string.settings_resume_headset_title),
+                            subtitle = stringResource(R.string.settings_resume_headset_desc),
+                            icon = Icons.Filled.Headset,
+                            checked = resumeOnHeadset,
+                            onCheckedChange = viewModel::setResumeOnHeadset,
+                            rowTag = "settings_resume_headset_item",
+                            switchTag = "settings_resume_headset_switch"
+                        )
+                    }
+                }
+
+                item {
+                    SettingsGroup(title = stringResource(R.string.settings_category_library)) {
+                        val lengthText = if (minTrackLengthSec == 0) {
+                            stringResource(R.string.settings_min_length_0s)
+                        } else {
+                            "${minTrackLengthSec}s"
+                        }
+                        SettingsActionItem(
+                            title = stringResource(R.string.settings_min_track_length_title),
+                            subtitle = stringResource(R.string.settings_min_track_length_desc, lengthText),
+                            icon = Icons.Filled.Timer,
+                            onClick = { showMinLengthDialog = true },
+                            testTag = "settings_min_length_item"
+                        )
+                        SettingsActionItem(
+                            title = stringResource(R.string.settings_excluded_folders_title),
+                            subtitle = stringResource(R.string.settings_excluded_folders_desc, excludedFolders.size),
+                            icon = Icons.Filled.FolderOff,
+                            onClick = { showFoldersDialog = true },
+                            testTag = "settings_excluded_folders_item"
+                        )
+                        SettingsSwitchItem(
+                            title = stringResource(R.string.settings_split_artists_title),
+                            subtitle = stringResource(R.string.settings_split_artists_desc),
+                            icon = Icons.Filled.CallSplit,
+                            checked = splitArtists,
+                            onCheckedChange = viewModel::setSplitArtists,
+                            rowTag = "settings_split_artists_item",
+                            switchTag = "settings_split_artists_switch"
+                        )
+                        if (splitArtists) {
+                            SettingsActionItem(
+                                title = stringResource(R.string.settings_separators_title),
+                                subtitle = artistSeparators.joinToString("  ") { "\u2066" + it.trim() + "\u2069" },
+                                icon = Icons.Filled.CallSplit,
+                                onClick = { showSeparatorsDialog = true },
+                                testTag = "settings_separators_item"
+                            )
+                        }
+                        SettingsActionItem(
+                            title = stringResource(R.string.settings_library_tools_title),
+                            subtitle = stringResource(R.string.settings_library_tools_desc),
+                            icon = Icons.Filled.LibraryMusic,
+                            onClick = onNavigateToLibraryTools,
+                            testTag = "settings_library_tools_item"
+                        )
+                    }
+                }
+
+                item {
+                    SettingsGroup(title = stringResource(R.string.settings_category_lyrics)) {
+                        SettingsSwitchItem(
+                            title = stringResource(id = R.string.settings_lrclib_title),
+                            subtitle = stringResource(id = R.string.settings_lrclib_desc),
+                            icon = Icons.Filled.Lyrics,
+                            checked = isLrclibEnabled,
+                            onCheckedChange = viewModel::setLrclibEnabled,
+                            rowTag = "settings_lrclib_item",
+                            switchTag = "settings_lrclib_switch"
+                        )
+                        SettingsActionItem(
+                            title = stringResource(R.string.settings_hidden_lyrics_title),
+                            subtitle = stringResource(R.string.settings_hidden_lyrics_desc, hiddenLyrics.size),
+                            icon = Icons.Filled.VisibilityOff,
+                            onClick = { showHiddenLyricsDialog = true },
+                            testTag = "settings_hidden_lyrics_item"
+                        )
+                    }
+                }
+
+                item {
+                    SettingsGroup(title = stringResource(R.string.settings_category_data)) {
+                        SettingsActionItem(
+                            title = stringResource(R.string.settings_backup_title),
+                            subtitle = stringResource(R.string.settings_backup_desc),
+                            icon = Icons.Filled.Backup,
+                            onClick = {
+                                val stamp = java.text.SimpleDateFormat("yyyyMMdd", java.util.Locale.ROOT).format(java.util.Date())
+                                backupLauncher.launch("logarhythm-backup-$stamp.json")
+                            },
+                            testTag = "settings_backup_item"
+                        )
+                        SettingsActionItem(
+                            title = stringResource(R.string.settings_restore_title),
+                            subtitle = stringResource(R.string.settings_restore_desc),
+                            icon = Icons.Filled.Restore,
+                            onClick = { restoreLauncher.launch(arrayOf("application/json", "*/*")) },
+                            testTag = "settings_restore_item"
+                        )
+                        SettingsActionItem(
+                            title = stringResource(R.string.settings_export_m3u_title),
+                            subtitle = stringResource(R.string.settings_export_m3u_desc),
+                            icon = Icons.Filled.Upload,
+                            onClick = { exportPlaylistsLauncher.launch(null) },
+                            testTag = "settings_export_m3u_item"
+                        )
+                        SettingsActionItem(
+                            title = stringResource(R.string.settings_import_m3u_title),
+                            subtitle = stringResource(R.string.settings_import_m3u_desc),
+                            icon = Icons.Filled.PlaylistAdd,
+                            onClick = { importPlaylistsLauncher.launch(arrayOf("*/*")) },
+                            testTag = "settings_import_m3u_item"
+                        )
+                    }
                 }
             }
         }
     }
 }
-}
-
 
 private tailrec fun Context.findActivity(): Activity? = when (this) {
     is Activity -> this

@@ -42,7 +42,7 @@ class HomeViewModel @Inject constructor(
 ) : ViewModel() {
 
     /** Index the device's music now (after permission is granted or on a manual rescan). */
-    fun rescanLibrary() = librarySync.requestRefresh()
+    fun rescanLibrary() = librarySync.requestRefresh(force = true)
 
 
     private val dailyMixGenerator = DailyMixGenerator()
@@ -57,6 +57,7 @@ class HomeViewModel @Inject constructor(
 
     val recentlyAdded: StateFlow<List<Track>> = allTracks
         .map { tracks -> HomeTrackCollections.recentlyAdded(tracks) }
+        .flowOn(Dispatchers.Default)
         .stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5000),
@@ -104,7 +105,7 @@ class HomeViewModel @Inject constructor(
             playEvents = events,
             favoriteTrackIds = favIds
         )
-    }.stateIn(
+    }.flowOn(Dispatchers.Default).stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5000),
         initialValue = emptyList()

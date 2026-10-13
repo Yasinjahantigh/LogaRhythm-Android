@@ -50,6 +50,8 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
+import androidx.compose.foundation.layout.WindowInsets
+import com.example.musicplayer.ui.components.DetailHero
 import com.example.R
 import com.example.musicplayer.domain.model.Track
 import com.example.musicplayer.feature.library.TrackListItem
@@ -125,19 +127,7 @@ fun AlbumDetailScreen(
 
     Scaffold(
         modifier = modifier.fillMaxSize().testTag("album_detail_screen"),
-        topBar = {
-            TopAppBar(
-                title = { Text(text = displayAlbumName, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                navigationIcon = {
-                    IconButton(onClick = onNavigateBack, modifier = Modifier.testTag("album_back_button")) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = stringResource(R.string.cd_back)
-                        )
-                    }
-                }
-            )
-        }
+        contentWindowInsets = WindowInsets(0.dp, 0.dp, 0.dp, 0.dp),
     ) { innerPadding ->
         val bottomPadding = com.example.musicplayer.ui.designsystem.LocalPlaybackBottomPadding.current
 
@@ -146,75 +136,20 @@ fun AlbumDetailScreen(
             modifier = Modifier.fillMaxSize().padding(innerPadding)
         ) {
             item {
-                Column(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 16.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    val artworkUri = album?.artworkUri ?: tracks.firstOrNull()?.artworkUri
-                    AsyncImage(
-                        model = artworkUri,
-                        contentDescription = stringResource(R.string.cd_artwork, displayAlbumName),
-                        modifier = Modifier
-                            .size(190.dp)
-                            .clip(RoundedCornerShape(20.dp))
-                            .background(MaterialTheme.colorScheme.surfaceVariant),
-                        contentScale = ContentScale.Crop,
-                        placeholder = painterResource(id = R.drawable.ic_music_placeholder),
-                        error = painterResource(id = R.drawable.ic_music_placeholder)
-                    )
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Text(
-                        text = displayAlbumName,
-                        style = MaterialTheme.typography.headlineSmall,
-                        fontWeight = FontWeight.Bold,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    if (displayArtistName.isNotBlank()) {
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = displayArtistName,
-                            style = MaterialTheme.typography.titleMedium,
-                            color = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.clickable(enabled = onNavigateToArtist != null) {
-                                onNavigateToArtist?.invoke(displayArtistName)
-                            }
-                        )
-                    }
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Text(
-                        text = stringResource(R.string.album_track_count, tracks.size),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Spacer(modifier = Modifier.height(20.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        Button(
-                            onClick = viewModel::playAll,
-                            enabled = tracks.isNotEmpty(),
-                            modifier = Modifier.weight(1f).testTag("album_play_button"),
-                            contentPadding = ButtonDefaults.ContentPadding
-                        ) {
-                            Icon(Icons.Filled.PlayArrow, contentDescription = null, modifier = Modifier.size(20.dp))
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(stringResource(R.string.btn_play))
-                        }
-                        FilledTonalButton(
-                            onClick = viewModel::shuffleAll,
-                            enabled = tracks.isNotEmpty(),
-                            modifier = Modifier.weight(1f).testTag("album_shuffle_button"),
-                            contentPadding = ButtonDefaults.ContentPadding
-                        ) {
-                            Icon(Icons.Filled.Shuffle, contentDescription = null, modifier = Modifier.size(20.dp))
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(stringResource(R.string.btn_shuffle))
-                        }
-                    }
-                    Spacer(modifier = Modifier.height(16.dp))
-                }
+                DetailHero(
+                    title = displayAlbumName,
+                    subtitle = displayArtistName,
+                    onSubtitleClick = onNavigateToArtist?.let { nav -> { nav(displayArtistName) } },
+                    meta = stringResource(R.string.album_track_count, tracks.size),
+                    artworkUri = album?.artworkUri ?: tracks.firstOrNull()?.artworkUri,
+                    onBack = onNavigateBack,
+                    onPlay = viewModel::playAll,
+                    onShuffle = viewModel::shuffleAll,
+                    actionsEnabled = tracks.isNotEmpty(),
+                    backTag = "album_back_button",
+                    playTag = "album_play_button",
+                    shuffleTag = "album_shuffle_button"
+                )
             }
 
             if (tracks.isEmpty()) {

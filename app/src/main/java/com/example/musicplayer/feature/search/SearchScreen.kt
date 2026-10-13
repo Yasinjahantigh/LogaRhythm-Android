@@ -36,6 +36,13 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import com.example.R
 import com.example.musicplayer.domain.model.Track
 import com.example.musicplayer.core.utils.rememberMediaStoreConsent
@@ -48,6 +55,7 @@ import com.example.musicplayer.feature.playlist.SongMenuBottomSheet
 @Composable
 fun SearchScreen(
     modifier: Modifier = Modifier,
+    onNavigateBack: () -> Unit = {},
     onNavigateToAlbum: (String) -> Unit = {},
     onNavigateToArtist: (String) -> Unit = {},
     viewModel: SearchViewModel = hiltViewModel(),
@@ -142,18 +150,12 @@ fun SearchScreen(
         )
     }
 
+    val focusRequester = remember { FocusRequester() }
+    LaunchedEffect(Unit) { focusRequester.requestFocus() }
+
     Scaffold(
         modifier = modifier.fillMaxSize().testTag("search_screen"),
-        topBar = {
-            TopAppBar(
-                title = {
-                    Text(
-                        text = stringResource(id = R.string.search_title),
-                        style = MaterialTheme.typography.headlineMedium
-                    )
-                }
-            )
-        }
+        contentWindowInsets = WindowInsets(0.dp, 0.dp, 0.dp, 0.dp)
     ) { innerPadding ->
         Box(
             modifier = Modifier
@@ -166,49 +168,71 @@ fun SearchScreen(
                     .fillMaxSize()
                     .widthIn(max = 840.dp)
             ) {
-            OutlinedTextField(
-                value = query,
-                onValueChange = viewModel::onQueryChange,
+            // Search is a focused, full-screen task: back arrow + field, keyboard opens at once.
+            Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp)
-                    .testTag("search_text_field"),
-                placeholder = {
-                    Text(text = stringResource(R.string.search_placeholder))
-                },
-                leadingIcon = {
+                    .statusBarsPadding()
+                    .padding(start = 4.dp, end = 16.dp, top = 8.dp, bottom = 4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(
+                    onClick = onNavigateBack,
+                    modifier = Modifier.testTag("search_back_button")
+                ) {
                     Icon(
-                        imageVector = Icons.Default.Search,
-                        contentDescription = stringResource(R.string.cd_search_icon)
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = stringResource(R.string.cd_back)
                     )
-                },
-                trailingIcon = {
-                    if (query.isNotEmpty()) {
-                        IconButton(
-                            onClick = viewModel::clearQuery,
-                            modifier = Modifier.testTag("clear_search_query_button")
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Close,
-                                contentDescription = stringResource(R.string.cd_clear_search)
-                            )
+                }
+                OutlinedTextField(
+                    value = query,
+                    onValueChange = viewModel::onQueryChange,
+                    modifier = Modifier
+                        .weight(1f)
+                        .focusRequester(focusRequester)
+                        .testTag("search_text_field"),
+                    placeholder = {
+                        Text(text = stringResource(R.string.search_placeholder), maxLines = 1)
+                    },
+                    leadingIcon = {
+                        Icon(
+                            imageVector = Icons.Default.Search,
+                            contentDescription = stringResource(R.string.cd_search_icon)
+                        )
+                    },
+                    trailingIcon = {
+                        if (query.isNotEmpty()) {
+                            IconButton(
+                                onClick = viewModel::clearQuery,
+                                modifier = Modifier.testTag("clear_search_query_button")
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Close,
+                                    contentDescription = stringResource(R.string.cd_clear_search)
+                                )
+                            }
                         }
-                    }
-                },
-                singleLine = true,
-                shape = MaterialTheme.shapes.extraLarge,
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
-                    unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
-                ),
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                keyboardActions = KeyboardActions(
-                    onSearch = {
-                        viewModel.saveRecentQuery(query)
-                        focusManager.clearFocus()
-                    }
+                    },
+                    singleLine = true,
+                    shape = androidx.compose.foundation.shape.CircleShape,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                        unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                        focusedBorderColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f),
+                        unfocusedBorderColor = androidx.compose.ui.graphics.Color.Transparent,
+                        focusedLeadingIconColor = MaterialTheme.colorScheme.primary,
+                        unfocusedLeadingIconColor = MaterialTheme.colorScheme.onSurfaceVariant
+                    ),
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                    keyboardActions = KeyboardActions(
+                        onSearch = {
+                            viewModel.saveRecentQuery(query)
+                            focusManager.clearFocus()
+                        }
+                    )
                 )
-            )
+            }
 
             if (query.trim().isEmpty()) {
                 RecentSearchesView(

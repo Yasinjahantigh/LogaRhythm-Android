@@ -7,6 +7,10 @@ import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -74,6 +78,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
@@ -95,6 +100,13 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.Canvas
 import androidx.compose.animation.core.animateFloatAsState
+import android.os.Build
+import androidx.compose.animation.Crossfade
+import androidx.compose.ui.draw.blur
+import com.example.musicplayer.ui.components.ArtworkImage
+import com.example.musicplayer.ui.components.cleanMetaOrNull
+import java.util.Locale
+import kotlin.math.abs
 import com.example.R
 import com.example.musicplayer.core.utils.ArtworkColorExtractor
 import com.example.musicplayer.core.utils.FileUtils
@@ -252,7 +264,8 @@ fun FullPlayerScreen(
         )
     }
 
-    val surfaceColor = MaterialTheme.colorScheme.surface
+    val scheme = MaterialTheme.colorScheme
+    val surfaceColor = scheme.surface
     var dynamicArtworkColor by remember { mutableStateOf(surfaceColor) }
 
     LaunchedEffect(track?.artworkUri) {
@@ -266,264 +279,36 @@ fun FullPlayerScreen(
 
     val animatedBgColor by animateColorAsState(
         targetValue = dynamicArtworkColor,
-        animationSpec = tween(durationMillis = 600),
+        animationSpec = tween(durationMillis = 700),
         label = "player_bg_color"
     )
 
-    Surface(
-        modifier = modifier
-            .fillMaxSize()
-            .testTag("full_player_screen"),
-        color = MaterialTheme.colorScheme.surface,
-        contentColor = MaterialTheme.colorScheme.onSurface
-    ) {
-        BoxWithConstraints(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(
-                    Brush.verticalGradient(
-                        colors = listOf(
-                            animatedBgColor.copy(alpha = 0.32f),
-                            MaterialTheme.colorScheme.surface
-                        )
-                    )
-                )
-        ) {
-            val isLandscapeLayout = maxWidth > maxHeight
-            val horizontalPadding = if (isLandscapeLayout) 28.dp else 24.dp
+    val albumText = track?.album.cleanMetaOrNull()
+    val timerLabel: String? = when {
+        sleepTimerRemainingMs == null -> null
+        isSleepTimerEndOfTrack -> stringResource(R.string.sleep_timer_end_of_track)
+        else -> TimeUtils.formatDuration(sleepTimerRemainingMs ?: 0L)
+    }
+    val speedLabel: String? = if (abs(playbackSpeed - 1.0f) > 0.01f) {
+        String.format(Locale.US, "%.1fx", playbackSpeed)
+    } else null
 
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .statusBarsPadding()
-                    .padding(horizontal = horizontalPadding, vertical = if (isLandscapeLayout) 6.dp else 12.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.SpaceBetween
-            ) {
-                // Header bar
-                FullPlayerHeader(
-                    showLyrics = showLyrics,
-                    playbackSpeed = playbackSpeed,
-                    sleepTimerRemainingMs = sleepTimerRemainingMs,
-                    isSleepTimerEndOfTrack = isSleepTimerEndOfTrack,
-                    onCollapse = onCollapse,
-                    onToggleLyrics = { showLyrics = !showLyrics },
-                    onOpenSpeedDialog = { showSpeedDialog = true },
-                    onOpenSleepTimerDialog = { showSleepTimerDialog = true },
-                    onOpenQueue = viewModel::openQueue,
-                    onStartRadio = {
-                        viewModel.startTrackRadio { count ->
-                            val message = if (count > 0) {
-                                context.getString(R.string.player_radio_started, count)
-                            } else {
-                                context.getString(R.string.player_radio_empty)
-                            }
-                            Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
-                        }
-                    },
-                    onOpenEqualizer = { showEqualizerSheet = true },
-                    onAddToPlaylist = { showAddToPlaylistDialog = true },
-                    onSearchGoogleLyrics = {
-                        if (track != null) {
-                            val query = "${track.title} ${track.artist} lyrics"
-                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://www.google.com/search?q=${URLEncoder.encode(query, "UTF-8")}"))
-                            context.startActivity(intent)
-                        }
-                    },
-                    onOpenSongDetails = { showDetailsDialog = true },
-                    onShareSong = {
-                        if (track != null) {
-                            shareTrack(context, track)
-                        }
-                    },
-                    onEditSongDetails = { showEditTrackDialog = true }
-                )
+    val onRewind10 = { viewModel.seekTo((positionState.value - 10_000L).coerceAtLeast(0L)) }
+    val onForward10 = { viewModel.seekTo((positionState.value + 10_000L).coerceAtMost(durationMs)) }
 
-                // Main adaptive body
-                if (isLandscapeLayout) {
-                    // LANDSCAPE TWO-PANE LAYOUT
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .weight(1f)
-                            .padding(vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(24.dp)
-                    ) {
-                        // Left Pane: Artwork or Lyrics
-                        Box(
-                            modifier = Modifier
-                                .weight(0.95f)
-                                .fillMaxHeight(),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            if (showLyrics) {
-                                LyricsView(
-                                    viewModel = lyricsViewModel,
-                                    onNext = viewModel::next,
-                                    onPrevious = viewModel::previous,
-                                    modifier = Modifier.fillMaxSize()
-                                )
-                            } else {
-                                BoxWithConstraints(
-                                    modifier = Modifier.fillMaxSize(),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    val artworkSize = minOf(maxWidth * 0.88f, maxHeight * 0.88f, 280.dp)
-                                    Box(
-                                        modifier = Modifier.size(artworkSize),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Surface(
-                                            onClick = { isVinylMode = !isVinylMode },
-                                            shape = CircleShape,
-                                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.85f),
-                                            modifier = Modifier
-                                                .align(Alignment.TopEnd)
-                                                .padding(6.dp)
-                                                .testTag("player_style_toggle")
-                                        ) {
-                                            Text(
-                                                text = if (isVinylMode) stringResource(R.string.player_style_vinyl) else stringResource(R.string.player_style_artwork),
-                                                style = MaterialTheme.typography.labelSmall,
-                                                fontWeight = FontWeight.SemiBold,
-                                                color = MaterialTheme.colorScheme.primary,
-                                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                                            )
-                                        }
-
-                                        if (isVinylMode) {
-                                            CuteVinylTurntable(track, isPlaying, Modifier.fillMaxSize())
-                                        } else {
-                                            Card(
-                                                shape = RoundedCornerShape(24.dp),
-                                                elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
-                                                modifier = Modifier
-                                                    .fillMaxSize()
-                                                    .offset { IntOffset(artworkDragOffsetX.value.roundToInt(), 0) }
-                                                    .pointerInput(Unit) {
-                                                        detectHorizontalDragGestures(
-                                                            onDragEnd = {
-                                                                coroutineScope.launch {
-                                                                    if (artworkDragOffsetX.value < -120f) viewModel.next()
-                                                                    else if (artworkDragOffsetX.value > 120f) viewModel.previous()
-                                                                    artworkDragOffsetX.animateTo(0f, spring())
-                                                                }
-                                                            },
-                                                            onDragCancel = {
-                                                                coroutineScope.launch { artworkDragOffsetX.animateTo(0f, spring()) }
-                                                            },
-                                                            onHorizontalDrag = { change, amount ->
-                                                                change.consume()
-                                                                coroutineScope.launch {
-                                                                    artworkDragOffsetX.snapTo((artworkDragOffsetX.value + amount).coerceIn(-200f, 200f))
-                                                                }
-                                                            }
-                                                        )
-                                                    }
-                                            ) {
-                                                AsyncImage(
-                                                    model = track?.artworkUri,
-                                                    contentDescription = stringResource(R.string.cd_artwork, track?.title.orEmpty()),
-                                                    placeholder = painterResource(id = R.drawable.ic_music_placeholder),
-                                                    error = painterResource(id = R.drawable.ic_music_placeholder),
-                                                    contentScale = ContentScale.Crop,
-                                                    modifier = Modifier.fillMaxSize()
-                                                )
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-
-                        // Right Pane: Metadata, Timeline, Controls
-                        Column(
-                            modifier = Modifier
-                                .weight(1.05f)
-                                .fillMaxHeight(),
-                            verticalArrangement = Arrangement.Center
-                        ) {
-                            TrackIdentityAndActions(
+    // The middle of the screen: big artwork, or lyrics (with a compact song row in portrait).
+    val stage: @Composable (Modifier, Boolean) -> Unit = { stageModifier, compactIdentity ->
+        Box(modifier = stageModifier) {
+            Crossfade(targetState = showLyrics, label = "player_stage") { lyricsOn ->
+                if (lyricsOn) {
+                    Column(modifier = Modifier.fillMaxSize()) {
+                        if (compactIdentity) {
+                            CompactTrackRow(
                                 track = track,
                                 isFavorite = isFavorite,
                                 onToggleFavorite = viewModel::toggleFavorite
                             )
-
-                            // Subtitle audio info badge + active visualizer in landscape
-                            val landscapeGenreText = track?.genre?.takeIf { it.isNotBlank() && it != "Unknown Genre" && !it.equals("null", ignoreCase = true) }
-                            val landscapeAlbumText = track?.album?.takeIf { it.isNotBlank() && it != "Unknown Album" && !it.equals("null", ignoreCase = true) }
-                            val landscapeTagText = landscapeGenreText ?: landscapeAlbumText ?: stringResource(R.string.offline_audio_badge)
-
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = 4.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    Surface(
-                                        shape = RoundedCornerShape(8.dp),
-                                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-                                    ) {
-                                        Text(
-                                            text = landscapeTagText,
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
-                                        )
-                                    }
-                                    Surface(
-                                        shape = RoundedCornerShape(8.dp),
-                                        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)
-                                    ) {
-                                        Text(
-                                            text = if (isPlaying) stringResource(R.string.player_groovy_vibe) else stringResource(R.string.player_paused),
-                                            style = MaterialTheme.typography.labelSmall,
-                                            fontWeight = FontWeight.SemiBold,
-                                            color = MaterialTheme.colorScheme.primary,
-                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
-                                        )
-                                    }
-                                }
-
-                                CuteEqualizerVisualizer(
-                                    isPlaying = isPlaying,
-                                    barColor = MaterialTheme.colorScheme.primary,
-                                    maxHeight = 16.dp
-                                )
-                            }
-
-                            PlaybackTimeline(
-                                positionState = positionState,
-                                durationMs = durationMs,
-                                showRemainingTime = showRemainingTime,
-                                onRemainingTimeClick = { showRemainingTime = !showRemainingTime },
-                                onSeek = viewModel::seekTo
-                            )
-
-                            FullPlayerControls(
-                                isPlaying = isPlaying,
-                                shuffle = shuffle,
-                                repeatMode = repeatMode,
-                                onTogglePlayPause = viewModel::togglePlayPause,
-                                onPrevious = viewModel::previous,
-                                onNext = viewModel::next,
-                                onToggleShuffle = viewModel::toggleShuffle,
-                                onCycleRepeat = viewModel::cycleRepeat,
-                                onRewind10 = { viewModel.seekTo((positionState.value - 10_000L).coerceAtLeast(0L)) },
-                                onFastForward10 = { viewModel.seekTo((positionState.value + 10_000L).coerceAtMost(durationMs)) },
-                                modifier = Modifier.padding(top = 8.dp)
-                            )
                         }
-                    }
-                } else {
-                    // PORTRAIT LAYOUT
-                    if (showLyrics) {
                         LyricsView(
                             viewModel = lyricsViewModel,
                             onNext = viewModel::next,
@@ -531,165 +316,391 @@ fun FullPlayerScreen(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .weight(1f)
-                                .padding(vertical = 8.dp)
+                                .padding(top = 4.dp, bottom = 8.dp)
                         )
-                    } else {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .weight(1f),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Surface(
-                                onClick = { isVinylMode = !isVinylMode },
-                                shape = CircleShape,
-                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.85f),
-                                modifier = Modifier
-                                    .align(Alignment.TopEnd)
-                                    .padding(end = 8.dp, top = 4.dp)
-                                    .testTag("player_style_toggle")
-                            ) {
-                                Text(
-                                    text = if (isVinylMode) stringResource(R.string.player_style_vinyl) else stringResource(R.string.player_style_artwork),
-                                    style = MaterialTheme.typography.labelSmall,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
-                                )
-                            }
-
-                            if (isVinylMode) {
-                                CuteVinylTurntable(
-                                    track = track,
-                                    isPlaying = isPlaying,
-                                    modifier = Modifier
-                                        .fillMaxWidth(0.92f)
-                                        .widthIn(max = 330.dp)
-                                        .aspectRatio(1f)
-                                        .offset { IntOffset(artworkDragOffsetX.value.roundToInt(), 0) }
-                                )
-                            } else {
-                                Card(
-                                    shape = RoundedCornerShape(28.dp),
-                                    elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
-                                    modifier = Modifier
-                                        .fillMaxWidth(0.88f)
-                                        .widthIn(max = 330.dp)
-                                        .aspectRatio(1f)
-                                        .offset { IntOffset(artworkDragOffsetX.value.roundToInt(), 0) }
-                                        .pointerInput(Unit) {
-                                            detectHorizontalDragGestures(
-                                                onDragEnd = {
-                                                    coroutineScope.launch {
-                                                        if (artworkDragOffsetX.value < -120f) viewModel.next()
-                                                        else if (artworkDragOffsetX.value > 120f) viewModel.previous()
-                                                        artworkDragOffsetX.animateTo(0f, spring())
-                                                    }
-                                                },
-                                                onDragCancel = {
-                                                    coroutineScope.launch { artworkDragOffsetX.animateTo(0f, spring()) }
-                                                },
-                                                onHorizontalDrag = { change, amount ->
-                                                    change.consume()
-                                                    coroutineScope.launch {
-                                                        artworkDragOffsetX.snapTo((artworkDragOffsetX.value + amount).coerceIn(-200f, 200f))
-                                                    }
-                                                }
-                                            )
-                                        }
-                                ) {
-                                    AsyncImage(
-                                        model = track?.artworkUri,
-                                        contentDescription = stringResource(R.string.cd_artwork, track?.title.orEmpty()),
-                                        placeholder = painterResource(id = R.drawable.ic_music_placeholder),
-                                        error = painterResource(id = R.drawable.ic_music_placeholder),
-                                        contentScale = ContentScale.Crop,
-                                        modifier = Modifier.fillMaxSize()
-                                    )
-                                }
-                            }
-                        }
                     }
-
-                    // Portrait track details & actions
-                    TrackIdentityAndActions(
-                        track = track,
-                        isFavorite = isFavorite,
-                        onToggleFavorite = viewModel::toggleFavorite
-                    )
-
-                    // Subtitle audio info badge + active playing indicator
-                    val genreText = track?.genre?.takeIf { it.isNotBlank() && it != "Unknown Genre" }
-                    val albumText = track?.album?.takeIf { it.isNotBlank() && it != "Unknown Album" }
-                    val tagText = genreText ?: albumText ?: stringResource(R.string.offline_audio_badge)
-
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
+                } else {
+                    BoxWithConstraints(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
                     ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Surface(
-                                shape = RoundedCornerShape(8.dp),
-                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-                            ) {
-                                Text(
-                                    text = tagText,
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
-                                )
-                            }
-                            Surface(
-                                shape = RoundedCornerShape(8.dp),
-                                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)
-                            ) {
-                                Text(
-                                    text = if (isPlaying) stringResource(R.string.player_groovy_vibe) else stringResource(R.string.player_paused),
-                                    style = MaterialTheme.typography.labelSmall,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
-                                )
-                            }
-                        }
-
-                        CuteEqualizerVisualizer(
+                        // The artwork is the hero: as large as the space allows, never clipped.
+                        val artworkSize = minOf(maxWidth, maxHeight - 8.dp, 400.dp).coerceAtLeast(120.dp)
+                        PlayerArtwork(
+                            track = track,
                             isPlaying = isPlaying,
-                            barColor = MaterialTheme.colorScheme.primary,
-                            maxHeight = 18.dp
+                            isVinylMode = isVinylMode,
+                            glowColor = animatedBgColor,
+                            onSwipeNext = viewModel::next,
+                            onSwipePrevious = viewModel::previous,
+                            modifier = Modifier.size(artworkSize)
                         )
                     }
-
-                    PlaybackTimeline(
-                        positionState = positionState,
-                        durationMs = durationMs,
-                        showRemainingTime = showRemainingTime,
-                        onRemainingTimeClick = { showRemainingTime = !showRemainingTime },
-                        onSeek = viewModel::seekTo
-                    )
-
-                    FullPlayerControls(
-                        isPlaying = isPlaying,
-                        shuffle = shuffle,
-                        repeatMode = repeatMode,
-                        onTogglePlayPause = viewModel::togglePlayPause,
-                        onPrevious = viewModel::previous,
-                        onNext = viewModel::next,
-                        onToggleShuffle = viewModel::toggleShuffle,
-                        onCycleRepeat = viewModel::cycleRepeat,
-                        onRewind10 = { viewModel.seekTo((positionState.value - 10_000L).coerceAtLeast(0L)) },
-                        onFastForward10 = { viewModel.seekTo((positionState.value + 10_000L).coerceAtMost(durationMs)) },
-                        modifier = Modifier.padding(bottom = 8.dp)
-                    )
                 }
             }
         }
+    }
+
+    Surface(
+        modifier = modifier
+            .fillMaxSize()
+            .testTag("full_player_screen"),
+        color = scheme.surface,
+        contentColor = scheme.onSurface
+    ) {
+        Box(modifier = Modifier.fillMaxSize()) {
+            PlayerBackdrop(
+                tint = animatedBgColor,
+                glow = scheme.tertiary
+            )
+
+            BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+                val isLandscapeLayout = maxWidth > maxHeight
+
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .statusBarsPadding()
+                        .navigationBarsPadding()
+                        .padding(horizontal = if (isLandscapeLayout) 28.dp else 24.dp, vertical = 6.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    FullPlayerHeader(
+                        isPlaying = isPlaying,
+                        subtitle = albumText,
+                        isVinylMode = isVinylMode,
+                        onCollapse = onCollapse,
+                        onToggleVinyl = { isVinylMode = !isVinylMode },
+                        onStartRadio = {
+                            viewModel.startTrackRadio { count ->
+                                val message = if (count > 0) {
+                                    context.getString(R.string.player_radio_started, count)
+                                } else {
+                                    context.getString(R.string.player_radio_empty)
+                                }
+                                Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+                            }
+                        },
+                        onOpenEqualizer = { showEqualizerSheet = true },
+                        onAddToPlaylist = { showAddToPlaylistDialog = true },
+                        onSearchGoogleLyrics = {
+                            if (track != null) {
+                                val query = "${track.title} ${track.artist} lyrics"
+                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://www.google.com/search?q=${URLEncoder.encode(query, "UTF-8")}"))
+                                context.startActivity(intent)
+                            }
+                        },
+                        onOpenSongDetails = { showDetailsDialog = true },
+                        onShareSong = {
+                            if (track != null) {
+                                shareTrack(context, track)
+                            }
+                        },
+                        onEditSongDetails = { showEditTrackDialog = true }
+                    )
+
+                    if (isLandscapeLayout) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .weight(1f)
+                                .padding(vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(28.dp)
+                        ) {
+                            stage(Modifier.weight(0.95f).fillMaxHeight(), false)
+
+                            Column(
+                                modifier = Modifier
+                                    .weight(1.05f)
+                                    .fillMaxHeight()
+                                    .verticalScroll(rememberScrollState()),
+                                verticalArrangement = Arrangement.Center
+                            ) {
+                                TrackIdentityAndActions(
+                                    track = track,
+                                    isFavorite = isFavorite,
+                                    onToggleFavorite = viewModel::toggleFavorite
+                                )
+                                PlaybackTimeline(
+                                    positionState = positionState,
+                                    durationMs = durationMs,
+                                    trackKey = track?.id.orEmpty(),
+                                    showRemainingTime = showRemainingTime,
+                                    onRemainingTimeClick = { showRemainingTime = !showRemainingTime },
+                                    onSeek = viewModel::seekTo,
+                                    onRewind10 = onRewind10,
+                                    onForward10 = onForward10,
+                                    modifier = Modifier.padding(top = 6.dp)
+                                )
+                                FullPlayerControls(
+                                    isPlaying = isPlaying,
+                                    shuffle = shuffle,
+                                    repeatMode = repeatMode,
+                                    onTogglePlayPause = viewModel::togglePlayPause,
+                                    onPrevious = viewModel::previous,
+                                    onNext = viewModel::next,
+                                    onToggleShuffle = viewModel::toggleShuffle,
+                                    onCycleRepeat = viewModel::cycleRepeat,
+                                    modifier = Modifier.padding(vertical = 8.dp),
+                                    compact = true
+                                )
+                                PlayerQuickActions(
+                                    showLyrics = showLyrics,
+                                    onToggleLyrics = { showLyrics = !showLyrics },
+                                    onOpenQueue = viewModel::openQueue,
+                                    timerLabel = timerLabel,
+                                    onOpenTimer = { showSleepTimerDialog = true },
+                                    speedLabel = speedLabel,
+                                    onOpenSpeed = { showSpeedDialog = true }
+                                )
+                            }
+                        }
+                    } else {
+                        stage(Modifier.fillMaxWidth().weight(1f), true)
+
+                        if (!showLyrics) {
+                            Spacer(modifier = Modifier.height(14.dp))
+                            TrackIdentityAndActions(
+                                track = track,
+                                isFavorite = isFavorite,
+                                onToggleFavorite = viewModel::toggleFavorite
+                            )
+                        }
+
+                        PlaybackTimeline(
+                            positionState = positionState,
+                            durationMs = durationMs,
+                            trackKey = track?.id.orEmpty(),
+                            showRemainingTime = showRemainingTime,
+                            onRemainingTimeClick = { showRemainingTime = !showRemainingTime },
+                            onSeek = viewModel::seekTo,
+                            onRewind10 = onRewind10,
+                            onForward10 = onForward10,
+                            modifier = Modifier.padding(top = 8.dp)
+                        )
+
+                        FullPlayerControls(
+                            isPlaying = isPlaying,
+                            shuffle = shuffle,
+                            repeatMode = repeatMode,
+                            onTogglePlayPause = viewModel::togglePlayPause,
+                            onPrevious = viewModel::previous,
+                            onNext = viewModel::next,
+                            onToggleShuffle = viewModel::toggleShuffle,
+                            onCycleRepeat = viewModel::cycleRepeat,
+                            modifier = Modifier.padding(top = 4.dp, bottom = 14.dp)
+                        )
+
+                        PlayerQuickActions(
+                            showLyrics = showLyrics,
+                            onToggleLyrics = { showLyrics = !showLyrics },
+                            onOpenQueue = viewModel::openQueue,
+                            timerLabel = timerLabel,
+                            onOpenTimer = { showSleepTimerDialog = true },
+                            speedLabel = speedLabel,
+                            onOpenSpeed = { showSpeedDialog = true },
+                            modifier = Modifier.padding(bottom = 6.dp)
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Backdrop: the artwork's colour pools at the top and a second theme-tinted glow sits at the
+ * bottom, then a scrim fades it into the surface so text always stays readable. Deliberately two
+ * cheap gradients (drawn once) instead of a blurred copy of the cover, which costs a full-screen
+ * GPU blur and made the player feel heavy on mid-range phones.
+ */
+@Composable
+private fun PlayerBackdrop(
+    tint: Color,
+    glow: Color,
+    modifier: Modifier = Modifier
+) {
+    val surface = MaterialTheme.colorScheme.surface
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .drawBehind {
+                drawRect(
+                    brush = Brush.radialGradient(
+                        colors = listOf(tint.copy(alpha = 0.55f), Color.Transparent),
+                        center = Offset(size.width * 0.12f, size.height * 0.06f),
+                        radius = size.maxDimension * 0.9f
+                    )
+                )
+                drawRect(
+                    brush = Brush.radialGradient(
+                        colors = listOf(glow.copy(alpha = 0.14f), Color.Transparent),
+                        center = Offset(size.width * 0.96f, size.height * 0.88f),
+                        radius = size.maxDimension * 0.75f
+                    )
+                )
+            }
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    Brush.verticalGradient(
+                        colors = listOf(
+                            surface.copy(alpha = 0.30f),
+                            surface.copy(alpha = 0.80f),
+                            surface
+                        )
+                    )
+                )
+        )
+    }
+}
+
+/**
+ * The hero artwork. It breathes with playback (full size while playing, gently receded while
+ * paused), casts a soft shadow tinted by its own colours, and can be swiped sideways to skip.
+ * Vinyl mode (from the menu) keeps the same footprint and gestures.
+ */
+@Composable
+private fun PlayerArtwork(
+    track: Track?,
+    isPlaying: Boolean,
+    isVinylMode: Boolean,
+    glowColor: Color,
+    onSwipeNext: () -> Unit,
+    onSwipePrevious: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val scope = rememberCoroutineScope()
+    val dragX = remember { Animatable(0f) }
+    val scale by animateFloatAsState(
+        targetValue = if (isPlaying) 1f else 0.9f,
+        animationSpec = spring(dampingRatio = 0.72f, stiffness = 180f),
+        label = "artwork_breathing"
+    )
+    val shape = RoundedCornerShape(36.dp)
+    val title = track?.title.cleanMetaOrNull() ?: stringResource(R.string.unknown_title)
+
+    Box(modifier = modifier, contentAlignment = Alignment.Center) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .offset { IntOffset(dragX.value.roundToInt(), 0) }
+                .graphicsLayer {
+                    scaleX = scale
+                    scaleY = scale
+                }
+                .pointerInput(Unit) {
+                    detectHorizontalDragGestures(
+                        onDragEnd = {
+                            scope.launch {
+                                if (dragX.value < -120f) onSwipeNext()
+                                else if (dragX.value > 120f) onSwipePrevious()
+                                dragX.animateTo(0f, spring())
+                            }
+                        },
+                        onDragCancel = { scope.launch { dragX.animateTo(0f, spring()) } },
+                        onHorizontalDrag = { change, amount ->
+                            change.consume()
+                            scope.launch { dragX.snapTo((dragX.value + amount).coerceIn(-200f, 200f)) }
+                        }
+                    )
+                },
+            contentAlignment = Alignment.Center
+        ) {
+            if (isVinylMode) {
+                CuteVinylTurntable(track, isPlaying, Modifier.fillMaxSize())
+            } else {
+                ArtworkImage(
+                    uri = track?.artworkUri,
+                    fallbackKey = title,
+                    shape = shape,
+                    glyphSize = 96.sp,
+                    contentDescription = stringResource(R.string.cd_artwork, title),
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .shadow(
+                            elevation = 18.dp,
+                            shape = shape,
+                            ambientColor = glowColor.copy(alpha = 0.6f),
+                            spotColor = glowColor
+                        )
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun FavoriteButton(
+    isFavorite: Boolean,
+    onToggleFavorite: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val scheme = MaterialTheme.colorScheme
+    val favoriteContainer by animateColorAsState(
+        targetValue = if (isFavorite) scheme.primaryContainer else scheme.surfaceContainerHighest.copy(alpha = 0.6f),
+        animationSpec = tween(250),
+        label = "favorite_container"
+    )
+    IconButton(
+        onClick = onToggleFavorite,
+        modifier = modifier
+            .size(52.dp)
+            .background(favoriteContainer, CircleShape)
+            .testTag("player_favorite_button")
+    ) {
+        Icon(
+            imageVector = if (isFavorite) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
+            contentDescription = stringResource(if (isFavorite) R.string.cd_unfavorite else R.string.cd_favorite),
+            tint = if (isFavorite) scheme.onPrimaryContainer else scheme.onSurfaceVariant,
+            modifier = Modifier.size(26.dp)
+        )
+    }
+}
+
+/** Small song row shown above the lyrics (portrait), so the song is never anonymous. */
+@Composable
+private fun CompactTrackRow(
+    track: Track?,
+    isFavorite: Boolean,
+    onToggleFavorite: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val title = track?.title.cleanMetaOrNull() ?: stringResource(R.string.unknown_title)
+    val artist = track?.artist.cleanMetaOrNull() ?: stringResource(R.string.unknown_artist)
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        ArtworkImage(
+            uri = track?.artworkUri,
+            fallbackKey = title,
+            modifier = Modifier.size(56.dp),
+            shape = RoundedCornerShape(16.dp),
+            contentDescription = stringResource(R.string.cd_artwork, title)
+        )
+        Column(modifier = Modifier.weight(1f).padding(horizontal = 14.dp)) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                text = artist,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.primary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+        FavoriteButton(isFavorite = isFavorite, onToggleFavorite = onToggleFavorite)
     }
 }
 
@@ -700,192 +711,34 @@ fun TrackIdentityAndActions(
     onToggleFavorite: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val displayTitle = when {
-        track == null || track.title.isBlank() ||
-            track.title.equals("<unknown>", ignoreCase = true) ||
-            track.title.equals("unknown", ignoreCase = true) ||
-            track.title.equals("null", ignoreCase = true) -> stringResource(R.string.unknown_title)
-        else -> track.title
-    }
-
-    val displayArtist = when {
-        track == null || track.artist.isBlank() ||
-            track.artist.equals("<unknown>", ignoreCase = true) ||
-            track.artist.equals("unknown", ignoreCase = true) ||
-            track.artist.equals("null", ignoreCase = true) -> stringResource(R.string.unknown_artist)
-        else -> track.artist
-    }
+    val displayTitle = track?.title.cleanMetaOrNull() ?: stringResource(R.string.unknown_title)
+    val displayArtist = track?.artist.cleanMetaOrNull() ?: stringResource(R.string.unknown_artist)
+    val scheme = MaterialTheme.colorScheme
 
     Row(
         modifier = modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
-        Column(modifier = Modifier.weight(1f)) {
+        Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
             Text(
                 text = displayTitle,
-                style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface,
+                style = MaterialTheme.typography.headlineMedium,
+                color = scheme.onSurface,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.basicMarquee()
+                modifier = Modifier.basicMarquee(initialDelayMillis = 1800)
             )
             Spacer(modifier = Modifier.height(2.dp))
             Text(
                 text = displayArtist,
                 style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = scheme.primary,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
         }
-
-        IconButton(
-            onClick = onToggleFavorite,
-            modifier = Modifier
-                .size(48.dp)
-                .testTag("player_favorite_button")
-        ) {
-            Icon(
-                imageVector = if (isFavorite) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
-                contentDescription = stringResource(if (isFavorite) R.string.cd_unfavorite else R.string.cd_favorite),
-                tint = if (isFavorite) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(28.dp)
-            )
-        }
-    }
-}
-
-/**
- * LogaRhythm's scrubber: a thin ember thread with a glowing playhead that swells while you hold it.
- *
- * It owns its own drag state and reads [positionState] lazily (draw phase for the thread, a tiny
- * local recomposition for the clock), so playback ticks never recompose the surrounding player.
- * Always laid out left-to-right, like a tape: elapsed time on the left, in every UI language.
- */
-@Composable
-fun PlaybackTimeline(
-    positionState: State<Long>,
-    durationMs: Long,
-    showRemainingTime: Boolean,
-    onRemainingTimeClick: () -> Unit,
-    onSeek: (Long) -> Unit,
-    modifier: Modifier = Modifier
-) {
-    CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
-        val duration = durationMs.coerceAtLeast(1L)
-        var dragFraction by remember { mutableStateOf<Float?>(null) }
-        val dragging = dragFraction != null
-        val swell by animateFloatAsState(
-            targetValue = if (dragging) 1f else 0f,
-            animationSpec = spring(),
-            label = "timeline_swell"
-        )
-        val active = MaterialTheme.colorScheme.primary
-        val thread = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.14f)
-        val currentOnSeek by rememberUpdatedState(onSeek)
-        val haptic = LocalHapticFeedback.current
-
-        val shownMs = dragFraction?.let { (it * duration).toLong() } ?: positionState.value
-        val progressForSemantics = (shownMs.toFloat() / duration).coerceIn(0f, 1f)
-        val description = stringResource(R.string.cd_seek_bar)
-
-        Column(modifier = modifier.fillMaxWidth()) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(40.dp)
-                    .testTag("player_seek_bar")
-                    .semantics {
-                        contentDescription = description
-                        progressBarRangeInfo = ProgressBarRangeInfo(progressForSemantics, 0f..1f)
-                        setProgress { target ->
-                            currentOnSeek((target.coerceIn(0f, 1f) * duration).toLong())
-                            true
-                        }
-                    }
-                    .pointerInput(duration) {
-                        detectTapGestures { offset ->
-                            val f = (offset.x / size.width.coerceAtLeast(1)).coerceIn(0f, 1f)
-                            currentOnSeek((f * duration).toLong())
-                        }
-                    }
-                    .pointerInput(duration) {
-                        detectHorizontalDragGestures(
-                            onDragStart = { offset ->
-                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                dragFraction = (offset.x / size.width.coerceAtLeast(1)).coerceIn(0f, 1f)
-                            },
-                            onDragEnd = {
-                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                dragFraction?.let { currentOnSeek((it * duration).toLong()) }
-                                dragFraction = null
-                            },
-                            onDragCancel = { dragFraction = null },
-                            onHorizontalDrag = { change, _ ->
-                                change.consume()
-                                dragFraction = (change.position.x / size.width.coerceAtLeast(1)).coerceIn(0f, 1f)
-                            }
-                        )
-                    }
-            ) {
-                Canvas(modifier = Modifier.fillMaxSize()) {
-                    val fraction = dragFraction ?: (positionState.value.toFloat() / duration).coerceIn(0f, 1f)
-                    val thickness = 4.dp.toPx() + 2.dp.toPx() * swell
-                    val radius = thickness / 2f
-                    val cy = size.height / 2f
-                    val x = (size.width * fraction).coerceIn(radius, size.width - radius)
-                    drawRoundRect(
-                        color = thread,
-                        topLeft = Offset(0f, cy - radius),
-                        size = Size(size.width, thickness),
-                        cornerRadius = CornerRadius(radius, radius)
-                    )
-                    drawRoundRect(
-                        color = active,
-                        topLeft = Offset(0f, cy - radius),
-                        size = Size(x + radius, thickness),
-                        cornerRadius = CornerRadius(radius, radius)
-                    )
-                    drawCircle(
-                        color = active.copy(alpha = 0.18f + 0.10f * swell),
-                        radius = 10.dp.toPx() + 8.dp.toPx() * swell,
-                        center = Offset(x, cy)
-                    )
-                    drawCircle(
-                        color = active,
-                        radius = 5.dp.toPx() + 2.dp.toPx() * swell,
-                        center = Offset(x, cy)
-                    )
-                }
-            }
-
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 4.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = TimeUtils.formatDuration(shownMs),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = if (dragging) active else MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontWeight = if (dragging) FontWeight.SemiBold else FontWeight.Medium
-                )
-                Text(
-                    text = if (showRemainingTime) {
-                        "-${TimeUtils.formatDuration((durationMs - shownMs).coerceAtLeast(0L))}"
-                    } else {
-                        TimeUtils.formatDuration(durationMs)
-                    },
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.clickable(onClick = onRemainingTimeClick)
-                )
-            }
-        }
+        FavoriteButton(isFavorite = isFavorite, onToggleFavorite = onToggleFavorite)
     }
 }
 

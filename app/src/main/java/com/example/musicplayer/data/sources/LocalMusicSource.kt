@@ -57,7 +57,8 @@ class LocalMusicSource @Inject constructor(
                 MediaStore.Audio.Media.DATE_MODIFIED,
                 MediaStore.Audio.Media.DATE_ADDED,
                 MediaStore.Audio.Media.DATA,
-                MediaStore.Audio.Media.GENRE
+                MediaStore.Audio.Media.GENRE,
+                MediaStore.Audio.Media.ALBUM_ARTIST
             )
         } else {
             arrayOf(
@@ -104,6 +105,9 @@ class LocalMusicSource @Inject constructor(
             val genreCol = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                 cursor.getColumnIndex(MediaStore.Audio.Media.GENRE)
             } else -1
+            val albumArtistCol = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                cursor.getColumnIndex(MediaStore.Audio.Media.ALBUM_ARTIST)
+            } else -1
 
             while (cursor.moveToNext()) {
                 val mediaStoreId = cursor.getLong(idCol)
@@ -116,6 +120,9 @@ class LocalMusicSource @Inject constructor(
                 val filePath = if (dataCol != -1) cursor.getString(dataCol) else null
                 val genreRaw = if (genreCol != -1) cursor.getString(genreCol) else null
                 val genre = genreRaw?.trim()?.ifBlank { "Unknown Genre" } ?: "Unknown Genre"
+                val albumArtist = if (albumArtistCol != -1) {
+                    cleanMetadataField(cursor.getString(albumArtistCol) ?: "", "")
+                } else ""
 
                 val folderName = when {
                     !filePath.isNullOrBlank() -> {
@@ -150,7 +157,9 @@ class LocalMusicSource @Inject constructor(
                         dateModified = dateModified,
                         dateAdded = dateAdded,
                         folder = folderName,
-                        genre = genre
+                        genre = genre,
+                        albumArtist = albumArtist,
+                        filePath = filePath.orEmpty()
                     )
                 )
             }

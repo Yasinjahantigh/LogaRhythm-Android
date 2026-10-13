@@ -2,9 +2,13 @@ package com.example.musicplayer.data.room
 
 import androidx.room.ColumnInfo
 import androidx.room.Entity
+import androidx.room.Index
 import androidx.room.PrimaryKey
 
-@Entity(tableName = "play_events")
+@Entity(
+    tableName = "play_events",
+    indices = [Index("trackId"), Index("timestamp")]
+)
 data class PlayEventEntity(
     @PrimaryKey(autoGenerate = true)
     val id: Long = 0L,

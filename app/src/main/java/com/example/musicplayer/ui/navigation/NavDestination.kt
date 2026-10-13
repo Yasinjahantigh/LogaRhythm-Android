@@ -54,8 +54,9 @@ sealed class NavDestination(
     )
 
     companion object {
+        /** Search is deliberately not a tab: it opens from the search pills on Home and Library. */
         val bottomNavDestinations: List<NavDestination>
-            get() = listOf(Home, Search, Library, Settings)
+            get() = listOf(Home, Library, Settings)
 
         const val ROUTE_ALBUM_DETAIL = "album_detail/{albumName}"
         const val ROUTE_ARTIST_DETAIL = "artist_detail/{artistName}"
@@ -64,6 +65,7 @@ sealed class NavDestination(
         const val ROUTE_PLAYLIST_DETAIL = "playlist_detail/{playlistId}"
         const val ROUTE_STATS = "stats"
         const val ROUTE_EQUALIZER = "equalizer"
+        const val ROUTE_LIBRARY_TOOLS = "library_tools"
 
         fun createAlbumDetailRoute(albumName: String): String =
             "album_detail/${Uri.encode(albumName)}"

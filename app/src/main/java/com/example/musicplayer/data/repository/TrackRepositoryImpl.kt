@@ -21,14 +21,20 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
+import com.example.musicplayer.domain.library.ArtistSplitter
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 import androidx.room.withTransaction
 import javax.inject.Inject
 import javax.inject.Singleton
 
+@OptIn(ExperimentalCoroutinesApi::class)
 @Singleton
 class TrackRepositoryImpl @Inject constructor(
     @ApplicationContext private val context: Context,
@@ -43,7 +49,7 @@ class TrackRepositoryImpl @Inject constructor(
     override fun getAllTracks(): Flow<List<Track>> {
         return musicDao.getAllTracks().map { list ->
             list.map { it.toDomain() }
-        }
+        }.flowOn(Dispatchers.Default)
     }
 
     override fun getTrackById(id: String): Flow<Track?> {
@@ -56,7 +62,7 @@ class TrackRepositoryImpl @Inject constructor(
                 val searchable = "${track.title} ${track.artist} ${track.album} ${track.genre}"
                 SearchUtils.matchesTokens(searchable, query)
             }
-        }
+        }.flowOn(Dispatchers.Default)
     }
 
     override fun searchAlbums(query: String): Flow<List<Album>> {
@@ -98,17 +104,43 @@ class TrackRepositoryImpl @Inject constructor(
         }
     }
 
-    override fun getArtists(): Flow<List<Artist>> {
-        return musicDao.getAllArtists().map { list ->
-            list.map {
-                Artist(
-                    id = "artist:${it.artist}",
-                    name = it.artist,
-                    trackCount = it.trackCount,
-                    albumCount = it.albumCount
-                )
+    /** Separators when multi-artist splitting is on, null when it is off. */
+    private fun splitConfig(): Flow<List<String>?> =
+        combine(preferencesManager.splitArtists, preferencesManager.artistSeparators) { on, raw ->
+            if (on) ArtistSplitter.parseSeparators(raw) else null
+        }
+
+    override fun getArtists(): Flow<List<Artist>> = splitConfig().flatMapLatest { separators ->
+        if (separators == null) {
+            musicDao.getAllArtists().map { list ->
+                list.map {
+                    Artist(
+                        id = "artist:${it.artist}",
+                        name = it.artist,
+                        trackCount = it.trackCount,
+                        albumCount = it.albumCount
+                    )
+                }
+            }
+        } else {
+            musicDao.getAllTracks().map { entities -> buildArtists(entities, separators) }
+                .flowOn(Dispatchers.Default)
+        }
+    }
+
+    private fun buildArtists(entities: List<TrackEntity>, separators: List<String>): List<Artist> {
+        class Acc(val name: String) { var tracks = 0; val albums = HashSet<String>() }
+        val byName = HashMap<String, Acc>()
+        for (entity in entities) {
+            for (name in ArtistSplitter.split(entity.artist, separators)) {
+                val acc = byName.getOrPut(name.lowercase()) { Acc(name) }
+                acc.tracks++
+                acc.albums.add(entity.album)
             }
         }
+        return byName.values
+            .sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.name })
+            .map { Artist(id = "artist:${it.name}", name = it.name, trackCount = it.tracks, albumCount = it.albums.size) }
     }
 
     override fun getFolders(): Flow<List<Folder>> {
@@ -141,11 +173,18 @@ class TrackRepositoryImpl @Inject constructor(
         }
     }
 
-    override fun getTracksByArtist(artist: String): Flow<List<Track>> {
-        return musicDao.getTracksByArtist(artist).map { list ->
-            list.map { it.toDomain() }
+    override fun getTracksByArtist(artist: String): Flow<List<Track>> =
+        splitConfig().flatMapLatest { separators ->
+            if (separators == null) {
+                musicDao.getTracksByArtist(artist).map { list -> list.map { it.toDomain() } }
+            } else {
+                musicDao.getAllTracks().map { entities ->
+                    entities.filter { e ->
+                        ArtistSplitter.split(e.artist, separators).any { it.equals(artist, ignoreCase = true) }
+                    }.map { it.toDomain() }
+                }.flowOn(Dispatchers.Default)
+            }
         }
-    }
 
     override fun getTracksByFolder(folder: String): Flow<List<Track>> {
         return musicDao.getTracksByFolder(folder).map { list ->
@@ -173,18 +212,23 @@ class TrackRepositoryImpl @Inject constructor(
         }
     }
 
-    override fun getArtistByName(artist: String): Flow<Artist?> {
-        return musicDao.getArtistByName(artist).map { result ->
-            result?.let {
-                Artist(
-                    id = "artist:${it.artist}",
-                    name = it.artist,
-                    trackCount = it.trackCount,
-                    albumCount = it.albumCount
-                )
+    override fun getArtistByName(artist: String): Flow<Artist?> =
+        splitConfig().flatMapLatest { separators ->
+            if (separators == null) {
+                musicDao.getArtistByName(artist).map { result ->
+                    result?.let {
+                        Artist(
+                            id = "artist:${it.artist}",
+                            name = it.artist,
+                            trackCount = it.trackCount,
+                            albumCount = it.albumCount
+                        )
+                    }
+                }
+            } else {
+                getArtists().map { list -> list.firstOrNull { it.name.equals(artist, ignoreCase = true) } }
             }
         }
-    }
 
     override fun getGenreByName(genre: String): Flow<Genre?> {
         return musicDao.getGenreByName(genre).map { result ->

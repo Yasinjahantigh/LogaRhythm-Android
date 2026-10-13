@@ -4,7 +4,9 @@ import android.content.Context
 import android.database.ContentObserver
 import android.os.Handler
 import android.os.Looper
+import android.os.Build
 import android.provider.MediaStore
+import com.example.musicplayer.data.datastore.PreferencesManager
 import com.example.musicplayer.core.utils.PermissionUtils
 import com.example.musicplayer.domain.repository.TrackRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -14,6 +16,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -31,7 +34,8 @@ import javax.inject.Singleton
 @Singleton
 class LibrarySync @Inject constructor(
     @ApplicationContext private val context: Context,
-    private val trackRepository: TrackRepository
+    private val trackRepository: TrackRepository,
+    private val preferencesManager: PreferencesManager
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val mutex = Mutex()
@@ -68,14 +72,21 @@ class LibrarySync @Inject constructor(
     }
 
     /** Schedules a scan; bursts of requests collapse into one. A no-op without audio permission. */
-    fun requestRefresh(debounceMs: Long = 0L) {
+    fun requestRefresh(debounceMs: Long = 0L, force: Boolean = false) {
         waiting?.cancel()
         waiting = scope.launch {
             if (debounceMs > 0) delay(debounceMs)
             mutex.withLock {
                 if (!PermissionUtils.hasAudioPermission(context)) return@withLock
                 try {
+                    // Coming back to the app with an unchanged media index is the common case; the
+                    // full MediaStore query + diff is skipped then (Android 11+ exposes a counter).
+                    val stamp = currentStamp()
+                    if (!force && stamp != null && stamp == preferencesManager.libraryGeneration.first()) {
+                        return@withLock
+                    }
                     trackRepository.refreshTracks()
+                    if (stamp != null) preferencesManager.setLibraryGeneration(stamp)
                 } catch (cancelled: CancellationException) {
                     throw cancelled
                 } catch (_: Exception) {
@@ -83,5 +94,25 @@ class LibrarySync @Inject constructor(
                 }
             }
         }
+    }
+
+    /**
+     * Identifies the state a scan would see: media index version/generation plus the app settings
+     * that filter it. Null (always scan) before Android 11 or if the platform call fails.
+     */
+    private suspend fun currentStamp(): String? {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return null
+        return runCatching {
+            val version = MediaStore.getVersion(context)
+            val generation = MediaStore.getGeneration(context, MediaStore.VOLUME_EXTERNAL)
+            val minSec = preferencesManager.minTrackLengthSec.first()
+            val excluded = preferencesManager.excludedFolders.first().sorted().hashCode()
+            "$SCHEMA_TAG|$version|$generation|$minSec|$excluded"
+        }.getOrNull()
+    }
+
+    private companion object {
+        /** Bump when a scan must repopulate new columns even if the media index is unchanged. */
+        const val SCHEMA_TAG = "v8"
     }
 }

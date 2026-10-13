@@ -8,6 +8,8 @@ import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.runtime.remember
 
 @Composable
 fun MusicPlayerTheme(
@@ -35,9 +37,17 @@ fun MusicPlayerTheme(
         else -> LightColorScheme
     }
 
+    // Arabic-script UIs get Vazirmatn (when its files are present); everything else gets Poppins.
+    val language = LocalConfiguration.current.locales.get(0)?.language.orEmpty()
+    val isArabicScript = language in setOf("fa", "ar", "ur", "ps", "ckb", "ku")
+    val typography = remember(isArabicScript) {
+        val family = if (isArabicScript) AppFonts.persian(context) ?: AppFonts.Poppins else AppFonts.Poppins
+        appTypography(family)
+    }
+
     MaterialTheme(
         colorScheme = colorScheme,
-        typography = Typography,
+        typography = typography,
         shapes = getAppShapes(cornerRoundness),
         content = content
     )

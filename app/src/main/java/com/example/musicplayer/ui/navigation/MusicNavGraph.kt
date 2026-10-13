@@ -17,6 +17,7 @@ import com.example.musicplayer.feature.library.LibraryScreen
 import com.example.musicplayer.feature.playlist.PlaylistDetailScreen
 import com.example.musicplayer.feature.search.SearchScreen
 import com.example.musicplayer.feature.settings.SettingsScreen
+import com.example.musicplayer.feature.tools.LibraryToolsScreen
 import com.example.musicplayer.feature.stats.StatsScreen
 
 @Composable
@@ -36,11 +37,15 @@ fun MusicNavGraph(
                 },
                 onNavigateToLibrary = {
                     navController.navigate(NavDestination.Library.route)
+                },
+                onNavigateToSearch = {
+                    navController.navigate(NavDestination.Search.route)
                 }
             )
         }
         composable(NavDestination.Search.route) {
             SearchScreen(
+                onNavigateBack = { navController.popBackStack() },
                 onNavigateToAlbum = { albumName ->
                     navController.navigate(NavDestination.createAlbumDetailRoute(albumName))
                 },
@@ -65,6 +70,9 @@ fun MusicNavGraph(
                 },
                 onNavigateToPlaylist = { playlistId ->
                     navController.navigate(NavDestination.createPlaylistDetailRoute(playlistId))
+                },
+                onNavigateToSearch = {
+                    navController.navigate(NavDestination.Search.route)
                 }
             )
         }
@@ -75,8 +83,14 @@ fun MusicNavGraph(
                 },
                 onNavigateToEqualizer = {
                     navController.navigate(NavDestination.ROUTE_EQUALIZER)
+                },
+                onNavigateToLibraryTools = {
+                    navController.navigate(NavDestination.ROUTE_LIBRARY_TOOLS)
                 }
             )
+        }
+        composable(NavDestination.ROUTE_LIBRARY_TOOLS) {
+            LibraryToolsScreen(onNavigateBack = { navController.popBackStack() })
         }
         composable(NavDestination.ROUTE_EQUALIZER) {
             EqualizerScreen(

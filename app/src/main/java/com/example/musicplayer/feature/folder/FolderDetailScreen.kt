@@ -47,6 +47,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.foundation.layout.WindowInsets
+import com.example.musicplayer.ui.components.DetailHero
 import com.example.R
 import com.example.musicplayer.domain.model.Track
 import com.example.musicplayer.feature.library.TrackListItem
@@ -100,19 +102,7 @@ fun FolderDetailScreen(
 
     Scaffold(
         modifier = modifier.fillMaxSize().testTag("folder_detail_screen"),
-        topBar = {
-            TopAppBar(
-                title = { Text(text = viewModel.folderName, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                navigationIcon = {
-                    IconButton(onClick = onNavigateBack, modifier = Modifier.testTag("folder_back_button")) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = stringResource(R.string.cd_back)
-                        )
-                    }
-                }
-            )
-        }
+        contentWindowInsets = WindowInsets(0.dp, 0.dp, 0.dp, 0.dp),
     ) { innerPadding ->
         val bottomPadding = com.example.musicplayer.ui.designsystem.LocalPlaybackBottomPadding.current
         LazyColumn(
@@ -120,66 +110,19 @@ fun FolderDetailScreen(
             modifier = Modifier.fillMaxSize().padding(innerPadding)
         ) {
             item {
-                Column(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 16.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(130.dp)
-                            .clip(CircleShape)
-                            .background(MaterialTheme.colorScheme.secondaryContainer),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Folder,
-                            contentDescription = null,
-                            modifier = Modifier.size(64.dp),
-                            tint = MaterialTheme.colorScheme.onSecondaryContainer
-                        )
-                    }
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Text(
-                        text = viewModel.folderName,
-                        style = MaterialTheme.typography.headlineSmall,
-                        fontWeight = FontWeight.Bold,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Text(
-                        text = stringResource(R.string.folder_track_count, tracks.size),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Spacer(modifier = Modifier.height(20.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        Button(
-                            onClick = viewModel::playAll,
-                            enabled = tracks.isNotEmpty(),
-                            modifier = Modifier.weight(1f).testTag("folder_play_button"),
-                            contentPadding = ButtonDefaults.ContentPadding
-                        ) {
-                            Icon(Icons.Filled.PlayArrow, contentDescription = null, modifier = Modifier.size(20.dp))
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(stringResource(R.string.btn_play))
-                        }
-                        FilledTonalButton(
-                            onClick = viewModel::shuffleAll,
-                            enabled = tracks.isNotEmpty(),
-                            modifier = Modifier.weight(1f).testTag("folder_shuffle_button"),
-                            contentPadding = ButtonDefaults.ContentPadding
-                        ) {
-                            Icon(Icons.Filled.Shuffle, contentDescription = null, modifier = Modifier.size(20.dp))
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(stringResource(R.string.btn_shuffle))
-                        }
-                    }
-                    Spacer(modifier = Modifier.height(16.dp))
-                }
+                DetailHero(
+                    title = viewModel.folderName,
+                    meta = stringResource(R.string.folder_track_count, tracks.size),
+                    artworkUri = tracks.firstOrNull { !it.artworkUri.isNullOrBlank() }?.artworkUri,
+                    icon = Icons.Default.Folder,
+                    onBack = onNavigateBack,
+                    onPlay = viewModel::playAll,
+                    onShuffle = viewModel::shuffleAll,
+                    actionsEnabled = tracks.isNotEmpty(),
+                    backTag = "folder_back_button",
+                    playTag = "folder_play_button",
+                    shuffleTag = "folder_shuffle_button"
+                )
             }
 
             if (tracks.isEmpty()) {

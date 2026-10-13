@@ -15,4 +15,10 @@ interface LyricsRepository {
     suspend fun fetchOnlineLyrics(track: Track): Lyrics?
     suspend fun fetchOnlineLyricsWithCustomQuery(track: Track, title: String, artist: String): Lyrics?
     suspend fun searchLyricsCandidates(title: String, artist: String): List<com.example.musicplayer.domain.model.LyricsCandidate>
+
+    /** Per-song timing correction in ms (positive = lyrics appear earlier); 0 when none is set. */
+    fun getOffset(trackId: String): Flow<Long>
+    suspend fun setOffset(trackId: String, offsetMs: Long)
+    /** Ids of songs whose lyrics the user hid; they can be restored with [resetLyricsToDefault]. */
+    fun getHiddenTrackIds(): Flow<List<String>>
 }

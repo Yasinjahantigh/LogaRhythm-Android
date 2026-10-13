@@ -302,4 +302,43 @@ class PreferencesManager @Inject constructor(
             preferences[keyOnboardingCompleted] = completed
         }
     }
+
+    // ---- Playback quality -------------------------------------------------------------------
+
+    private val keyFadeSec = intPreferencesKey("key_fade_between_songs_sec")
+    private val keySkipSilence = booleanPreferencesKey("key_skip_silence")
+    private val keyReplayGain = stringPreferencesKey("key_replay_gain_mode")
+    private val keyResumeOnHeadset = booleanPreferencesKey("key_resume_on_headset")
+
+    /** 0 = off. The player fades out/in around each song change (single player, no overlap). */
+    val fadeBetweenSongsSec: Flow<Int> = dataStore.data.map { it[keyFadeSec] ?: 0 }
+    val skipSilence: Flow<Boolean> = dataStore.data.map { it[keySkipSilence] ?: false }
+    /** "off" | "track" | "album". */
+    val replayGainMode: Flow<String> = dataStore.data.map { it[keyReplayGain] ?: "off" }
+    val resumeOnHeadset: Flow<Boolean> = dataStore.data.map { it[keyResumeOnHeadset] ?: true }
+
+    suspend fun setFadeBetweenSongsSec(seconds: Int) { dataStore.edit { it[keyFadeSec] = seconds.coerceIn(0, 12) } }
+    suspend fun setSkipSilence(enabled: Boolean) { dataStore.edit { it[keySkipSilence] = enabled } }
+    suspend fun setReplayGainMode(mode: String) { dataStore.edit { it[keyReplayGain] = mode } }
+    suspend fun setResumeOnHeadset(enabled: Boolean) { dataStore.edit { it[keyResumeOnHeadset] = enabled } }
+
+    // ---- Library intelligence ---------------------------------------------------------------
+
+    private val keySplitArtists = booleanPreferencesKey("key_split_artists")
+    private val keyArtistSeparators = stringPreferencesKey("key_artist_separators")
+    private val keyLibraryGeneration = stringPreferencesKey("key_library_generation")
+
+    val splitArtists: Flow<Boolean> = dataStore.data.map { it[keySplitArtists] ?: true }
+    /** One separator per line; null means "use the built-in defaults". */
+    val artistSeparators: Flow<String?> = dataStore.data.map { it[keyArtistSeparators] }
+    /** MediaStore version+generation seen by the last successful scan; lets a scan be skipped. */
+    val libraryGeneration: Flow<String?> = dataStore.data.map { it[keyLibraryGeneration] }
+
+    suspend fun setSplitArtists(enabled: Boolean) { dataStore.edit { it[keySplitArtists] = enabled } }
+    suspend fun setArtistSeparators(raw: String?) {
+        dataStore.edit { if (raw == null) it.remove(keyArtistSeparators) else it[keyArtistSeparators] = raw }
+    }
+    suspend fun setLibraryGeneration(value: String?) {
+        dataStore.edit { if (value == null) it.remove(keyLibraryGeneration) else it[keyLibraryGeneration] = value }
+    }
 }

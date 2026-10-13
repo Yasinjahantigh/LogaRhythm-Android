@@ -29,7 +29,7 @@ object AppDimensions {
     val artworkRow: Dp = 52.dp
     val artworkMiniPlayer: Dp = 40.dp
     val artworkLarge: Dp = 80.dp
-    val miniPlayerHeight: Dp = 54.dp
+    val miniPlayerHeight: Dp = 72.dp
     val bottomBarHeight: Dp = 80.dp
     val playButtonMini: Dp = 36.dp
     val navButtonMini: Dp = 32.dp

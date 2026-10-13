@@ -132,4 +132,16 @@ class LrcParserTest {
         assertFalse(result.isSynced)
         assertEquals(0, result.lines.size)
     }
+
+    @Test
+    fun parsesEnhancedWordTiming() {
+        val line = LrcParser.parse("[00:10.00]<00:10.00>Hello <00:10.50>world").lines.single()
+        assertEquals("Hello world", line.text)
+        assertEquals(listOf(10_000L, 10_500L), line.words.map { it.startMs })
+    }
+
+    @Test
+    fun plainLinesHaveNoWords() {
+        assertTrue(LrcParser.parse("[00:01.00]Hi").lines.single().words.isEmpty())
+    }
 }

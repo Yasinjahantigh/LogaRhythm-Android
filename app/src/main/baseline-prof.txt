@@ -1,0 +1,10 @@
+# Hand-written baseline profile: ahead-of-time compiles the app's own startup and scrolling paths.
+# Wildcards follow the profgen syntax. Regenerate with Macrobenchmark when a device is available.
+HSPLcom/example/musicplayer/MainActivity;->**(**)**
+HSPLcom/example/musicplayer/ui/**->**(**)**
+HSPLcom/example/musicplayer/feature/home/**->**(**)**
+HSPLcom/example/musicplayer/feature/library/**->**(**)**
+HSPLcom/example/musicplayer/feature/player/**->**(**)**
+HSPLcom/example/musicplayer/playback/**->**(**)**
+HSPLcom/example/musicplayer/data/room/**->**(**)**
+Lcom/example/musicplayer/**;
