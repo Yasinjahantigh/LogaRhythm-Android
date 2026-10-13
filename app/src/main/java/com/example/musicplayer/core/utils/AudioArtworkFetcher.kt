@@ -14,6 +14,7 @@ import coil.fetch.DrawableResult
 import coil.fetch.FetchResult
 import coil.fetch.Fetcher
 import coil.request.Options
+import coil.size.pxOrElse
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -24,15 +25,22 @@ import kotlinx.coroutines.withContext
  */
 class AudioArtworkFetcher(
     private val context: Context,
-    private val uri: Uri
+    private val uri: Uri,
+    private val options: Options
 ) : Fetcher {
+
+    /** Edge length actually needed on screen; list rows ask for ~150px, the player for ~1000px. */
+    private val targetEdge: Int = maxOf(
+        options.size.width.pxOrElse { 512 },
+        options.size.height.pxOrElse { 512 }
+    ).coerceIn(128, 768)
 
     override suspend fun fetch(): FetchResult? = withContext(Dispatchers.IO) {
         val resolver = context.contentResolver
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             try {
-                val bitmap = resolver.loadThumbnail(uri, Size(512, 512), null)
+                val bitmap = resolver.loadThumbnail(uri, Size(targetEdge, targetEdge), null)
                 return@withContext DrawableResult(
                     drawable = BitmapDrawable(context.resources, bitmap),
                     isSampled = false,
@@ -53,7 +61,13 @@ class AudioArtworkFetcher(
             }
 
             if (picture != null) {
-                val bitmap = BitmapFactory.decodeByteArray(picture, 0, picture.size)
+                val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                BitmapFactory.decodeByteArray(picture, 0, picture.size, bounds)
+                var sample = 1
+                while (bounds.outWidth / (sample * 2) >= targetEdge && bounds.outHeight / (sample * 2) >= targetEdge) sample *= 2
+                val bitmap = BitmapFactory.decodeByteArray(
+                    picture, 0, picture.size, BitmapFactory.Options().apply { inSampleSize = sample }
+                )
                 if (bitmap != null) {
                     return@withContext DrawableResult(
                         drawable = BitmapDrawable(context.resources, bitmap),
@@ -76,7 +90,7 @@ class AudioArtworkFetcher(
             if (scheme == ContentResolver.SCHEME_CONTENT &&
                 (authority == "media" || authority?.contains("media") == true)
             ) {
-                return AudioArtworkFetcher(context, data)
+                return AudioArtworkFetcher(context, data, options)
             }
             return null
         }

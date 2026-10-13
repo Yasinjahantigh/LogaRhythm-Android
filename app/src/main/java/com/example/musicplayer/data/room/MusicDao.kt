@@ -4,6 +4,7 @@ import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import androidx.room.Transaction
 import androidx.room.Update
 import kotlinx.coroutines.flow.Flow
 
@@ -73,9 +74,9 @@ interface MusicDao {
     fun searchGenres(query: String, normalizedQuery: String): Flow<List<GenreQueryResult>>
 
     @Query("""
-        SELECT album, artist, COUNT(*) AS trackCount, MIN(artworkUri) AS artworkUri 
+        SELECT album, COALESCE(NULLIF(albumArtist, ''), artist) AS artist, COUNT(*) AS trackCount, MIN(artworkUri) AS artworkUri 
         FROM tracks 
-        GROUP BY album, artist 
+        GROUP BY album, COALESCE(NULLIF(albumArtist, ''), artist) 
         ORDER BY album COLLATE NOCASE ASC
     """)
     fun getAllAlbums(): Flow<List<AlbumQueryResult>>
@@ -119,10 +120,10 @@ interface MusicDao {
     fun getTracksByGenre(genre: String): Flow<List<TrackEntity>>
 
     @Query("""
-        SELECT album, artist, COUNT(*) AS trackCount, MIN(artworkUri) AS artworkUri 
+        SELECT album, COALESCE(NULLIF(albumArtist, ''), artist) AS artist, COUNT(*) AS trackCount, MIN(artworkUri) AS artworkUri 
         FROM tracks 
         WHERE album = :album
-        GROUP BY album, artist 
+        GROUP BY album, COALESCE(NULLIF(albumArtist, ''), artist) 
         LIMIT 1
     """)
     fun getAlbumByName(album: String): Flow<AlbumQueryResult?>
@@ -151,8 +152,23 @@ interface MusicDao {
     @Update
     suspend fun updateTracks(tracks: List<TrackEntity>)
 
+    @Query("UPDATE tracks SET title = :title, artist = :artist, album = :album, genre = :genre WHERE id = :id")
+    suspend fun updateTrackMetadata(id: String, title: String, artist: String, album: String, genre: String)
+
     @Query("DELETE FROM tracks WHERE id IN (:ids)")
     suspend fun deleteTracksByIds(ids: List<String>)
+
+    /** Apply a completed scan atomically so a database error cannot leave a half-synced library. */
+    @Transaction
+    suspend fun syncLocalTracks(
+        toInsert: List<TrackEntity>,
+        toUpdate: List<TrackEntity>,
+        toDeleteIds: List<String>
+    ) {
+        if (toInsert.isNotEmpty()) insertTracks(toInsert)
+        if (toUpdate.isNotEmpty()) updateTracks(toUpdate)
+        if (toDeleteIds.isNotEmpty()) deleteTracksByIds(toDeleteIds)
+    }
 
     @Query("SELECT * FROM play_events WHERE trackId = :trackId ORDER BY timestamp DESC")
     fun getPlayEventsForTrack(trackId: String): Flow<List<PlayEventEntity>>
@@ -163,6 +179,10 @@ interface MusicDao {
     @Insert
     suspend fun insertPlayEvent(event: PlayEventEntity)
 
+    /** Replaces the provisional listened time recorded at the play threshold with the final total. */
+    @Query("UPDATE play_events SET listenedMs = :listenedMs WHERE trackId = :trackId AND timestamp = :timestamp AND skipped = 0")
+    suspend fun updatePlayEventListened(trackId: String, timestamp: Long, listenedMs: Long)
+
     @Query("SELECT COALESCE(SUM(listenedMs), 0) FROM play_events")
     fun getTotalListenTimeMs(): Flow<Long>
 
@@ -170,12 +190,12 @@ interface MusicDao {
     fun getTotalListenTimeMs(sinceTimestamp: Long): Flow<Long>
 
     @Query("""
-        SELECT t.id, t.title, t.artist, t.album, t.durationMs, t.artworkUri, t.sourceType, t.uri, t.dateModified, t.folder, t.genre,
+        SELECT t.id, t.title, t.artist, t.album, t.durationMs, t.artworkUri, t.sourceType, t.uri, t.dateModified, t.folder, t.genre, t.dateAdded,
                COUNT(pe.id) AS playCount,
                COALESCE(SUM(pe.listenedMs), 0) AS totalListenedMs
         FROM play_events pe
         INNER JOIN tracks t ON pe.trackId = t.id
-        WHERE pe.timestamp >= :sinceTimestamp
+        WHERE pe.timestamp >= :sinceTimestamp AND pe.skipped = 0
         GROUP BY pe.trackId
         ORDER BY playCount DESC, totalListenedMs DESC
         LIMIT :limit
@@ -189,7 +209,7 @@ interface MusicDao {
                COUNT(DISTINCT t.id) AS trackCount
         FROM play_events pe
         INNER JOIN tracks t ON pe.trackId = t.id
-        WHERE pe.timestamp >= :sinceTimestamp AND t.artist != ''
+        WHERE pe.timestamp >= :sinceTimestamp AND pe.skipped = 0 AND t.artist != ''
         GROUP BY t.artist
         ORDER BY playCount DESC, totalListenedMs DESC
         LIMIT :limit
@@ -205,7 +225,7 @@ interface MusicDao {
                COUNT(DISTINCT t.id) AS trackCount
         FROM play_events pe
         INNER JOIN tracks t ON pe.trackId = t.id
-        WHERE pe.timestamp >= :sinceTimestamp AND t.album != ''
+        WHERE pe.timestamp >= :sinceTimestamp AND pe.skipped = 0 AND t.album != ''
         GROUP BY t.album, t.artist
         ORDER BY playCount DESC, totalListenedMs DESC
         LIMIT :limit
@@ -216,6 +236,7 @@ interface MusicDao {
         SELECT t.*
         FROM play_events pe
         INNER JOIN tracks t ON pe.trackId = t.id
+        WHERE pe.skipped = 0
         GROUP BY pe.trackId
         ORDER BY MAX(pe.timestamp) DESC
         LIMIT :limit
@@ -226,9 +247,33 @@ interface MusicDao {
         SELECT t.*
         FROM play_events pe
         INNER JOIN tracks t ON pe.trackId = t.id
+        WHERE pe.skipped = 0
         GROUP BY pe.trackId
         ORDER BY COUNT(pe.id) DESC, SUM(pe.listenedMs) DESC
         LIMIT :limit
     """)
     fun getMostPlayedTracks(limit: Int = 20): Flow<List<TrackEntity>>
+
+    // ---- one-shot reads used by backup/restore, duplicates and playback helpers ----
+
+    @Query("SELECT * FROM tracks")
+    suspend fun getAllTracksOnce(): List<TrackEntity>
+
+    @Query("SELECT * FROM play_events")
+    suspend fun getAllPlayEventsOnce(): List<PlayEventEntity>
+
+    @Insert
+    suspend fun insertPlayEvents(events: List<PlayEventEntity>)
+
+    @Query("SELECT * FROM resume_positions")
+    suspend fun getAllResumePositionsOnce(): List<ResumePositionEntity>
+
+    @Query("SELECT * FROM resume_positions WHERE trackId = :trackId")
+    suspend fun getResumePosition(trackId: String): ResumePositionEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertResumePosition(entity: ResumePositionEntity)
+
+    @Query("DELETE FROM resume_positions WHERE trackId = :trackId")
+    suspend fun clearResumePosition(trackId: String)
 }

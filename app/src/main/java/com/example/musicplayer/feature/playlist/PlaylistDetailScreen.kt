@@ -12,15 +12,16 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.QueueMusic
 import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
@@ -50,6 +51,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.foundation.layout.WindowInsets
+import com.example.musicplayer.ui.components.DetailHero
 import com.example.R
 import com.example.musicplayer.core.utils.TimeUtils
 import com.example.musicplayer.domain.model.Track
@@ -148,84 +151,57 @@ fun PlaylistDetailScreen(
 
     Scaffold(
         modifier = modifier.fillMaxSize().testTag("playlist_detail_screen"),
+        contentWindowInsets = WindowInsets(0.dp, 0.dp, 0.dp, 0.dp),
         snackbarHost = { SnackbarHost(snackbarHostState) },
-        topBar = {
-            TopAppBar(
-                title = { Text(text = displayName) },
-                navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.cd_back))
-                    }
-                },
-                actions = {
-                    if (!isBuiltIn) {
-                        Box {
-                            IconButton(onClick = { showMenu = true }) {
-                                Icon(Icons.Default.MoreVert, contentDescription = stringResource(R.string.cd_playlist_menu))
-                            }
-                            DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
-                                DropdownMenuItem(
-                                    text = { Text(stringResource(R.string.btn_rename)) },
-                                    onClick = { showMenu = false; showRenameDialog = true }
-                                )
-                                DropdownMenuItem(
-                                    text = { Text(stringResource(R.string.btn_delete)) },
-                                    onClick = { showMenu = false; showDeleteDialog = true }
-                                )
-                            }
-                        }
-                    }
-                }
-            )
-        }
     ) { innerPadding ->
         val bottomPadding = com.example.musicplayer.ui.designsystem.LocalPlaybackBottomPadding.current
-        LazyColumn(
-            contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = bottomPadding + 16.dp),
-            modifier = Modifier.fillMaxSize().padding(innerPadding)
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding),
+            contentAlignment = Alignment.TopCenter
         ) {
-            item {
-                Column(
-                    modifier = Modifier.fillMaxWidth().padding(24.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(110.dp)
-                            .clip(RoundedCornerShape(24.dp))
-                            .background(if (isBuiltIn) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHighest),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = if (isBuiltIn) Icons.Default.Favorite else Icons.Default.QueueMusic,
-                            contentDescription = null,
-                            tint = if (isBuiltIn) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(54.dp)
-                        )
-                    }
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Text(text = displayName, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                    val totalDuration = tracks.sumOf { it.durationMs }
-                    Text(
-                        text = "${tracks.size} songs • ${TimeUtils.formatDuration(totalDuration)}",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+            LazyColumn(
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = bottomPadding + 16.dp),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .widthIn(max = 840.dp)
+            ) {
+                item {
+                    DetailHero(
+                        title = displayName,
+                        meta = stringResource(R.string.playlist_track_count, tracks.size) +
+                            " • " + TimeUtils.formatDuration(tracks.sumOf { it.durationMs }),
+                        artworkUri = tracks.firstOrNull { !it.artworkUri.isNullOrBlank() }?.artworkUri,
+                        icon = if (isBuiltIn) Icons.Default.Favorite else Icons.AutoMirrored.Filled.QueueMusic,
+                        onBack = onNavigateBack,
+                        onPlay = viewModel::playAll,
+                        onShuffle = viewModel::shuffleAll,
+                        actionsEnabled = tracks.isNotEmpty(),
+                        backTag = "playlist_back_button",
+                        playTag = "btn_playlist_play",
+                        shuffleTag = "btn_playlist_shuffle",
+                        topEndAction = if (!isBuiltIn) {
+                            {
+                                Box {
+                                    IconButton(onClick = { showMenu = true }) {
+                                        Icon(Icons.Default.MoreVert, contentDescription = stringResource(R.string.cd_playlist_menu))
+                                    }
+                                    DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
+                                        DropdownMenuItem(
+                                            text = { Text(stringResource(R.string.btn_rename)) },
+                                            onClick = { showMenu = false; showRenameDialog = true }
+                                        )
+                                        DropdownMenuItem(
+                                            text = { Text(stringResource(R.string.btn_delete)) },
+                                            onClick = { showMenu = false; showDeleteDialog = true }
+                                        )
+                                    }
+                                }
+                            }
+                        } else null
                     )
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                        Button(onClick = viewModel::playAll, enabled = tracks.isNotEmpty(), modifier = Modifier.testTag("btn_playlist_play")) {
-                            Icon(Icons.Default.PlayArrow, contentDescription = null)
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(stringResource(R.string.btn_play))
-                        }
-                        FilledTonalButton(onClick = viewModel::shuffleAll, enabled = tracks.isNotEmpty(), modifier = Modifier.testTag("btn_playlist_shuffle")) {
-                            Icon(Icons.Default.Shuffle, contentDescription = null)
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(stringResource(R.string.btn_shuffle))
-                        }
-                    }
                 }
-            }
 
             if (tracks.isEmpty()) {
                 item {
@@ -244,4 +220,5 @@ fun PlaylistDetailScreen(
             }
         }
     }
+}
 }

@@ -51,7 +51,70 @@ class LrclibLyricsSource @Inject constructor() : LyricsSource {
             return@withContext searchLyrics
         }
 
+        // Phase 3: Fallback query with title only if artist was present but yielded no results
+        if (cleanArtist.isNotBlank()) {
+            val titleOnlyLyrics = fetchFromSearchEndpoint(cleanTitle, "")
+            if (titleOnlyLyrics != null && !titleOnlyLyrics.isEmpty) {
+                return@withContext titleOnlyLyrics
+            }
+        }
+
         null
+    }
+
+    suspend fun searchCandidates(title: String, artist: String): List<com.example.musicplayer.domain.model.LyricsCandidate> = withContext(Dispatchers.IO) {
+        val cleanTitle = sanitizeTitle(title)
+        val cleanArtist = sanitizeArtist(artist)
+        if (cleanTitle.isBlank()) return@withContext emptyList()
+
+        val results = mutableListOf<com.example.musicplayer.domain.model.LyricsCandidate>()
+        var connection: HttpURLConnection? = null
+        try {
+            val query = if (cleanArtist.isNotBlank()) "$cleanTitle $cleanArtist" else cleanTitle
+            val url = URL("$BASE_SEARCH_URL?q=" + URLEncoder.encode(query, "UTF-8"))
+            connection = (url.openConnection() as HttpURLConnection).apply {
+                requestMethod = "GET"
+                connectTimeout = TIMEOUT_MS
+                readTimeout = TIMEOUT_MS
+                setRequestProperty("User-Agent", USER_AGENT)
+                setRequestProperty("Accept", "application/json")
+            }
+
+            if (connection.responseCode == HttpURLConnection.HTTP_OK) {
+                val responseText = connection.inputStream.bufferedReader().use(BufferedReader::readText)
+                val array = JSONArray(responseText)
+                for (i in 0 until array.length().coerceAtMost(6)) {
+                    val item = array.getJSONObject(i)
+                    val lyrics = parseLyricsFromJson(item)
+                    if (lyrics != null && !lyrics.isEmpty) {
+                        // JSONObject.optString can stringify JSON null as the literal "null".
+                        // Read optional fields defensively before they reach the picker UI.
+                        val id = LyricsResponseFields.text(item, "id").ifBlank { "${results.size}" }
+                        val trackName = LyricsResponseFields.text(item, "trackName").ifBlank { cleanTitle }
+                        val artistName = LyricsResponseFields.text(item, "artistName").ifBlank { cleanArtist }
+                        val albumName = LyricsResponseFields.text(item, "albumName")
+                        if (trackName.isBlank() || artistName.equals("null", ignoreCase = true)) continue
+                        val duration = (item.optDouble("duration", 0.0) * 1000).toLong()
+                        results.add(
+                            com.example.musicplayer.domain.model.LyricsCandidate(
+                                id = "lrclib_$id",
+                                trackName = trackName,
+                                artistName = artistName,
+                                albumName = albumName,
+                                durationMs = duration,
+                                isSynced = lyrics.isSynced,
+                                sourceName = "LRCLIB",
+                                lyrics = lyrics
+                            )
+                        )
+                    }
+                }
+            }
+        } catch (_: Exception) {
+        } finally {
+            connection?.disconnect()
+        }
+        results
     }
 
     private fun fetchFromGetEndpoint(cleanTitle: String, cleanArtist: String): Lyrics? {
@@ -123,8 +186,8 @@ class LrclibLyricsSource @Inject constructor() : LyricsSource {
     }
 
     private fun parseLyricsFromJson(json: JSONObject): Lyrics? {
-        val synced = json.optString("syncedLyrics", "").trim()
-        val plain = json.optString("plainLyrics", "").trim()
+        val synced = LyricsResponseFields.text(json, "syncedLyrics")
+        val plain = LyricsResponseFields.text(json, "plainLyrics")
 
         val textToParse = when {
             synced.isNotBlank() -> synced

@@ -56,6 +56,9 @@ interface PlaylistDao {
     @Query("DELETE FROM playlist_tracks WHERE playlistId = :playlistId AND trackId = :trackId")
     suspend fun deletePlaylistTrack(playlistId: Long, trackId: String)
 
+    @Query("DELETE FROM playlist_tracks WHERE trackId = :trackId")
+    suspend fun removeTrackFromAllPlaylists(trackId: String)
+
     @Query("DELETE FROM playlist_tracks WHERE playlistId = :playlistId")
     suspend fun clearPlaylistTracks(playlistId: Long)
 
@@ -80,4 +83,10 @@ interface PlaylistDao {
         }
         insertPlaylistTracks(entities)
     }
+
+    @Query("SELECT * FROM playlists")
+    suspend fun getAllPlaylistEntitiesOnce(): List<PlaylistEntity>
+
+    @Query("SELECT * FROM playlist_tracks ORDER BY playlistId ASC, orderIndex ASC")
+    suspend fun getAllPlaylistTracksOnce(): List<PlaylistTrackEntity>
 }

@@ -3,8 +3,10 @@ package com.example.musicplayer.feature.playlist
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
-import android.provider.MediaStore
+import android.os.Build
 import android.widget.Toast
+import java.io.File
+import com.example.musicplayer.core.utils.FileUtils
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -25,6 +27,7 @@ import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.filled.Album
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DeleteOutline
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Lyrics
@@ -68,7 +71,6 @@ import coil.request.ImageRequest
 import com.example.R
 import com.example.musicplayer.core.utils.TimeUtils
 import com.example.musicplayer.domain.model.Track
-import java.io.File
 import java.net.URLEncoder
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -86,7 +88,8 @@ fun SongMenuBottomSheet(
     onGoToAlbum: (() -> Unit)? = null,
     onGoToArtist: (() -> Unit)? = null,
     onRemoveFromPlaylist: (() -> Unit)? = null,
-    onDeleteTrack: (() -> Unit)? = null
+    onDeleteTrack: (() -> Unit)? = null,
+    onEditTrack: (() -> Unit)? = null
 ) {
     val sheetState = rememberModalBottomSheetState()
     val context = LocalContext.current
@@ -111,7 +114,6 @@ fun SongMenuBottomSheet(
                     onClick = {
                         showDeleteConfirmDialog = false
                         onDeleteTrack?.invoke()
-                        deleteAudioFile(context, track)
                         onDismissRequest()
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
@@ -275,6 +277,16 @@ fun SongMenuBottomSheet(
                 )
             }
 
+            // Edit song metadata
+            if (onEditTrack != null) {
+                SongMenuOption(
+                    icon = Icons.Default.Edit,
+                    title = stringResource(R.string.action_edit_track_info),
+                    tag = "menu_edit_track",
+                    onClick = { onEditTrack(); onDismissRequest() }
+                )
+            }
+
             // Song Information / Details
             SongMenuOption(
                 icon = Icons.Default.Info,
@@ -300,7 +312,15 @@ fun SongMenuBottomSheet(
                 title = stringResource(R.string.action_delete_song),
                 tag = "menu_delete_song",
                 iconTint = MaterialTheme.colorScheme.error,
-                onClick = { showDeleteConfirmDialog = true }
+                onClick = {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                        // MediaStore's system confirmation is the authoritative prompt.
+                        onDeleteTrack?.invoke()
+                        onDismissRequest()
+                    } else {
+                        showDeleteConfirmDialog = true
+                    }
+                }
             )
         }
     }
@@ -343,7 +363,7 @@ private fun SongDetailsDialog(
     onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
-    val filePath = remember(track) { resolveFilePath(context, track) }
+    val filePath = remember(track) { FileUtils.resolveTrackPath(context, track) }
     val fileSizeMb = remember(filePath) {
         if (filePath != null) {
             val f = File(filePath)
@@ -413,43 +433,4 @@ private fun shareAudioTrack(context: Context, track: Track) {
     } catch (_: Exception) {
         Toast.makeText(context, "Cannot share file", Toast.LENGTH_SHORT).show()
     }
-}
-
-private fun deleteAudioFile(context: Context, track: Track) {
-    try {
-        if (track.id.startsWith("local:")) {
-            val id = track.id.removePrefix("local:").toLongOrNull()
-            if (id != null) {
-                val uri = Uri.withAppendedPath(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, id.toString())
-                context.contentResolver.delete(uri, null, null)
-                Toast.makeText(context, context.getString(R.string.song_deleted), Toast.LENGTH_SHORT).show()
-            }
-        }
-    } catch (_: Exception) {
-    }
-}
-
-private fun resolveFilePath(context: Context, track: Track): String? {
-    if (!track.id.startsWith("local:")) return track.uri
-    val mediaStoreId = track.id.removePrefix("local:").toLongOrNull() ?: return null
-    val projection = arrayOf(MediaStore.Audio.Media.DATA)
-    val selection = "${MediaStore.Audio.Media._ID} = ?"
-    val selectionArgs = arrayOf(mediaStoreId.toString())
-
-    try {
-        context.contentResolver.query(
-            MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
-            projection,
-            selection,
-            selectionArgs,
-            null
-        )?.use { cursor ->
-            val dataCol = cursor.getColumnIndex(MediaStore.Audio.Media.DATA)
-            if (dataCol != -1 && cursor.moveToFirst()) {
-                return cursor.getString(dataCol)
-            }
-        }
-    } catch (_: Exception) {
-    }
-    return null
 }

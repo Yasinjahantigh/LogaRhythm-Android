@@ -1,11 +1,22 @@
 package com.example.musicplayer.data.room
 
+import androidx.room.ColumnInfo
 import androidx.room.Entity
+import androidx.room.Index
 import androidx.room.PrimaryKey
 import com.example.musicplayer.domain.model.SourceType
 import com.example.musicplayer.domain.model.Track
 
-@Entity(tableName = "tracks")
+@Entity(
+    tableName = "tracks",
+    indices = [
+        Index("artist"),
+        Index("album"),
+        Index("folder"),
+        Index("genre"),
+        Index("dateAdded")
+    ]
+)
 data class TrackEntity(
     @PrimaryKey
     val id: String,
@@ -17,8 +28,11 @@ data class TrackEntity(
     val sourceType: String,
     val uri: String,
     val dateModified: Long = 0L,
+    @ColumnInfo(defaultValue = "0") val dateAdded: Long = 0L,
     val folder: String = "",
-    val genre: String = ""
+    val genre: String = "",
+    @ColumnInfo(defaultValue = "''") val albumArtist: String = "",
+    @ColumnInfo(defaultValue = "''") val filePath: String = ""
 ) {
     fun toDomain(): Track = Track(
         id = id,
@@ -30,8 +44,11 @@ data class TrackEntity(
         sourceType = if (sourceType == SourceType.LOCAL.prefix) SourceType.LOCAL else SourceType.WEB,
         uri = uri,
         dateModified = dateModified,
+        dateAdded = dateAdded,
         folder = folder,
-        genre = genre
+        genre = genre,
+        albumArtist = albumArtist,
+        filePath = filePath
     )
 
     companion object {
@@ -45,8 +62,11 @@ data class TrackEntity(
             sourceType = track.sourceType.prefix,
             uri = track.uri,
             dateModified = track.dateModified,
+            dateAdded = track.dateAdded,
             folder = track.folder,
-            genre = track.genre
+            genre = track.genre,
+            albumArtist = track.albumArtist,
+            filePath = track.filePath
         )
     }
 }

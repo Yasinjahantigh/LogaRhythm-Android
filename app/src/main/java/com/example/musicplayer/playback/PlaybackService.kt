@@ -8,11 +8,14 @@ import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.analytics.AnalyticsListener
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
 import com.example.musicplayer.MainActivity
+import com.example.musicplayer.data.datastore.PreferencesManager
+import com.example.musicplayer.data.room.MusicDao
 import com.example.musicplayer.widget.MusicWidgetUpdater
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
@@ -37,7 +40,14 @@ class PlaybackService : MediaSessionService() {
     @Inject
     lateinit var sleepTimerManager: SleepTimerManager
 
+    @Inject
+    lateinit var preferencesManager: PreferencesManager
+
+    @Inject
+    lateinit var musicDao: MusicDao
+
     private var mediaSession: MediaSession? = null
+    private var enhancer: PlaybackEnhancer? = null
 
     @OptIn(UnstableApi::class)
     override fun onCreate() {
@@ -48,10 +58,21 @@ class PlaybackService : MediaSessionService() {
             .setUsage(C.USAGE_MEDIA)
             .build()
 
+        // Local files never stall on a network, so a short buffer is plenty and keeps RAM low.
+        val loadControl = DefaultLoadControl.Builder()
+            .setBufferDurationsMs(10_000, 20_000, 1_000, 2_000)
+            .build()
+
         val player = ExoPlayer.Builder(this)
             .setAudioAttributes(audioAttributes, true)
             .setHandleAudioBecomingNoisy(true)
+            .setLoadControl(loadControl)
+            // Keeps the CPU awake for local playback with the screen off (no stutter on idle devices).
+            .setWakeMode(C.WAKE_MODE_LOCAL)
             .build()
+
+        enhancer = PlaybackEnhancer(this, player, preferencesManager, musicDao, sleepTimerManager)
+            .also { it.start() }
 
         // Sync player events to Glance Home Screen Widget
         player.addListener(object : Player.Listener {
@@ -144,6 +165,8 @@ class PlaybackService : MediaSessionService() {
     }
 
     override fun onDestroy() {
+        enhancer?.release()
+        enhancer = null
         sleepTimerManager.detachPlayer()
         equalizerManager.release()
         mediaSession?.run {

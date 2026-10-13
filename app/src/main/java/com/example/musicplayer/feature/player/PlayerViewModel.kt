@@ -3,16 +3,22 @@ package com.example.musicplayer.feature.player
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.musicplayer.data.datastore.PreferencesManager
+import com.example.musicplayer.domain.ai.MusicAiEngine
 import com.example.musicplayer.domain.model.Track
 import com.example.musicplayer.domain.repository.PlaylistRepository
+import com.example.musicplayer.domain.repository.StatsRepository
+import com.example.musicplayer.domain.taste.TasteProfile
+import com.example.musicplayer.domain.repository.TrackRepository
 import com.example.musicplayer.playback.PlayerController
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -23,6 +29,8 @@ import javax.inject.Inject
 class PlayerViewModel @Inject constructor(
     private val playerController: PlayerController,
     private val playlistRepository: PlaylistRepository,
+    private val trackRepository: TrackRepository,
+    private val statsRepository: StatsRepository,
     preferencesManager: PreferencesManager
 ) : ViewModel() {
 
@@ -98,10 +106,50 @@ class PlayerViewModel @Inject constructor(
     fun setSleepTimerEndOfTrack() = playerController.setSleepTimerEndOfTrack()
     fun cancelSleepTimer() = playerController.cancelSleepTimer()
 
+    /** Starts a relevance-first radio queue without losing the current song's playback position. */
+    fun startTrackRadio(onResult: (recommendedCount: Int) -> Unit = {}) {
+        val seed = currentTrack.value ?: return
+        viewModelScope.launch {
+            val library = trackRepository.getAllTracks().first()
+            // Radio learns from real listening: songs heard together rise, skipped songs sink.
+            val favoriteIds = playlistRepository.getPlaylistTracks(1L).first().map { it.id }.toSet()
+            val profile = TasteProfile.build(statsRepository.getAllPlayEvents().first(), favoriteIds)
+            val recommendations = MusicAiEngine.recommendNextTracks(
+                currentTrack = seed,
+                allTracks = library,
+                limit = 12,
+                profile = profile
+            )
+            if (recommendations.isNotEmpty()) playerController.playRadio(seed, recommendations)
+            onResult(recommendations.size)
+        }
+    }
+
     fun toggleFavorite() {
         val track = currentTrack.value ?: return
         viewModelScope.launch {
             playlistRepository.toggleFavorite(track.id)
+        }
+    }
+
+    fun updateTrackMetadata(
+        id: String,
+        title: String,
+        artist: String,
+        album: String,
+        genre: String,
+        onDone: (Track?) -> Unit = {}
+    ) {
+        viewModelScope.launch {
+            val updated = try {
+                trackRepository.updateTrackMetadata(id, title, artist, album, genre)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                null
+            }
+            if (updated != null) playerController.updateTrackInPlayback(updated)
+            onDone(updated)
         }
     }
 }
