@@ -19,14 +19,7 @@ object WidgetArtworkUtils {
     suspend fun loadThumbnail(context: Context, uri: Uri?): Bitmap? = withContext(Dispatchers.IO) {
         if (uri == null) return@withContext null
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            try {
-                return@withContext context.contentResolver.loadThumbnail(uri, Size(160, 160), null)
-            } catch (_: Exception) {
-                // Fall back to MediaMetadataRetriever
-            }
-        }
-
+        // 1. Try embedded picture via MediaMetadataRetriever
         try {
             val retriever = MediaMetadataRetriever()
             retriever.setDataSource(context, uri)
@@ -41,21 +34,38 @@ object WidgetArtworkUtils {
                 }
                 BitmapFactory.decodeByteArray(picture, 0, picture.size, options)
 
-                val reqSize = 160
+                val reqSize = 256
                 var sampleSize = 1
-                while (options.outWidth / sampleSize > reqSize || options.outHeight / sampleSize > reqSize) {
+                while (options.outWidth / (sampleSize * 2) >= reqSize && options.outHeight / (sampleSize * 2) >= reqSize) {
                     sampleSize *= 2
                 }
 
                 val decodeOptions = BitmapFactory.Options().apply {
                     inSampleSize = sampleSize
-                    inPreferredConfig = Bitmap.Config.RGB_565
+                    inPreferredConfig = Bitmap.Config.ARGB_8888
                 }
-                return@withContext BitmapFactory.decodeByteArray(picture, 0, picture.size, decodeOptions)
+                val bitmap = BitmapFactory.decodeByteArray(picture, 0, picture.size, decodeOptions)
+                if (bitmap != null) return@withContext bitmap
             }
         } catch (_: Exception) {
             // Cannot extract embedded picture
         }
+
+        // 2. Fall back to scoped storage loadThumbnail on Android Q+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            try {
+                return@withContext context.contentResolver.loadThumbnail(uri, Size(256, 256), null)
+            } catch (_: Exception) {
+                // Fall back to direct stream decode
+            }
+        }
+
+        // 3. Fall back to content resolver stream
+        try {
+            context.contentResolver.openInputStream(uri)?.use { stream ->
+                return@withContext BitmapFactory.decodeStream(stream)
+            }
+        } catch (_: Exception) {}
 
         null
     }

@@ -38,10 +38,15 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.outlined.FavoriteBorder
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -68,6 +73,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -158,6 +164,7 @@ fun FullPlayerScreen(
     val isFavorite by viewModel.isFavorite.collectAsStateWithLifecycle()
     val playbackSpeed by viewModel.playbackSpeed.collectAsStateWithLifecycle()
     val sleepTimerRemainingMs by viewModel.sleepTimerRemainingMs.collectAsStateWithLifecycle()
+    val sleepTimerRemainingTracks by viewModel.sleepTimerRemainingTracks.collectAsStateWithLifecycle()
     val isSleepTimerEndOfTrack by viewModel.isSleepTimerEndOfTrack.collectAsStateWithLifecycle()
     val playlists by playlistViewModel.playlists.collectAsStateWithLifecycle()
 
@@ -172,6 +179,7 @@ fun FullPlayerScreen(
     var editTrackSaving by remember { mutableStateOf(false) }
     var isVinylMode by remember { mutableStateOf(false) }
     var showRemainingTime by remember { mutableStateOf(false) }
+    var showFullArtworkDialog by remember { mutableStateOf(false) }
 
     val track = currentTrack
     val context = LocalContext.current
@@ -191,8 +199,10 @@ fun FullPlayerScreen(
     if (showSleepTimerDialog) {
         SleepTimerDialog(
             remainingMs = sleepTimerRemainingMs,
+            remainingTracks = sleepTimerRemainingTracks,
             isEndOfTrack = isSleepTimerEndOfTrack,
             onSetTimerMinutes = viewModel::setSleepTimer,
+            onSetTimerTracks = viewModel::setSleepTimerTracks,
             onSetEndOfTrack = viewModel::setSleepTimerEndOfTrack,
             onCancelTimer = viewModel::cancelSleepTimer,
             onDismiss = { showSleepTimerDialog = false }
@@ -264,6 +274,13 @@ fun FullPlayerScreen(
         )
     }
 
+    if (showFullArtworkDialog && track != null) {
+        FullArtworkDialog(
+            track = track,
+            onDismiss = { showFullArtworkDialog = false }
+        )
+    }
+
     val scheme = MaterialTheme.colorScheme
     val surfaceColor = scheme.surface
     var dynamicArtworkColor by remember { mutableStateOf(surfaceColor) }
@@ -282,9 +299,25 @@ fun FullPlayerScreen(
         animationSpec = tween(durationMillis = 700),
         label = "player_bg_color"
     )
+    // The player surface itself follows the song: artwork color blended into the theme surface
+    // so the whole screen — not just the glow — matches the cover while text stays readable.
+    val playerSurfaceColor = remember(animatedBgColor, surfaceColor) {
+        val blended = androidx.core.graphics.ColorUtils.blendARGB(
+            surfaceColor.toArgb(), animatedBgColor.toArgb(), 0.28f
+        )
+        Color(blended)
+    }
 
     val albumText = track?.album.cleanMetaOrNull()
     val timerLabel: String? = when {
+        sleepTimerRemainingTracks != null -> {
+            val count = sleepTimerRemainingTracks ?: 0
+            if (count == 1) {
+                stringResource(R.string.sleep_timer_end_of_track)
+            } else {
+                stringResource(R.string.sleep_timer_tracks_remaining, count)
+            }
+        }
         sleepTimerRemainingMs == null -> null
         isSleepTimerEndOfTrack -> stringResource(R.string.sleep_timer_end_of_track)
         else -> TimeUtils.formatDuration(sleepTimerRemainingMs ?: 0L)
@@ -333,6 +366,7 @@ fun FullPlayerScreen(
                             glowColor = animatedBgColor,
                             onSwipeNext = viewModel::next,
                             onSwipePrevious = viewModel::previous,
+                            onArtworkClick = { showFullArtworkDialog = true },
                             modifier = Modifier.size(artworkSize)
                         )
                     }
@@ -345,7 +379,7 @@ fun FullPlayerScreen(
         modifier = modifier
             .fillMaxSize()
             .testTag("full_player_screen"),
-        color = scheme.surface,
+        color = playerSurfaceColor,
         contentColor = scheme.onSurface
     ) {
         Box(modifier = Modifier.fillMaxSize()) {
@@ -396,7 +430,12 @@ fun FullPlayerScreen(
                                 shareTrack(context, track)
                             }
                         },
-                        onEditSongDetails = { showEditTrackDialog = true }
+                        onEditSongDetails = { showEditTrackDialog = true },
+                        onHideSong = {
+                            viewModel.hideCurrentTrack { hidden ->
+                                Toast.makeText(context, context.getString(R.string.track_hidden_toast, hidden.title), Toast.LENGTH_SHORT).show()
+                            }
+                        }
                     )
 
                     if (isLandscapeLayout) {
@@ -571,6 +610,7 @@ private fun PlayerArtwork(
     glowColor: Color,
     onSwipeNext: () -> Unit,
     onSwipePrevious: () -> Unit,
+    onArtworkClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val scope = rememberCoroutineScope()
@@ -611,7 +651,7 @@ private fun PlayerArtwork(
             contentAlignment = Alignment.Center
         ) {
             if (isVinylMode) {
-                CuteVinylTurntable(track, isPlaying, Modifier.fillMaxSize())
+                CuteVinylTurntable(track, isPlaying, Modifier.fillMaxSize(), onArtworkClick = onArtworkClick)
             } else {
                 ArtworkImage(
                     uri = track?.artworkUri,
@@ -627,6 +667,7 @@ private fun PlayerArtwork(
                             ambientColor = glowColor.copy(alpha = 0.6f),
                             spotColor = glowColor
                         )
+                        .clickable(onClick = onArtworkClick)
                 )
             }
         }
@@ -752,7 +793,7 @@ private fun FullPlayerSongDetailsDialog(
     val fileSizeMb = remember(filePath) {
         if (filePath != null) {
             val f = File(filePath)
-            if (f.exists()) String.format("%.2f MB", f.length().toDouble() / (1024 * 1024)) else null
+            if (f.exists()) String.format(Locale.US, "%.2f MB", f.length().toDouble() / (1024 * 1024)) else null
         } else null
     }
 
@@ -821,5 +862,99 @@ private fun shareTrack(context: Context, track: Track) {
         context.startActivity(Intent.createChooser(shareIntent, context.getString(R.string.action_share_song)))
     } catch (_: Exception) {
         Toast.makeText(context, "Cannot share file", Toast.LENGTH_SHORT).show()
+    }
+}
+
+@Composable
+private fun FullArtworkDialog(
+    track: Track?,
+    onDismiss: () -> Unit
+) {
+    if (track == null) return
+    val title = track.title.cleanMetaOrNull() ?: stringResource(R.string.unknown_title)
+    val artist = track.artist.cleanMetaOrNull() ?: stringResource(R.string.unknown_artist)
+    val album = track.album.cleanMetaOrNull()
+
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(
+            usePlatformDefaultWidth = false
+        )
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.94f))
+                .clickable(onClick = onDismiss),
+            contentAlignment = Alignment.Center
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(28.dp)
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                        onClick = {}
+                    ),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .widthIn(max = 480.dp)
+                        .aspectRatio(1f)
+                        .shadow(32.dp, RoundedCornerShape(28.dp), spotColor = Color.White.copy(alpha = 0.25f))
+                        .clip(RoundedCornerShape(28.dp)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    ArtworkImage(
+                        uri = track.artworkUri,
+                        fallbackKey = title,
+                        shape = RoundedCornerShape(28.dp),
+                        glyphSize = 120.sp,
+                        contentDescription = stringResource(R.string.cd_artwork, title),
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(24.dp))
+
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleLarge,
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold,
+                    textAlign = TextAlign.Center,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+
+                Text(
+                    text = if (!album.isNullOrBlank()) "$artist · $album" else artist,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = Color.White.copy(alpha = 0.75f),
+                    textAlign = TextAlign.Center,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(top = 4.dp)
+                )
+
+                Spacer(modifier = Modifier.height(24.dp))
+
+                IconButton(
+                    onClick = onDismiss,
+                    modifier = Modifier
+                        .size(48.dp)
+                        .background(Color.White.copy(alpha = 0.16f), CircleShape)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Close,
+                        contentDescription = stringResource(R.string.cd_back),
+                        tint = Color.White
+                    )
+                }
+            }
+        }
     }
 }

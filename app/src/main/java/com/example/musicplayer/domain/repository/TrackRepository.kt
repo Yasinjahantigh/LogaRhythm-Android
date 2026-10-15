@@ -28,4 +28,10 @@ interface TrackRepository {
     suspend fun refreshTracks()
     suspend fun updateTrackMetadata(id: String, title: String, artist: String, album: String, genre: String): Track?
     suspend fun deleteTrack(track: Track): Boolean
+    fun getHiddenTracks(): Flow<List<Track>>
+    fun getAllDeviceFolderNames(): Flow<List<String>>
+    suspend fun hideTrack(trackId: String)
+    suspend fun unhideTrack(trackId: String)
+    suspend fun unhideAllTracks()
+    suspend fun excludeFolder(folder: String)
 }

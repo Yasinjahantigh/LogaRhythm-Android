@@ -33,7 +33,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.R
 
-enum class SortField(@StringRes val titleRes: Int) {
+enum class SortField(@param:StringRes val titleRes: Int) {
     TITLE(R.string.sort_title),
     ARTIST(R.string.sort_artist),
     ALBUM(R.string.sort_album),
@@ -41,7 +41,7 @@ enum class SortField(@StringRes val titleRes: Int) {
     DURATION(R.string.sort_duration)
 }
 
-enum class SortDirection(@StringRes val titleRes: Int) {
+enum class SortDirection(@param:StringRes val titleRes: Int) {
     ASCENDING(R.string.sort_ascending),
     DESCENDING(R.string.sort_descending)
 }

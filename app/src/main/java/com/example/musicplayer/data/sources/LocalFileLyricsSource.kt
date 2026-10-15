@@ -24,7 +24,7 @@ import javax.inject.Singleton
  */
 @Singleton
 class LocalFileLyricsSource @Inject constructor(
-    @ApplicationContext private val context: Context,
+    @param:ApplicationContext private val context: Context,
     private val audioFileTagWriter: AudioFileTagWriter
 ) : LyricsSource {
 

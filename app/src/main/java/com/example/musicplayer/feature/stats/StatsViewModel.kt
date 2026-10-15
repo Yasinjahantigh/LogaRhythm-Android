@@ -11,6 +11,7 @@ import com.example.musicplayer.domain.model.TrackStat
 import com.example.musicplayer.domain.repository.PlaylistRepository
 import com.example.musicplayer.domain.repository.StatsRepository
 import com.example.musicplayer.playback.PlayerController
+import com.example.musicplayer.domain.repository.TrackRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -33,6 +34,7 @@ enum class StatsTab {
 class StatsViewModel @Inject constructor(
     private val statsRepository: StatsRepository,
     private val playlistRepository: PlaylistRepository,
+    private val trackRepository: TrackRepository,
     private val playerController: PlayerController
 ) : ViewModel() {
 
@@ -118,6 +120,12 @@ class StatsViewModel @Inject constructor(
     fun createPlaylist(name: String) {
         viewModelScope.launch {
             playlistRepository.createPlaylist(name)
+        }
+    }
+
+    fun hideTrack(track: Track) {
+        viewModelScope.launch {
+            trackRepository.hideTrack(track.id)
         }
     }
 }

@@ -103,7 +103,11 @@ fun SearchScreen(
             } else null,
             onGoToArtist = if (menuTrack.artist.isNotBlank() && menuTrack.artist != "Unknown Artist") {
                 { onNavigateToArtist(menuTrack.artist) }
-            } else null
+            } else null,
+            onHideTrack = {
+                viewModel.hideTrack(menuTrack)
+                Toast.makeText(context, context.getString(R.string.track_hidden_toast, menuTrack.title), Toast.LENGTH_SHORT).show()
+            }
         )
     }
 

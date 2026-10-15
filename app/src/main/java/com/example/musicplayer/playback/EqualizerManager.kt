@@ -18,6 +18,7 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
+@Suppress("DEPRECATION")
 class EqualizerManager @Inject constructor(
     private val preferencesManager: PreferencesManager
 ) {

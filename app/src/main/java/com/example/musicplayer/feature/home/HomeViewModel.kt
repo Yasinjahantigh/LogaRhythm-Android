@@ -267,4 +267,13 @@ class HomeViewModel @Inject constructor(
             }
         }
     }
+
+    fun hideTrack(track: Track) {
+        viewModelScope.launch {
+            if (playerController.currentTrack.value?.id == track.id) {
+                playerController.next()
+            }
+            trackRepository.hideTrack(track.id)
+        }
+    }
 }

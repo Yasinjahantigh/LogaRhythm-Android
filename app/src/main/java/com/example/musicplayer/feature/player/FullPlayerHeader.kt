@@ -19,6 +19,7 @@ import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.OpenInBrowser
 import androidx.compose.material.icons.filled.PlaylistAddCheck
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -58,6 +59,7 @@ fun FullPlayerHeader(
     onOpenSongDetails: () -> Unit,
     onShareSong: () -> Unit,
     onEditSongDetails: () -> Unit,
+    onHideSong: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     var showMoreMenu by remember { mutableStateOf(false) }
@@ -170,6 +172,13 @@ fun FullPlayerHeader(
                     leadingIcon = { Icon(Icons.Default.Share, contentDescription = null) },
                     onClick = { showMoreMenu = false; onShareSong() }
                 )
+                if (onHideSong != null) {
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.action_hide_track)) },
+                        leadingIcon = { Icon(Icons.Default.VisibilityOff, contentDescription = null) },
+                        onClick = { showMoreMenu = false; onHideSong() }
+                    )
+                }
             }
         }
     }

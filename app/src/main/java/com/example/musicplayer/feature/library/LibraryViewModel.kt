@@ -36,7 +36,7 @@ class LibraryViewModel @Inject constructor(
     private val trackRepository: TrackRepository,
     private val playlistRepository: PlaylistRepository,
     private val playerController: PlayerController,
-    @ApplicationContext private val context: Context
+    @param:ApplicationContext private val context: Context
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(
@@ -209,13 +209,17 @@ class LibraryViewModel @Inject constructor(
     fun checkPermissionAndLoad() {
         val granted = PermissionUtils.hasAudioPermission(context)
         _uiState.update { it.copy(hasPermission = granted) }
-        if (granted) refresh(isPullToRefresh = false)
-        else _uiState.update { it.copy(isLoading = false) }
+        // No auto-scan here on purpose: the library comes from the Room snapshot immediately
+        // (single-shot), and LibrarySync refreshes only when the MediaStore stamp actually changed
+        // or the user pulls to refresh. The old behavior ran a full MediaStore query + diff on
+        // every cold start, which is what made launch feel heavy on weak phones.
+        if (!granted) _uiState.update { it.copy(isLoading = false) }
     }
 
     fun onPermissionResult(isGranted: Boolean) {
         _uiState.update { it.copy(hasPermission = isGranted) }
-        if (isGranted) refresh(isPullToRefresh = false)
+        // Same as above: LibrarySync (forced refresh from onboarding) owns scanning now.
+        if (!isGranted) _uiState.update { it.copy(isLoading = false) }
     }
 
     fun refresh(isPullToRefresh: Boolean = true) {
@@ -236,6 +240,15 @@ class LibraryViewModel @Inject constructor(
             } finally {
                 _uiState.update { it.copy(isRefreshing = false, isLoading = false) }
             }
+        }
+    }
+
+    fun hideTrack(track: Track) {
+        viewModelScope.launch {
+            if (currentTrack.value?.id == track.id) {
+                playerController.next()
+            }
+            trackRepository.hideTrack(track.id)
         }
     }
 }

@@ -187,7 +187,13 @@ fun LibraryScreen(
             } else null,
             onGoToArtist = if (track.artist.isNotBlank() && track.artist != "Unknown Artist") {
                 { onNavigateToArtist(track.artist) }
-            } else null
+            } else null,
+            onHideTrack = {
+                viewModel.hideTrack(track)
+                scope.launch {
+                    snackbarHostState.showSnackbar(context.getString(R.string.track_hidden_toast, track.title))
+                }
+            }
         )
     }
 

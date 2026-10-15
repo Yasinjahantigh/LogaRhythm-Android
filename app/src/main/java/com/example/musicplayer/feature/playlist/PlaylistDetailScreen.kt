@@ -145,6 +145,12 @@ fun PlaylistDetailScreen(
                 scope.launch {
                     snackbarHostState.showSnackbar(context.getString(R.string.removed_from_playlist))
                 }
+            },
+            onHideTrack = {
+                viewModel.hideTrack(track)
+                scope.launch {
+                    snackbarHostState.showSnackbar(context.getString(R.string.track_hidden_toast, track.title))
+                }
             }
         )
     }

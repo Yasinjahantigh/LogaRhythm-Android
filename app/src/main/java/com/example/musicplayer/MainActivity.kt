@@ -82,23 +82,35 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        // Synchronous bootstrap: SharedPreferences mirror written by PreferencesManager, so the
+        // first composed frame already knows the right destination — no onboarding flash.
+        val onboardingBootstrap = getSharedPreferences(
+            PreferencesManager.BOOTSTRAP_PREFS, Context.MODE_PRIVATE
+        ).getBoolean(PreferencesManager.BOOTSTRAP_ONBOARDING_KEY, false)
         setContent {
             val themeMode by preferencesManager.themeMode.collectAsStateWithLifecycle(initialValue = "system")
-            val colorSource by preferencesManager.colorSource.collectAsStateWithLifecycle(initialValue = "fixed_color")
+            val colorSource by preferencesManager.colorSource.collectAsStateWithLifecycle(initialValue = "album_art")
             val cornerRoundness by preferencesManager.cornerRoundness.collectAsStateWithLifecycle(initialValue = "standard")
-            val isOnboardingCompleted by preferencesManager.isOnboardingCompleted.collectAsStateWithLifecycle(initialValue = false)
+            // Starts from the sync bootstrap instead of a hardcoded `false`, so returning users
+            // never see the first-run menu for a few hundred ms while DataStore loads.
+            val isOnboardingCompleted by preferencesManager.isOnboardingCompleted.collectAsStateWithLifecycle(
+                initialValue = onboardingBootstrap
+            )
             val currentTrack by playerController.currentTrack.collectAsStateWithLifecycle()
             val scope = rememberCoroutineScope()
 
             var seedArtworkColor by remember { mutableStateOf<Color?>(null) }
 
+            // Decoded once per song (cached, 64px, debounced): drives the whole-app theme in
+            // `album_art` mode (now the default) and tints the mini/full player chrome.
             LaunchedEffect(currentTrack?.artworkUri, colorSource) {
-                if (colorSource == "album_art" && currentTrack?.artworkUri != null) {
-                    val extracted = ArtworkColorExtractor.extractDominantColor(
+                val uri = currentTrack?.artworkUri
+                if (uri != null) {
+                    kotlinx.coroutines.delay(120)
+                    seedArtworkColor = ArtworkColorExtractor.extractDominantColor(
                         this@MainActivity,
-                        currentTrack?.artworkUri
+                        uri
                     )
-                    seedArtworkColor = extracted
                 } else {
                     seedArtworkColor = null
                 }
@@ -122,7 +134,7 @@ class MainActivity : ComponentActivity() {
                             }
                         )
                     } else {
-                        MainScreen()
+                        MainScreen(seedTint = seedArtworkColor)
                     }
                 }
             }

@@ -19,6 +19,7 @@ interface PlayerController {
     // Phase 7: Extras
     val playbackSpeed: StateFlow<Float>
     val sleepTimerRemainingMs: StateFlow<Long?>
+    val sleepTimerRemainingTracks: StateFlow<Int?>
     val isSleepTimerEndOfTrack: StateFlow<Boolean>
     val equalizerState: StateFlow<EqualizerState>
 
@@ -32,6 +33,7 @@ interface PlayerController {
     fun seekTo(positionMs: Long)
     fun toggleShuffle()
     fun setShuffleEnabled(enabled: Boolean)
+    fun reshuffleQueue()
     fun cycleRepeat()
     fun setRepeatMode(mode: Int)
 
@@ -46,6 +48,7 @@ interface PlayerController {
     // Phase 7: Extras
     fun setPlaybackSpeed(speed: Float)
     fun setSleepTimer(minutes: Int)
+    fun setSleepTimerTracks(tracks: Int)
     fun setSleepTimerEndOfTrack()
     fun cancelSleepTimer()
     fun setEqualizerEnabled(enabled: Boolean)

@@ -44,7 +44,7 @@ sealed interface TagWriteOutcome {
  */
 @Singleton
 class AudioFileTagWriter @Inject constructor(
-    @ApplicationContext private val context: Context
+    @param:ApplicationContext private val context: Context
 ) {
 
     /** Compatibility wrapper used by the repository: fields equal to [track]'s current values are left alone. */

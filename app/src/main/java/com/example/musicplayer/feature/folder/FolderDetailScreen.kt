@@ -19,8 +19,10 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.FolderOff
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Shuffle
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -28,8 +30,10 @@ import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -71,7 +75,34 @@ fun FolderDetailScreen(
 
     var selectedTrackForMenu by remember { mutableStateOf<Track?>(null) }
     var showAddToPlaylistDialog by remember { mutableStateOf(false) }
+    var showExcludeDialog by remember { mutableStateOf(false) }
     val context = LocalContext.current
+
+    if (showExcludeDialog) {
+        AlertDialog(
+            onDismissRequest = { showExcludeDialog = false },
+            title = { Text(stringResource(R.string.dialog_exclude_folder_title)) },
+            text = { Text(stringResource(R.string.dialog_exclude_folder_confirm, viewModel.folderName)) },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showExcludeDialog = false
+                        viewModel.excludeFolder()
+                        Toast.makeText(context, context.getString(R.string.folder_excluded_toast, viewModel.folderName), Toast.LENGTH_SHORT).show()
+                        onNavigateBack()
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Text(stringResource(R.string.settings_folder_excluded_badge))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showExcludeDialog = false }) {
+                    Text(stringResource(R.string.btn_cancel))
+                }
+            }
+        )
+    }
 
     if (selectedTrackForMenu != null) {
         val menuTrack = selectedTrackForMenu!!
@@ -80,7 +111,11 @@ fun FolderDetailScreen(
             onDismissRequest = { selectedTrackForMenu = null },
             onPlayNext = { viewModel.playNext(menuTrack) },
             onAddToQueue = { viewModel.addToQueue(menuTrack) },
-            onAddToPlaylist = { showAddToPlaylistDialog = true }
+            onAddToPlaylist = { showAddToPlaylistDialog = true },
+            onHideTrack = {
+                viewModel.hideTrack(menuTrack)
+                Toast.makeText(context, context.getString(R.string.track_hidden_toast, menuTrack.title), Toast.LENGTH_SHORT).show()
+            }
         )
     }
 
@@ -110,19 +145,34 @@ fun FolderDetailScreen(
             modifier = Modifier.fillMaxSize().padding(innerPadding)
         ) {
             item {
-                DetailHero(
-                    title = viewModel.folderName,
-                    meta = stringResource(R.string.folder_track_count, tracks.size),
-                    artworkUri = tracks.firstOrNull { !it.artworkUri.isNullOrBlank() }?.artworkUri,
-                    icon = Icons.Default.Folder,
-                    onBack = onNavigateBack,
-                    onPlay = viewModel::playAll,
-                    onShuffle = viewModel::shuffleAll,
-                    actionsEnabled = tracks.isNotEmpty(),
-                    backTag = "folder_back_button",
-                    playTag = "folder_play_button",
-                    shuffleTag = "folder_shuffle_button"
-                )
+                Column {
+                    DetailHero(
+                        title = viewModel.folderName,
+                        meta = stringResource(R.string.folder_track_count, tracks.size),
+                        artworkUri = tracks.firstOrNull { !it.artworkUri.isNullOrBlank() }?.artworkUri,
+                        icon = Icons.Default.Folder,
+                        onBack = onNavigateBack,
+                        onPlay = viewModel::playAll,
+                        onShuffle = viewModel::shuffleAll,
+                        actionsEnabled = tracks.isNotEmpty(),
+                        backTag = "folder_back_button",
+                        playTag = "folder_play_button",
+                        shuffleTag = "folder_shuffle_button"
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 6.dp),
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        OutlinedButton(
+                            onClick = { showExcludeDialog = true },
+                            modifier = Modifier.testTag("folder_exclude_button")
+                        ) {
+                            Icon(Icons.Filled.FolderOff, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text(stringResource(R.string.action_exclude_folder))
+                        }
+                    }
+                }
             }
 
             if (tracks.isEmpty()) {

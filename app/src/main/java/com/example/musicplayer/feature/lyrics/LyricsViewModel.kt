@@ -13,6 +13,7 @@ import com.example.musicplayer.domain.repository.LyricsRepository
 import com.example.musicplayer.playback.PlayerController
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import java.util.Locale
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -35,7 +36,7 @@ class LyricsViewModel @Inject constructor(
     private val playerController: PlayerController,
     private val lyricsRepository: LyricsRepository,
     private val preferencesManager: PreferencesManager,
-    @ApplicationContext private val context: Context
+    @param:ApplicationContext private val context: Context
 ) : ViewModel() {
 
     val currentTrack: StateFlow<Track?> = playerController.currentTrack
@@ -249,7 +250,7 @@ class LyricsViewModel @Inject constructor(
                 val min = line.timestampMs / 60_000L
                 val sec = (line.timestampMs % 60_000L) / 1_000L
                 val frac = (line.timestampMs % 1_000L) / 10L
-                String.format("[%02d:%02d.%02d]%s", min, sec, frac, line.text)
+                String.format(Locale.US, "[%02d:%02d.%02d]%s", min, sec, frac, line.text)
             }
         } else {
             lyrics.plainText.orEmpty()
@@ -301,7 +302,7 @@ class LyricsViewModel @Inject constructor(
                 val min = line.timestampMs / 60_000L
                 val sec = (line.timestampMs % 60_000L) / 1_000L
                 val frac = (line.timestampMs % 1_000L) / 10L
-                String.format("[%02d:%02d.%02d]%s", min, sec, frac, line.text)
+                String.format(Locale.US, "[%02d:%02d.%02d]%s", min, sec, frac, line.text)
             }
         } else {
             candidate.lyrics.plainText.orEmpty()

@@ -12,6 +12,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 @HiltViewModel
@@ -63,4 +64,13 @@ class GenreDetailViewModel @Inject constructor(
 
     fun playNext(track: Track) = playerController.playNext(track)
     fun addToQueue(track: Track) = playerController.addToQueue(track)
+
+    fun hideTrack(track: Track) {
+        viewModelScope.launch {
+            if (currentTrack.value?.id == track.id) {
+                playerController.next()
+            }
+            trackRepository.hideTrack(track.id)
+        }
+    }
 }

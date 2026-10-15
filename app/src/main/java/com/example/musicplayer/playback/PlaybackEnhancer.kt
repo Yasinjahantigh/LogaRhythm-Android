@@ -4,16 +4,23 @@ import android.content.Context
 import android.media.AudioDeviceCallback
 import android.media.AudioDeviceInfo
 import android.media.AudioManager
+import android.media.audiofx.LoudnessEnhancer
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
+import android.util.Log
 import androidx.annotation.OptIn
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
+import androidx.media3.common.Metadata
 import androidx.media3.common.Player
 import androidx.media3.common.Tracks
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.analytics.AnalyticsListener
+import androidx.media3.extractor.metadata.id3.TextInformationFrame
+import androidx.media3.extractor.metadata.mp4.MdtaMetadataEntry
+import androidx.media3.extractor.metadata.vorbis.VorbisComment
 import com.example.musicplayer.data.datastore.PreferencesManager
 import com.example.musicplayer.data.room.MusicDao
 import com.example.musicplayer.data.room.ResumePositionEntity
@@ -31,7 +38,9 @@ import kotlinx.coroutines.withContext
  *
  *  - fade out / fade in around song changes (a cheap alternative to overlapping crossfade, which
  *    would need a second decoder and audio track),
- *  - ReplayGain read from the stream's own tags (attenuation only),
+ *  - ReplayGain read from the stream's own tags (ID3 TXXX, Vorbis comments, MP4 freeform, R128):
+ *    attenuation rides on `player.volume`, boost (up to +6 dB) on `LoudnessEnhancer`, plus a user
+ *    preamp on top,
  *  - skip silence,
  *  - gentle fade-out for the last seconds of the sleep timer,
  *  - per-file position memory for long recordings,
@@ -62,6 +71,9 @@ class PlaybackEnhancer(
             AudioDeviceInfo.TYPE_BLUETOOTH_A2DP,
             TYPE_BLE_HEADSET
         )
+        val GAIN_KEYS = listOf(
+            "replaygain_track_gain", "replaygain_album_gain", "r128_track_gain", "r128_album_gain"
+        )
     }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
@@ -70,15 +82,22 @@ class PlaybackEnhancer(
 
     private var fadeMs = 0L
     private var replayMode = ReplayGainMode.OFF
+    private var preampDb = 0f
     private var resumeOnHeadset = true
 
     private var trackGainDb: Float? = null
     private var albumGainDb: Float? = null
     private var replayVolume = 1f
+    private var pendingBoostMb = 0
     private var lastVolume = -1f
     private var lastItemId: String? = null
     private var lastSavedAt = 0L
     private var pausedByNoisyAt = 0L
+
+    // DSP boost stage for quiet tracks (player.volume can only attenuate). Bound to the current
+    // audio session; recreated when the session changes, released with the player.
+    private var loudness: LoudnessEnhancer? = null
+    private var loudnessSessionId = 0
 
     private val tick = object : Runnable {
         override fun run() {
@@ -98,6 +117,8 @@ class PlaybackEnhancer(
             trackGainDb = null
             albumGainDb = null
             replayVolume = 1f
+            pendingBoostMb = 0
+            applyBoost()
             lastSavedAt = 0L
             applyVolume()
             if (mediaItem != null && reason != Player.MEDIA_ITEM_TRANSITION_REASON_REPEAT) {
@@ -147,14 +168,29 @@ class PlaybackEnhancer(
         }
     }
 
+    private val analyticsListener = object : AnalyticsListener {
+        override fun onAudioSessionIdChanged(eventTime: AnalyticsListener.EventTime, audioSessionId: Int) {
+            bindLoudness(audioSessionId)
+        }
+    }
+
     fun start() {
         player.addListener(listener)
+        player.addAnalyticsListener(analyticsListener)
+        bindLoudness(player.audioSessionId)
         audioManager.registerAudioDeviceCallback(deviceCallback, handler)
         scope.launch { preferences.fadeBetweenSongsSec.collect { fadeMs = it * 1000L; applyVolume() } }
         scope.launch { preferences.skipSilence.collect { player.skipSilenceEnabled = it } }
         scope.launch {
             preferences.replayGainMode.collect {
                 replayMode = ReplayGainMode.from(it)
+                recomputeReplayVolume()
+                applyVolume()
+            }
+        }
+        scope.launch {
+            preferences.replayGainPreampDb.collect {
+                preampDb = it
                 recomputeReplayVolume()
                 applyVolume()
             }
@@ -167,6 +203,10 @@ class PlaybackEnhancer(
         maybeSavePosition(force = true)
         handler.removeCallbacksAndMessages(null)
         player.removeListener(listener)
+        runCatching { player.removeAnalyticsListener(analyticsListener) }
+        runCatching { loudness?.release() }
+        loudness = null
+        loudnessSessionId = 0
         runCatching { audioManager.unregisterAudioDeviceCallback(deviceCallback) }
         scope.cancel()
     }
@@ -207,13 +247,40 @@ class PlaybackEnhancer(
     }
 
     private fun recomputeReplayVolume() {
-        replayVolume = ReplayGain.volumeFor(ReplayGain.pick(replayMode, trackGainDb, albumGainDb))
+        val (volume, boostMb) = ReplayGain.splitForOutput(
+            ReplayGain.pick(replayMode, trackGainDb, albumGainDb), preampDb
+        )
+        replayVolume = volume
+        pendingBoostMb = boostMb
+        applyBoost()
+    }
+
+    /** (Re)binds the DSP boost to the player's audio session. Silent no-op where unsupported. */
+    private fun bindLoudness(audioSessionId: Int) {
+        if (audioSessionId == 0 || audioSessionId == C.AUDIO_SESSION_ID_UNSET) return
+        if (loudness != null && loudnessSessionId == audioSessionId) return
+        runCatching { loudness?.release() }
+        loudness = null
+        loudnessSessionId = audioSessionId
+        loudness = runCatching {
+            LoudnessEnhancer(0, audioSessionId).apply { enabled = true }
+        }.getOrElse {
+            Log.w("PlaybackEnhancer", "LoudnessEnhancer not supported: ${it.message}")
+            null
+        }
+        applyBoost()
+    }
+
+    private fun applyBoost() {
+        val enhancer = loudness ?: return
+        runCatching { enhancer.setTargetGain(pendingBoostMb) }
     }
 
     /**
-     * ReplayGain lives in ID3 TXXX frames and Vorbis comments, both surfaced by ExoPlayer as stream
-     * metadata. Entries are read through their stable `toString()` form, which contains the field
-     * name followed by its value, so no extractor-internal classes are referenced.
+     * ReplayGain lives in ID3 TXXX frames, Vorbis comments and MP4 freeform atoms, all surfaced by
+     * ExoPlayer as stream metadata. Entries are read through their typed key/value fields first
+     * (description/key + value); unknown entry types fall back to the old `toString()` scan so no
+     * tag that used to work stops working. Also understands R128_*_GAIN (1/256 dB units).
      */
     private fun readReplayGain(tracks: Tracks) {
         var track: Float? = null
@@ -222,10 +289,14 @@ class PlaybackEnhancer(
             for (i in 0 until group.length) {
                 val metadata = group.getTrackFormat(i).metadata ?: continue
                 for (e in 0 until metadata.length()) {
-                    val text = metadata.get(e).toString()
-                    val lower = text.lowercase()
-                    track = track ?: gainAfter(text, lower, "replaygain_track_gain")
-                    album = album ?: gainAfter(text, lower, "replaygain_album_gain")
+                    val keyed = keyValueOf(metadata.get(e)) ?: continue
+                    val (key, value) = keyed
+                    when (key) {
+                        "replaygain_track_gain" -> track = track ?: ReplayGain.parseDb(value)
+                        "replaygain_album_gain" -> album = album ?: ReplayGain.parseDb(value)
+                        "r128_track_gain" -> track = track ?: ReplayGain.parseR128(value)
+                        "r128_album_gain" -> album = album ?: ReplayGain.parseR128(value)
+                    }
                 }
             }
         }
@@ -234,10 +305,20 @@ class PlaybackEnhancer(
         recomputeReplayVolume()
     }
 
-    private fun gainAfter(text: String, lower: String, key: String): Float? {
-        val at = lower.indexOf(key)
-        if (at < 0) return null
-        return ReplayGain.parseDb(text.substring(at + key.length))
+    private fun keyValueOf(entry: Metadata.Entry): Pair<String, String>? = try {
+        when (entry) {
+            is TextInformationFrame -> entry.description to entry.value
+            is VorbisComment -> entry.key to entry.value
+            is MdtaMetadataEntry -> entry.key to String(entry.value, Charsets.UTF_8)
+            else -> {
+                val text = entry.toString()
+                val lower = text.lowercase()
+                val key = GAIN_KEYS.firstOrNull { lower.contains(it) } ?: return null
+                key to text.substring(lower.indexOf(key) + key.length)
+            }
+        }.let { (key, value) -> key.lowercase().trim() to value }
+    } catch (_: Exception) {
+        null
     }
 
     // ---- long-audio position memory -------------------------------------------------------------

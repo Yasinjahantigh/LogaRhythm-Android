@@ -16,7 +16,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         ResumePositionEntity::class
     ],
     version = 8,
-    exportSchema = false
+    exportSchema = true
 )
 abstract class MusicDatabase : RoomDatabase() {
     abstract fun musicDao(): MusicDao
@@ -24,10 +24,49 @@ abstract class MusicDatabase : RoomDatabase() {
     abstract fun lyricsDao(): LyricsDao
 
     companion object {
+        val MIGRATION_1_2: Migration = object : Migration(1, 2) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("CREATE TABLE IF NOT EXISTS play_events (id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, trackId TEXT NOT NULL, timestamp INTEGER NOT NULL, durationMs INTEGER NOT NULL)")
+            }
+        }
+
+        val MIGRATION_2_3: Migration = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("CREATE TABLE IF NOT EXISTS playlists (id TEXT NOT NULL, name TEXT NOT NULL, createdAt INTEGER NOT NULL, updatedAt INTEGER NOT NULL, PRIMARY KEY(id))")
+                db.execSQL("CREATE TABLE IF NOT EXISTS playlist_tracks (playlistId TEXT NOT NULL, trackId TEXT NOT NULL, position INTEGER NOT NULL, PRIMARY KEY(playlistId, trackId))")
+            }
+        }
+
+        val MIGRATION_3_4: Migration = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("CREATE TABLE IF NOT EXISTS lyrics (trackId TEXT NOT NULL, content TEXT NOT NULL, isSynced INTEGER NOT NULL, PRIMARY KEY(trackId))")
+            }
+        }
+
+        val MIGRATION_4_5: Migration = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE tracks ADD COLUMN folder TEXT NOT NULL DEFAULT ''")
+            }
+        }
+
+        /** Preserve playlists, lyrics, and listening history when adding the MediaStore date. */
+        val MIGRATION_5_6: Migration = object : Migration(5, 6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE tracks ADD COLUMN dateAdded INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("UPDATE tracks SET dateAdded = dateModified WHERE dateAdded = 0")
+            }
+        }
+
+        /** Adds skip tracking; every existing event was a completed play, so it defaults to 0. */
+        val MIGRATION_6_7: Migration = object : Migration(6, 7) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE play_events ADD COLUMN skipped INTEGER NOT NULL DEFAULT 0")
+            }
+        }
+
         /**
          * Indices for the group-by / filter queries behind Library, Artist, Album and Stats, the
          * album-artist and file-path columns, per-song lyrics offsets and long-audio resume points.
-         * Index names follow Room's `index_<table>_<column>` convention or schema validation fails.
          */
         val MIGRATION_7_8: Migration = object : Migration(7, 8) {
             override fun migrate(db: SupportSQLiteDatabase) {
@@ -45,21 +84,14 @@ abstract class MusicDatabase : RoomDatabase() {
             }
         }
 
-        /** Adds skip tracking; every existing event was a completed play, so it defaults to 0. */
-        val MIGRATION_6_7: Migration = object : Migration(6, 7) {
-            override fun migrate(db: SupportSQLiteDatabase) {
-                db.execSQL("ALTER TABLE play_events ADD COLUMN skipped INTEGER NOT NULL DEFAULT 0")
-            }
-        }
-
-        /** Preserve playlists, lyrics, and listening history when adding the MediaStore date. */
-        val MIGRATION_5_6: Migration = object : Migration(5, 6) {
-            override fun migrate(db: SupportSQLiteDatabase) {
-                db.execSQL("ALTER TABLE tracks ADD COLUMN dateAdded INTEGER NOT NULL DEFAULT 0")
-                // Older records have no added timestamp; modification time is the safest fallback
-                // until the next successful MediaStore scan refreshes them.
-                db.execSQL("UPDATE tracks SET dateAdded = dateModified WHERE dateAdded = 0")
-            }
-        }
+        val ALL_MIGRATIONS: Array<Migration> = arrayOf(
+            MIGRATION_1_2,
+            MIGRATION_2_3,
+            MIGRATION_3_4,
+            MIGRATION_4_5,
+            MIGRATION_5_6,
+            MIGRATION_6_7,
+            MIGRATION_7_8
+        )
     }
 }

@@ -1,3 +1,7 @@
+import java.io.File
+import java.io.ByteArrayOutputStream
+import java.net.URI
+
 plugins {
   alias(libs.plugins.android.application)
   alias(libs.plugins.kotlin.compose)
@@ -5,31 +9,67 @@ plugins {
   alias(libs.plugins.hilt.android)
 }
 
+fun getVersionInfo(): Pair<Int, String> {
+  var tag = System.getenv("GIT_TAG") ?: ""
+  if (tag.isBlank()) {
+    try {
+      val stdout = ByteArrayOutputStream()
+      providers.exec {
+        commandLine("git", "describe", "--tags", "--always")
+        standardOutput = stdout
+        isIgnoreExitValue = true
+      }
+      tag = stdout.toString().trim()
+    } catch (_: Exception) {}
+  }
+
+  val versionPattern = Regex("""^v?(\d+)\.(\d+)\.(\d+)(?:-.*)?$""")
+  val match = versionPattern.matchEntire(tag)
+  return if (match != null) {
+    val (major, minor, patch) = match.destructured
+    val code = major.toInt() * 10000 + minor.toInt() * 100 + patch.toInt()
+    val name = "$major.$minor.$patch"
+    Pair(code, name)
+  } else {
+    Pair(10300, "1.3.0")
+  }
+}
+
+val (appVersionCode, appVersionName) = getVersionInfo()
+
 android {
   namespace = "com.example"
-  compileSdk { version = release(36) { minorApiLevel = 1 } }
+  compileSdk = 36
 
   defaultConfig {
     applicationId = "com.aistudio.musicplayer.qpmwzx"
     minSdk = 26
-    targetSdk = 36
-    versionCode = 4
-    versionName = "1.3.0"
+    targetSdk = 35
+    versionCode = appVersionCode
+    versionName = appVersionName
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }
 
-  // Release signing is opt-in: CI passes KEYSTORE_PATH / STORE_PASSWORD / KEY_PASSWORD (and optionally
-  // KEY_ALIAS). Without them the release build is signed with the debug key so a local
-  // `assembleRelease` always produces an installable APK.
-  val releaseStorePassword: String? = System.getenv("STORE_PASSWORD")
+  val ksPath = System.getenv("KEYSTORE_PATH") ?: findProperty("KEYSTORE_PATH") as? String
+  val ksPassword = System.getenv("KEYSTORE_PASSWORD") ?: System.getenv("STORE_PASSWORD") ?: findProperty("KEYSTORE_PASSWORD") as? String ?: findProperty("STORE_PASSWORD") as? String
+  val kAlias = System.getenv("KEY_ALIAS") ?: findProperty("KEY_ALIAS") as? String
+  val kPassword = System.getenv("KEY_PASSWORD") ?: findProperty("KEY_PASSWORD") as? String ?: ksPassword
+
+  val hasSigningSecrets = !ksPath.isNullOrBlank() && !ksPassword.isNullOrBlank() && !kAlias.isNullOrBlank() && !kPassword.isNullOrBlank()
+  val requireSigning = System.getenv("REQUIRE_RELEASE_SIGNING") == "true"
+
+  if (requireSigning && !hasSigningSecrets) {
+    throw GradleException("Release build requires KEYSTORE_PATH, KEYSTORE_PASSWORD, KEY_ALIAS, and KEY_PASSWORD environment variables or Gradle properties.")
+  }
+
   signingConfigs {
-    if (!releaseStorePassword.isNullOrBlank()) {
+    if (hasSigningSecrets) {
       create("release") {
-        storeFile = file(System.getenv("KEYSTORE_PATH") ?: "${rootDir}/my-upload-key.jks")
-        storePassword = releaseStorePassword
-        keyAlias = System.getenv("KEY_ALIAS") ?: "upload"
-        keyPassword = System.getenv("KEY_PASSWORD") ?: releaseStorePassword
+        storeFile = File(ksPath!!)
+        storePassword = ksPassword!!
+        keyAlias = kAlias!!
+        keyPassword = kPassword!!
       }
     }
   }
@@ -37,15 +77,11 @@ android {
   buildTypes {
     release {
       isCrunchPngs = false
-      // R8 + resource shrinking: without it the APK ships the whole Compose / Material-Icons
-      // extended library un-optimised, which is the single biggest reason release builds felt
-      // heavy (slow cold start, janky first scroll, big install).
       isMinifyEnabled = true
       isShrinkResources = true
       proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
       signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
     }
-    // Use Android Gradle Plugin's standard per-user debug keystore.
     debug { }
   }
   compileOptions {
@@ -55,7 +91,6 @@ android {
   buildFeatures {
     compose = true
   }
-  // The app ships English and Persian only; this drops every other locale bundled by libraries.
   androidResources {
     localeFilters += listOf("en", "fa")
   }
@@ -69,6 +104,10 @@ android {
     includeInApk = false
     includeInBundle = true
   }
+}
+
+ksp {
+  arg("room.schemaLocation", "$projectDir/schemas")
 }
 
 dependencies {
@@ -128,26 +167,16 @@ dependencies {
   androidTestImplementation(libs.androidx.junit)
   androidTestImplementation(libs.androidx.runner)
   debugImplementation(libs.androidx.compose.ui.test.manifest)
-  debugImplementation(libs.androidx.compose.ui.tooling)
 }
 
-// ---------------------------------------------------------------------------------------------
-// Persian UI font (Vazirmatn, SIL Open Font License 1.1 - https://github.com/rastikerdar/vazirmatn)
-//
-// The files are fetched once into src/main/assets/fonts on the first build and then reused, so
-// the app ships with a proper Persian typeface without committing binaries to the repository.
-// It is strictly best-effort: if the download fails (offline CI, blocked host) the build still
-// succeeds and the app falls back to Poppins + the system's Arabic-script font. You can also drop
-// Vazirmatn-{Light,Regular,Medium,SemiBold,Bold}.ttf into src/main/assets/fonts yourself.
-// ---------------------------------------------------------------------------------------------
 val downloadPersianFont = tasks.register("downloadPersianFont") {
   val fontsDir = layout.projectDirectory.dir("src/main/assets/fonts").asFile
   doLast {
     fontsDir.mkdirs()
     val version = "v33.003"
     listOf("Light", "Regular", "Medium", "SemiBold", "Bold").forEach { weight ->
-      val target = java.io.File(fontsDir, "Vazirmatn-$weight.ttf")
-      fun isFont(file: java.io.File): Boolean {
+      val target = File(fontsDir, "Vazirmatn-$weight.ttf")
+      fun isFont(file: File): Boolean {
         if (!file.exists() || file.length() < 20_000L) return false
         val head = ByteArray(4)
         file.inputStream().use { it.read(head) }
@@ -162,10 +191,14 @@ val downloadPersianFont = tasks.register("downloadPersianFont") {
       )
       for (source in sources) {
         try {
-          val connection = java.net.URL(source).openConnection()
+          val connection = URI(source).toURL().openConnection()
           connection.connectTimeout = 8_000
           connection.readTimeout = 15_000
-          connection.getInputStream().use { input -> target.outputStream().use { input.copyTo(it) } }
+          connection.getInputStream().use { input ->
+            target.outputStream().use { output ->
+              input.copyTo(output)
+            }
+          }
           if (isFont(target)) break
           target.delete()
         } catch (e: Exception) {
@@ -178,5 +211,3 @@ val downloadPersianFont = tasks.register("downloadPersianFont") {
     }
   }
 }
-
-tasks.matching { it.name == "preBuild" }.configureEach { dependsOn(downloadPersianFont) }

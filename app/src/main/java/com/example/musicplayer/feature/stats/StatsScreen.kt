@@ -139,6 +139,8 @@ fun StatsScreen(
         }
     }
 
+    val context = androidx.compose.ui.platform.LocalContext.current
+
     selectedTrackForMenu?.let { track ->
         SongMenuBottomSheet(
             track = track,
@@ -154,6 +156,11 @@ fun StatsScreen(
             onAddToPlaylist = {
                 selectedTrackForMenu = null
                 trackForAddToPlaylist = track
+            },
+            onHideTrack = {
+                viewModel.hideTrack(track)
+                selectedTrackForMenu = null
+                android.widget.Toast.makeText(context, context.getString(R.string.track_hidden_toast, track.title), android.widget.Toast.LENGTH_SHORT).show()
             }
         )
     }

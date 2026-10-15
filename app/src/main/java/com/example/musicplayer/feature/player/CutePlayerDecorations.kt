@@ -12,6 +12,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
@@ -122,7 +123,8 @@ fun CuteEqualizerVisualizer(
 fun CuteVinylTurntable(
     track: Track?,
     isPlaying: Boolean,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onArtworkClick: (() -> Unit)? = null
 ) {
     val rotation by if (isPlaying) {
         val infiniteTransition = rememberInfiniteTransition(label = "vinyl_transition")
@@ -201,7 +203,8 @@ fun CuteVinylTurntable(
                 .fillMaxSize(0.44f)
                 .rotate(if (isPlaying) rotation else 0f)
                 .clip(CircleShape)
-                .border(3.dp, Color(0xFF26262B), CircleShape),
+                .border(3.dp, Color(0xFF26262B), CircleShape)
+                .clickable(enabled = onArtworkClick != null) { onArtworkClick?.invoke() },
             contentAlignment = Alignment.Center
         ) {
             AsyncImage(

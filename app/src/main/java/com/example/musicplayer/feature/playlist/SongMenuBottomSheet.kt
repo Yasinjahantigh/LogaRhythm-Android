@@ -6,6 +6,7 @@ import android.net.Uri
 import android.os.Build
 import android.widget.Toast
 import java.io.File
+import java.util.Locale
 import com.example.musicplayer.core.utils.FileUtils
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -23,6 +24,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
+import androidx.compose.material.icons.automirrored.filled.PlaylistAddCheck
 import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.filled.Album
 import androidx.compose.material.icons.filled.Delete
@@ -33,9 +36,8 @@ import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Lyrics
 import androidx.compose.material.icons.filled.OpenInBrowser
 import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.PlaylistAdd
-import androidx.compose.material.icons.filled.PlaylistAddCheck
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -89,13 +91,39 @@ fun SongMenuBottomSheet(
     onGoToArtist: (() -> Unit)? = null,
     onRemoveFromPlaylist: (() -> Unit)? = null,
     onDeleteTrack: (() -> Unit)? = null,
-    onEditTrack: (() -> Unit)? = null
+    onEditTrack: (() -> Unit)? = null,
+    onHideTrack: (() -> Unit)? = null
 ) {
     val sheetState = rememberModalBottomSheetState()
     val context = LocalContext.current
 
     var showDetailsDialog by remember { mutableStateOf(false) }
     var showDeleteConfirmDialog by remember { mutableStateOf(false) }
+    var showHideConfirmDialog by remember { mutableStateOf(false) }
+
+    if (showHideConfirmDialog) {
+        AlertDialog(
+            onDismissRequest = { showHideConfirmDialog = false },
+            title = { Text(text = stringResource(R.string.dialog_hide_song_title)) },
+            text = { Text(text = stringResource(R.string.dialog_hide_song_confirm, track.title)) },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showHideConfirmDialog = false
+                        onHideTrack?.invoke()
+                        onDismissRequest()
+                    }
+                ) {
+                    Text(text = stringResource(R.string.btn_hide))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showHideConfirmDialog = false }) {
+                    Text(text = stringResource(R.string.btn_cancel))
+                }
+            }
+        )
+    }
 
     if (showDetailsDialog) {
         SongDetailsDialog(
@@ -199,7 +227,7 @@ fun SongMenuBottomSheet(
 
             // Add to queue
             SongMenuOption(
-                icon = Icons.Default.PlaylistAdd,
+                icon = Icons.AutoMirrored.Filled.PlaylistAdd,
                 title = stringResource(R.string.action_add_to_queue),
                 tag = "menu_add_to_queue",
                 onClick = { onAddToQueue(); onDismissRequest() }
@@ -218,7 +246,7 @@ fun SongMenuBottomSheet(
 
             // Add to playlist
             SongMenuOption(
-                icon = Icons.Default.PlaylistAddCheck,
+                icon = Icons.AutoMirrored.Filled.PlaylistAddCheck,
                 title = stringResource(R.string.action_add_to_playlist),
                 tag = "menu_add_to_playlist",
                 onClick = { onAddToPlaylist(); onDismissRequest() }
@@ -306,6 +334,16 @@ fun SongMenuBottomSheet(
                 }
             )
 
+            // Hide song from library
+            if (onHideTrack != null) {
+                SongMenuOption(
+                    icon = Icons.Default.VisibilityOff,
+                    title = stringResource(R.string.action_hide_track),
+                    tag = "menu_hide_song",
+                    onClick = { showHideConfirmDialog = true }
+                )
+            }
+
             // Delete song from device
             SongMenuOption(
                 icon = Icons.Default.Delete,
@@ -367,7 +405,7 @@ private fun SongDetailsDialog(
     val fileSizeMb = remember(filePath) {
         if (filePath != null) {
             val f = File(filePath)
-            if (f.exists()) String.format("%.2f MB", f.length().toDouble() / (1024 * 1024)) else null
+            if (f.exists()) String.format(Locale.US, "%.2f MB", f.length().toDouble() / (1024 * 1024)) else null
         } else null
     }
 

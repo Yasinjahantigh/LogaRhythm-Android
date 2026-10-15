@@ -11,12 +11,13 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 @HiltViewModel
 class FolderDetailViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
-    trackRepository: TrackRepository,
+    private val trackRepository: TrackRepository,
     private val playerController: PlayerController
 ) : ViewModel() {
 
@@ -54,5 +55,20 @@ class FolderDetailViewModel @Inject constructor(
         val list = tracks.value
         val index = list.indexOfFirst { it.id == track.id }.coerceAtLeast(0)
         playerController.play(list, index)
+    }
+
+    fun hideTrack(track: Track) {
+        viewModelScope.launch {
+            if (currentTrack.value?.id == track.id) {
+                playerController.next()
+            }
+            trackRepository.hideTrack(track.id)
+        }
+    }
+
+    fun excludeFolder() {
+        viewModelScope.launch {
+            trackRepository.excludeFolder(folderName)
+        }
     }
 }

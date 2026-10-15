@@ -85,7 +85,11 @@ fun GenreDetailScreen(
             onDismissRequest = { selectedTrackForMenu = null },
             onPlayNext = { viewModel.playNext(menuTrack) },
             onAddToQueue = { viewModel.addToQueue(menuTrack) },
-            onAddToPlaylist = { showAddToPlaylistDialog = true }
+            onAddToPlaylist = { showAddToPlaylistDialog = true },
+            onHideTrack = {
+                viewModel.hideTrack(menuTrack)
+                Toast.makeText(context, context.getString(R.string.track_hidden_toast, menuTrack.title), Toast.LENGTH_SHORT).show()
+            }
         )
     }
 
