@@ -1,4 +1,4 @@
-<resources>
+<resources xmlns:tools="http://schemas.android.com/tools" tools:ignore="PluralsCandidate,UnusedResources">
     <string name="app_name">LogaRhythm</string>
     <string name="nav_home">Home</string>
     <string name="nav_search">Search</string>
@@ -165,6 +165,14 @@
     <string name="sleep_timer_active">Active: %1$s remaining</string>
     <string name="sleep_timer_remaining">%1$s</string>
     <string name="sleep_timer_cancel">Cancel Timer</string>
+    <string name="sleep_timer_tab_minutes">Minutes</string>
+    <string name="sleep_timer_tab_tracks">Tracks</string>
+    <string name="sleep_timer_tracks_count">%1$d tracks</string>
+    <string name="sleep_timer_one_track">1 track (End of current song)</string>
+    <string name="sleep_timer_tracks_remaining">%1$d tracks remaining</string>
+    <string name="sleep_timer_start">Set Timer</string>
+    <string name="sleep_timer_minutes_count">%1$d minutes</string>
+    <string name="sleep_timer_tracks_desc">Playback will stop after %1$d tracks</string>
     <string name="cd_sleep_timer">Sleep timer</string>
 
     <string name="playback_speed_title">Playback Speed</string>
@@ -427,6 +435,7 @@
     <string name="settings_replaygain_title">Volume leveling (ReplayGain)</string>
     <string name="settings_replaygain_track">Per song</string>
     <string name="settings_replaygain_album">Per album</string>
+    <string name="settings_replaygain_preamp_title">Leveling pre-amplifier</string>
     <string name="settings_skip_silence_title">Skip silence</string>
     <string name="settings_skip_silence_desc">Jumps over long quiet gaps</string>
     <string name="settings_resume_headset_title">Resume on headphones</string>
@@ -462,4 +471,28 @@
     <string name="tools_no_duplicates">No duplicates found</string>
     <string name="tools_no_missing">Every song has title, artist and album</string>
     <string name="tools_duplicate_group">%1$d copies</string>
+
+    <!-- Hidden tracks & Folder exclusion enhancements -->
+    <string name="action_hide_track">Hide song</string>
+    <string name="dialog_hide_song_title">Hide song</string>
+    <string name="dialog_hide_song_confirm">Hide \"%1$s\" from your library? You can restore it anytime in Settings or Library Tools.</string>
+    <string name="btn_hide">Hide</string>
+    <string name="btn_restore">Restore</string>
+    <string name="btn_restore_all">Restore all</string>
+    <string name="track_hidden_toast">\"%1$s\" hidden from library</string>
+    <string name="track_restored_toast">\"%1$s\" restored to library</string>
+    <string name="all_tracks_restored_toast">All songs restored to library</string>
+    <string name="settings_hidden_tracks_title">Hidden songs</string>
+    <string name="settings_hidden_tracks_desc">%1$d songs hidden</string>
+    <string name="settings_hidden_tracks_empty">No songs are currently hidden.</string>
+    <string name="settings_unhide_all_confirm">Restore all hidden songs back to your library?</string>
+    <string name="tools_hidden_tracks">Hidden songs</string>
+    <string name="tools_no_hidden_tracks">No songs are currently hidden</string>
+    <string name="settings_reset_excluded_folders">Reset to defaults</string>
+    <string name="settings_clear_all_exclusions">Clear all exclusions</string>
+    <string name="settings_folder_excluded_badge">Excluded</string>
+    <string name="action_exclude_folder">Exclude folder from library</string>
+    <string name="dialog_exclude_folder_title">Exclude folder</string>
+    <string name="dialog_exclude_folder_confirm">Exclude \"%1$s\" from your library? Its songs will be hidden. You can un-exclude it anytime in Settings.</string>
+    <string name="folder_excluded_toast">Folder \"%1$s\" excluded from library</string>
 </resources>

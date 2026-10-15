@@ -56,7 +56,9 @@ private fun NavHostController.navigateTopLevel(destination: NavDestination, curr
 @Composable
 fun MainScreen(
     modifier: Modifier = Modifier,
-    playerViewModel: PlayerViewModel = hiltViewModel()
+    playerViewModel: PlayerViewModel = hiltViewModel(),
+    /** Artwork-derived tint (decoded once in MainActivity, cached). Tints player chrome only. */
+    seedTint: androidx.compose.ui.graphics.Color? = null
 ) {
     val navController = rememberNavController()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
@@ -124,7 +126,8 @@ fun MainScreen(
                                         onNext = onMiniNext, onPrevious = onMiniPrevious,
                                         onExpand = playerViewModel::expand,
                                         isCompact = isCompact, onDismiss = playerViewModel::dismissMiniPlayer,
-                                        modifier = Modifier.navigationBarsPadding()
+                                        modifier = Modifier.navigationBarsPadding(),
+                                        tint = seedTint
                                     )
                                 }
                             }
@@ -148,7 +151,8 @@ fun MainScreen(
                                             onTogglePlayPause = playerViewModel::togglePlayPause,
                                             onNext = onMiniNext, onPrevious = onMiniPrevious,
                                             onExpand = playerViewModel::expand,
-                                            isCompact = isCompact, onDismiss = playerViewModel::dismissMiniPlayer
+                                            isCompact = isCompact, onDismiss = playerViewModel::dismissMiniPlayer,
+                                            tint = seedTint
                                         )
                                     }
                                 }
@@ -167,7 +171,8 @@ fun MainScreen(
                                     onNext = onMiniNext, onPrevious = onMiniPrevious,
                                     onExpand = playerViewModel::expand,
                                     isCompact = isCompact, onDismiss = playerViewModel::dismissMiniPlayer,
-                                    modifier = Modifier.navigationBarsPadding()
+                                    modifier = Modifier.navigationBarsPadding(),
+                                    tint = seedTint
                                 )
                             }
                         }

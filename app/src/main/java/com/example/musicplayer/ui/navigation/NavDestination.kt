@@ -16,8 +16,8 @@ import com.example.R
 
 sealed class NavDestination(
     val route: String,
-    @StringRes val labelRes: Int,
-    @StringRes val contentDescriptionRes: Int,
+    @param:StringRes val labelRes: Int,
+    @param:StringRes val contentDescriptionRes: Int,
     val selectedIcon: ImageVector,
     val unselectedIcon: ImageVector
 ) {

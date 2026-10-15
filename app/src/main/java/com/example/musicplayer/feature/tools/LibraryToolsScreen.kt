@@ -18,6 +18,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -51,6 +52,7 @@ fun LibraryToolsScreen(
 ) {
     val duplicates by viewModel.duplicates.collectAsStateWithLifecycle()
     val missing by viewModel.missingTags.collectAsStateWithLifecycle()
+    val hiddenTracks by viewModel.hiddenTracks.collectAsStateWithLifecycle()
     val currentTrack by viewModel.currentTrack.collectAsStateWithLifecycle()
     val isPlaying by viewModel.isPlaying.collectAsStateWithLifecycle()
     val playlists by playlistViewModel.playlists.collectAsStateWithLifecycle()
@@ -65,7 +67,8 @@ fun LibraryToolsScreen(
             onDismissRequest = { menuTrack = null },
             onPlayNext = { viewModel.playNext(track) },
             onAddToQueue = { viewModel.addToQueue(track) },
-            onAddToPlaylist = { showAddToPlaylist = true }
+            onAddToPlaylist = { showAddToPlaylist = true },
+            onHideTrack = { viewModel.hideTrack(track) }
         )
         if (showAddToPlaylist) {
             AddToPlaylistDialog(
@@ -108,6 +111,11 @@ fun LibraryToolsScreen(
                 onClick = { tab = 1 },
                 label = { Text(stringResource(R.string.tools_missing_tags) + (missing?.let { " (${it.size})" } ?: "")) }
             )
+            FilterChip(
+                selected = tab == 2,
+                onClick = { tab = 2 },
+                label = { Text(stringResource(R.string.tools_hidden_tracks) + (hiddenTracks?.let { " (${it.size})" } ?: "")) }
+            )
         }
 
         val bottom = LocalPlaybackBottomPadding.current
@@ -141,12 +149,46 @@ fun LibraryToolsScreen(
                         }
                     }
                 }
-            } else {
+            } else if (tab == 1) {
                 val tracks = missing
                 if (tracks != null && tracks.isEmpty()) item { EmptyNote(stringResource(R.string.tools_no_missing)) }
                 tracks?.let { list ->
                     items(list, key = { "m_" + it.id }) { track ->
                         TrackRow(track, currentTrack, isPlaying, viewModel::play) { menuTrack = it }
+                    }
+                }
+            } else {
+                val hidden = hiddenTracks
+                if (hidden != null && hidden.isEmpty()) {
+                    item { EmptyNote(stringResource(R.string.tools_no_hidden_tracks)) }
+                }
+                if (hidden != null && hidden.isNotEmpty()) {
+                    item(key = "restore_all_header") {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 4.dp),
+                            horizontalArrangement = Arrangement.End
+                        ) {
+                            TextButton(onClick = { viewModel.unhideAllTracks() }) {
+                                Text(stringResource(R.string.btn_restore_all))
+                            }
+                        }
+                    }
+                    items(hidden, key = { "h_" + it.id }) { track ->
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(end = 12.dp)
+                        ) {
+                            Box(modifier = Modifier.weight(1f)) {
+                                TrackRow(track, currentTrack, isPlaying, viewModel::play) { menuTrack = it }
+                            }
+                            TextButton(onClick = { viewModel.unhideTrack(track.id) }) {
+                                Text(stringResource(R.string.btn_restore))
+                            }
+                        }
                     }
                 }
             }

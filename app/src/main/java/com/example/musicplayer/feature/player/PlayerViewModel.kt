@@ -48,6 +48,7 @@ class PlayerViewModel @Inject constructor(
     // Phase 7: Extras
     val playbackSpeed: StateFlow<Float> = playerController.playbackSpeed
     val sleepTimerRemainingMs: StateFlow<Long?> = playerController.sleepTimerRemainingMs
+    val sleepTimerRemainingTracks: StateFlow<Int?> = playerController.sleepTimerRemainingTracks
     val isSleepTimerEndOfTrack: StateFlow<Boolean> = playerController.isSleepTimerEndOfTrack
 
     val isFavorite: StateFlow<Boolean> = currentTrack.flatMapLatest { track ->
@@ -89,6 +90,7 @@ class PlayerViewModel @Inject constructor(
     fun previous() = playerController.previous()
     fun seekTo(positionMs: Long) = playerController.seekTo(positionMs)
     fun toggleShuffle() = playerController.toggleShuffle()
+    fun reshuffleQueue() = playerController.reshuffleQueue()
     fun cycleRepeat() = playerController.cycleRepeat()
     fun play(list: List<Track>, startIndex: Int = 0) = playerController.play(list, startIndex)
 
@@ -103,6 +105,7 @@ class PlayerViewModel @Inject constructor(
     // Phase 7: Extras methods
     fun setPlaybackSpeed(speed: Float) = playerController.setPlaybackSpeed(speed)
     fun setSleepTimer(minutes: Int) = playerController.setSleepTimer(minutes)
+    fun setSleepTimerTracks(tracks: Int) = playerController.setSleepTimerTracks(tracks)
     fun setSleepTimerEndOfTrack() = playerController.setSleepTimerEndOfTrack()
     fun cancelSleepTimer() = playerController.cancelSleepTimer()
 
@@ -150,6 +153,15 @@ class PlayerViewModel @Inject constructor(
             }
             if (updated != null) playerController.updateTrackInPlayback(updated)
             onDone(updated)
+        }
+    }
+
+    fun hideCurrentTrack(onHidden: (Track) -> Unit = {}) {
+        val track = currentTrack.value ?: return
+        viewModelScope.launch {
+            next()
+            trackRepository.hideTrack(track.id)
+            onHidden(track)
         }
     }
 }

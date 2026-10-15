@@ -17,12 +17,13 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 
-/** Duplicates and "missing tags" views; both are computed off the main thread from the library. */
+/** Duplicates, "missing tags", and hidden tracks views; computed off the main thread from the library. */
 @HiltViewModel
 class LibraryToolsViewModel @Inject constructor(
-    trackRepository: TrackRepository,
+    private val trackRepository: TrackRepository,
     preferencesManager: PreferencesManager,
     private val playerController: PlayerController
 ) : ViewModel() {
@@ -41,10 +42,33 @@ class LibraryToolsViewModel @Inject constructor(
             .flowOn(Dispatchers.Default)
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
+    val hiddenTracks: StateFlow<List<Track>?> =
+        trackRepository.getHiddenTracks()
+            .flowOn(Dispatchers.Default)
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
     val currentTrack: StateFlow<Track?> = playerController.currentTrack
     val isPlaying: StateFlow<Boolean> = playerController.isPlaying
 
     fun play(track: Track) = playerController.play(listOf(track), 0)
     fun playNext(track: Track) = playerController.playNext(track)
     fun addToQueue(track: Track) = playerController.addToQueue(track)
+
+    fun hideTrack(track: Track) {
+        viewModelScope.launch {
+            trackRepository.hideTrack(track.id)
+        }
+    }
+
+    fun unhideTrack(trackId: String) {
+        viewModelScope.launch {
+            trackRepository.unhideTrack(trackId)
+        }
+    }
+
+    fun unhideAllTracks() {
+        viewModelScope.launch {
+            trackRepository.unhideAllTracks()
+        }
+    }
 }

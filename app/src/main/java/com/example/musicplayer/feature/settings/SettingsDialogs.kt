@@ -1,6 +1,7 @@
 package com.example.musicplayer.feature.settings
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -79,35 +80,75 @@ fun ExcludedFoldersDialog(
     allFolders: List<String>,
     excludedFolders: Set<String>,
     onToggleFolder: (String) -> Unit,
+    onResetDefaults: () -> Unit,
+    onClearAll: () -> Unit,
     onDismiss: () -> Unit
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.settings_excluded_folders_dialog_title)) },
-        text = {
-            if (allFolders.isEmpty()) {
+        title = {
+            Column {
+                Text(stringResource(R.string.settings_excluded_folders_dialog_title), style = MaterialTheme.typography.titleLarge)
+                Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    text = stringResource(R.string.settings_no_folders_found),
+                    text = stringResource(R.string.settings_excluded_folders_desc, excludedFolders.size),
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = MaterialTheme.colorScheme.primary
                 )
-            } else {
-                LazyColumn(modifier = Modifier.fillMaxWidth()) {
-                    items(allFolders, key = { it }) { folder ->
-                        val isExcluded = excludedFolders.contains(folder)
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { onToggleFolder(folder) }
-                                .padding(vertical = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Checkbox(
-                                checked = isExcluded,
-                                onCheckedChange = { onToggleFolder(folder) }
-                            )
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Text(text = folder, style = MaterialTheme.typography.bodyLarge)
+            }
+        },
+        text = {
+            Column {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    TextButton(onClick = onResetDefaults) {
+                        Text(stringResource(R.string.settings_reset_excluded_folders), style = MaterialTheme.typography.labelMedium)
+                    }
+                    TextButton(onClick = onClearAll) {
+                        Text(stringResource(R.string.settings_clear_all_exclusions), style = MaterialTheme.typography.labelMedium)
+                    }
+                }
+                if (allFolders.isEmpty()) {
+                    Text(
+                        text = stringResource(R.string.settings_no_folders_found),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(vertical = 16.dp)
+                    )
+                } else {
+                    LazyColumn(modifier = Modifier.fillMaxWidth().heightIn(max = 380.dp)) {
+                        items(allFolders, key = { it }) { folder ->
+                            val isExcluded = excludedFolders.contains(folder)
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { onToggleFolder(folder) }
+                                    .padding(vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Checkbox(
+                                    checked = isExcluded,
+                                    onCheckedChange = { onToggleFolder(folder) }
+                                )
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = folder,
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        maxLines = 1,
+                                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                                    )
+                                    if (isExcluded) {
+                                        Text(
+                                            text = stringResource(R.string.settings_folder_excluded_badge),
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.error
+                                        )
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -115,7 +156,7 @@ fun ExcludedFoldersDialog(
         },
         confirmButton = {
             TextButton(onClick = onDismiss) {
-                Text(stringResource(R.string.btn_cancel))
+                Text(stringResource(R.string.btn_close))
             }
         }
     )
@@ -204,6 +245,86 @@ fun HiddenLyricsDialog(
         confirmButton = {
             androidx.compose.material3.TextButton(onClick = onDismiss) {
                 androidx.compose.material3.Text(androidx.compose.ui.res.stringResource(com.example.R.string.btn_close))
+            }
+        }
+    )
+}
+
+@Composable
+fun HiddenTracksDialog(
+    tracks: List<com.example.musicplayer.domain.model.Track>,
+    onRestore: (String) -> Unit,
+    onRestoreAll: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Column {
+                Text(stringResource(R.string.settings_hidden_tracks_title), style = MaterialTheme.typography.titleLarge)
+                if (tracks.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = stringResource(R.string.settings_hidden_tracks_desc, tracks.size),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+            }
+        },
+        text = {
+            if (tracks.isEmpty()) {
+                Text(
+                    text = stringResource(R.string.settings_hidden_tracks_empty),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(vertical = 16.dp)
+                )
+            } else {
+                Column {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                        horizontalArrangement = Arrangement.End
+                    ) {
+                        TextButton(onClick = onRestoreAll) {
+                            Text(stringResource(R.string.btn_restore_all))
+                        }
+                    }
+                    LazyColumn(modifier = Modifier.fillMaxWidth().heightIn(max = 380.dp)) {
+                        items(tracks, key = { it.id }) { track ->
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 6.dp)
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = track.title,
+                                        maxLines = 1,
+                                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                                        style = MaterialTheme.typography.bodyLarge
+                                    )
+                                    Text(
+                                        text = "${track.artist} • ${com.example.musicplayer.core.utils.TimeUtils.formatDuration(track.durationMs)}",
+                                        maxLines = 1,
+                                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                TextButton(onClick = { onRestore(track.id) }) {
+                                    Text(stringResource(R.string.btn_restore))
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.btn_close))
             }
         }
     )

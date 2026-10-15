@@ -14,7 +14,7 @@ import androidx.compose.runtime.remember
 @Composable
 fun MusicPlayerTheme(
     themeMode: String = "system",
-    colorSource: String = "wallpaper",
+    colorSource: String = "album_art",
     cornerRoundness: String = "standard",
     seedArtworkColor: Color? = null,
     darkTheme: Boolean = when (themeMode) {

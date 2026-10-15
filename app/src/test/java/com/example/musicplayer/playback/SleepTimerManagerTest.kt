@@ -45,4 +45,22 @@ class SleepTimerManagerTest {
         assertFalse(manager.isEndOfTrack.value)
         assertNull(manager.remainingMs.value)
     }
+
+    @Test
+    fun sleepTimer_startTimerTracksSetsRemainingTracks() = runTest {
+        val manager = SleepTimerManager()
+        assertNull(manager.remainingTracks.value)
+
+        manager.startTimerTracks(5)
+        assertEquals(5, manager.remainingTracks.value)
+        assertFalse(manager.isEndOfTrack.value)
+
+        manager.startTimerTracks(1)
+        assertEquals(1, manager.remainingTracks.value)
+        assertTrue(manager.isEndOfTrack.value)
+
+        manager.cancelTimer()
+        assertNull(manager.remainingTracks.value)
+        assertFalse(manager.isEndOfTrack.value)
+    }
 }

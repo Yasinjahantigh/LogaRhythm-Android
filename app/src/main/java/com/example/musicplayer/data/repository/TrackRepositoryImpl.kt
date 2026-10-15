@@ -47,8 +47,14 @@ class TrackRepositoryImpl @Inject constructor(
 ) : TrackRepository {
 
     override fun getAllTracks(): Flow<List<Track>> {
-        return musicDao.getAllTracks().map { list ->
-            list.map { it.toDomain() }
+        return combine(musicDao.getAllTracks(), preferencesManager.hiddenTrackIds) { list, hiddenIds ->
+            list.map { it.toDomain() }.filter { it.id !in hiddenIds }
+        }.flowOn(Dispatchers.Default)
+    }
+
+    override fun getHiddenTracks(): Flow<List<Track>> {
+        return combine(musicDao.getAllTracks(), preferencesManager.hiddenTrackIds) { list, hiddenIds ->
+            list.map { it.toDomain() }.filter { it.id in hiddenIds }
         }.flowOn(Dispatchers.Default)
     }
 
@@ -57,8 +63,8 @@ class TrackRepositoryImpl @Inject constructor(
     }
 
     override fun searchTracks(query: String): Flow<List<Track>> {
-        return musicDao.getAllTracks().map { allTracks ->
-            allTracks.map { it.toDomain() }.filter { track ->
+        return getAllTracks().map { allTracks ->
+            allTracks.filter { track ->
                 val searchable = "${track.title} ${track.artist} ${track.album} ${track.genre}"
                 SearchUtils.matchesTokens(searchable, query)
             }
@@ -91,17 +97,32 @@ class TrackRepositoryImpl @Inject constructor(
     }
 
     override fun getAlbums(): Flow<List<Album>> {
-        return musicDao.getAllAlbums().map { list ->
-            list.map {
+        return getAllTracks().map { tracks ->
+            class AlbumAcc(val name: String, val artist: String, var trackCount: Int, var artworkUri: String?)
+            val map = linkedMapOf<String, AlbumAcc>()
+            for (track in tracks) {
+                val artistKey = track.albumArtist.ifBlank { track.artist }
+                val key = "${track.album}|$artistKey"
+                val existing = map[key]
+                if (existing == null) {
+                    map[key] = AlbumAcc(track.album, artistKey, 1, track.artworkUri)
+                } else {
+                    existing.trackCount++
+                    if (existing.artworkUri.isNullOrBlank() && !track.artworkUri.isNullOrBlank()) {
+                        existing.artworkUri = track.artworkUri
+                    }
+                }
+            }
+            map.values.map {
                 Album(
-                    id = "album:${it.album}:${it.artist}",
-                    name = it.album,
+                    id = "album:${it.name}:${it.artist}",
+                    name = it.name,
                     artist = it.artist,
                     trackCount = it.trackCount,
                     artworkUri = it.artworkUri
                 )
-            }
-        }
+            }.sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.name })
+        }.flowOn(Dispatchers.Default)
     }
 
     /** Separators when multi-artist splitting is on, null when it is off. */
@@ -111,31 +132,23 @@ class TrackRepositoryImpl @Inject constructor(
         }
 
     override fun getArtists(): Flow<List<Artist>> = splitConfig().flatMapLatest { separators ->
-        if (separators == null) {
-            musicDao.getAllArtists().map { list ->
-                list.map {
-                    Artist(
-                        id = "artist:${it.artist}",
-                        name = it.artist,
-                        trackCount = it.trackCount,
-                        albumCount = it.albumCount
-                    )
-                }
-            }
-        } else {
-            musicDao.getAllTracks().map { entities -> buildArtists(entities, separators) }
-                .flowOn(Dispatchers.Default)
-        }
+        getAllTracks().map { tracks ->
+            val sepList = separators ?: emptyList()
+            buildArtistsFromTracks(tracks, sepList)
+        }.flowOn(Dispatchers.Default)
     }
 
-    private fun buildArtists(entities: List<TrackEntity>, separators: List<String>): List<Artist> {
+    private fun buildArtistsFromTracks(tracks: List<Track>, separators: List<String>): List<Artist> {
         class Acc(val name: String) { var tracks = 0; val albums = HashSet<String>() }
         val byName = HashMap<String, Acc>()
-        for (entity in entities) {
-            for (name in ArtistSplitter.split(entity.artist, separators)) {
-                val acc = byName.getOrPut(name.lowercase()) { Acc(name) }
-                acc.tracks++
-                acc.albums.add(entity.album)
+        for (track in tracks) {
+            val names = if (separators.isEmpty()) listOf(track.artist) else ArtistSplitter.split(track.artist, separators)
+            for (name in names) {
+                if (name.isNotBlank()) {
+                    val acc = byName.getOrPut(name.lowercase()) { Acc(name) }
+                    acc.tracks++
+                    acc.albums.add(track.album)
+                }
             }
         }
         return byName.values
@@ -144,102 +157,89 @@ class TrackRepositoryImpl @Inject constructor(
     }
 
     override fun getFolders(): Flow<List<Folder>> {
-        return musicDao.getAllFolders().map { list ->
-            list.map {
-                Folder(
-                    id = "folder:${it.folder}",
-                    name = it.folder,
-                    trackCount = it.trackCount
-                )
+        return getAllTracks().map { tracks ->
+            val byFolder = LinkedHashMap<String, Int>()
+            for (track in tracks) {
+                if (track.folder.isNotBlank()) {
+                    byFolder[track.folder] = (byFolder[track.folder] ?: 0) + 1
+                }
             }
-        }
+            byFolder.entries.map {
+                Folder(
+                    id = "folder:${it.key}",
+                    name = it.key,
+                    trackCount = it.value
+                )
+            }.sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.name })
+        }.flowOn(Dispatchers.Default)
     }
 
     override fun getGenres(): Flow<List<Genre>> {
-        return musicDao.getAllGenres().map { list ->
-            list.map {
-                Genre(
-                    id = "genre:${it.genre}",
-                    name = it.genre,
-                    trackCount = it.trackCount
-                )
+        return getAllTracks().map { tracks ->
+            val byGenre = LinkedHashMap<String, Int>()
+            for (track in tracks) {
+                if (track.genre.isNotBlank() && !track.genre.equals("Unknown Genre", ignoreCase = true)) {
+                    byGenre[track.genre] = (byGenre[track.genre] ?: 0) + 1
+                }
             }
-        }
+            byGenre.entries.map {
+                Genre(
+                    id = "genre:${it.key}",
+                    name = it.key,
+                    trackCount = it.value
+                )
+            }.sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.name })
+        }.flowOn(Dispatchers.Default)
     }
 
     override fun getTracksByAlbum(album: String): Flow<List<Track>> {
-        return musicDao.getTracksByAlbum(album).map { list ->
-            list.map { it.toDomain() }
+        return getAllTracks().map { tracks ->
+            tracks.filter { it.album.equals(album, ignoreCase = true) }
         }
     }
 
     override fun getTracksByArtist(artist: String): Flow<List<Track>> =
         splitConfig().flatMapLatest { separators ->
             if (separators == null) {
-                musicDao.getTracksByArtist(artist).map { list -> list.map { it.toDomain() } }
+                getAllTracks().map { tracks ->
+                    tracks.filter { it.artist.equals(artist, ignoreCase = true) }
+                }
             } else {
-                musicDao.getAllTracks().map { entities ->
-                    entities.filter { e ->
+                getAllTracks().map { tracks ->
+                    tracks.filter { e ->
                         ArtistSplitter.split(e.artist, separators).any { it.equals(artist, ignoreCase = true) }
-                    }.map { it.toDomain() }
+                    }
                 }.flowOn(Dispatchers.Default)
             }
         }
 
     override fun getTracksByFolder(folder: String): Flow<List<Track>> {
-        return musicDao.getTracksByFolder(folder).map { list ->
-            list.map { it.toDomain() }
+        return getAllTracks().map { tracks ->
+            tracks.filter { it.folder.equals(folder, ignoreCase = true) }
         }
     }
 
     override fun getTracksByGenre(genre: String): Flow<List<Track>> {
-        return musicDao.getTracksByGenre(genre).map { list ->
-            list.map { it.toDomain() }
+        return getAllTracks().map { tracks ->
+            tracks.filter { it.genre.equals(genre, ignoreCase = true) }
         }
     }
 
     override fun getAlbumByName(album: String): Flow<Album?> {
-        return musicDao.getAlbumByName(album).map { result ->
-            result?.let {
-                Album(
-                    id = "album:${it.album}:${it.artist}",
-                    name = it.album,
-                    artist = it.artist,
-                    trackCount = it.trackCount,
-                    artworkUri = it.artworkUri
-                )
-            }
-        }
+        return getAlbums().map { list -> list.firstOrNull { it.name.equals(album, ignoreCase = true) } }
     }
 
     override fun getArtistByName(artist: String): Flow<Artist?> =
         splitConfig().flatMapLatest { separators ->
             if (separators == null) {
-                musicDao.getArtistByName(artist).map { result ->
-                    result?.let {
-                        Artist(
-                            id = "artist:${it.artist}",
-                            name = it.artist,
-                            trackCount = it.trackCount,
-                            albumCount = it.albumCount
-                        )
-                    }
-                }
+                getArtists().map { list -> list.firstOrNull { it.name.equals(artist, ignoreCase = true) } }
             } else {
                 getArtists().map { list -> list.firstOrNull { it.name.equals(artist, ignoreCase = true) } }
             }
         }
 
     override fun getGenreByName(genre: String): Flow<Genre?> {
-        return musicDao.getGenreByName(genre).map { result ->
-            result?.let {
-                Genre(
-                    id = "genre:${it.genre}",
-                    name = it.genre,
-                    trackCount = it.trackCount
-                )
-            }
-        }
+        return getGenres().map { list -> list.firstOrNull { it.name.equals(genre, ignoreCase = true) } }
     }
 
     override suspend fun refreshTracks() = withContext(Dispatchers.IO) {
@@ -394,4 +394,33 @@ class TrackRepositoryImpl @Inject constructor(
         }
     }
 
+    override fun getAllDeviceFolderNames(): Flow<List<String>> =
+        combine(
+            musicDao.getAllFolders(),
+            preferencesManager.excludedFolders
+        ) { dbFolders, excluded ->
+            val onDevice = localMusicSource.scanAllFolderNames()
+            val all = (dbFolders.map { it.folder } + excluded + onDevice + LocalMusicSource.DEFAULT_EXCLUDED_FOLDERS)
+                .filter { it.isNotBlank() }
+                .distinct()
+                .sortedWith(String.CASE_INSENSITIVE_ORDER)
+            all
+        }.flowOn(Dispatchers.IO)
+
+    override suspend fun hideTrack(trackId: String) {
+        preferencesManager.hideTrack(trackId)
+    }
+
+    override suspend fun unhideTrack(trackId: String) {
+        preferencesManager.unhideTrack(trackId)
+    }
+
+    override suspend fun unhideAllTracks() {
+        preferencesManager.unhideAllTracks()
+    }
+
+    override suspend fun excludeFolder(folder: String) {
+        preferencesManager.excludeFolder(folder)
+        refreshTracks()
+    }
 }

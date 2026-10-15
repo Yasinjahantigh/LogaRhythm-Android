@@ -150,4 +150,13 @@ class SearchViewModel @Inject constructor(
             onDone(deleted)
         }
     }
+
+    fun hideTrack(track: Track) {
+        viewModelScope.launch {
+            if (currentTrack.value?.id == track.id) {
+                playerController.next()
+            }
+            trackRepository.hideTrack(track.id)
+        }
+    }
 }

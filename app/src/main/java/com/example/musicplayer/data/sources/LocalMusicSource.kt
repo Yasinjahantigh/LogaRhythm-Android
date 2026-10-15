@@ -18,7 +18,7 @@ import javax.inject.Singleton
 
 @Singleton
 class LocalMusicSource @Inject constructor(
-    @ApplicationContext private val context: Context
+    @param:ApplicationContext private val context: Context
 ) : MusicSource {
 
     companion object {
@@ -43,7 +43,7 @@ class LocalMusicSource @Inject constructor(
         minDurationMs: Long = this.minDurationMs,
         excludedFolders: Set<String> = emptySet()
     ): List<Track> = withContext(Dispatchers.IO) {
-        val effectiveExcludedFolders = if (excludedFolders.isEmpty()) DEFAULT_EXCLUDED_FOLDERS else excludedFolders
+        val effectiveExcludedFolders = excludedFolders
         val tracks = mutableListOf<Track>()
         val collection = MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
 
@@ -222,4 +222,29 @@ class LocalMusicSource @Inject constructor(
     }
 
     override suspend fun getPlaybackUri(track: Track): String = track.uri
+
+    suspend fun scanAllFolderNames(): Set<String> = withContext(Dispatchers.IO) {
+        val folders = mutableSetOf<String>()
+        val collection = MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
+        val projection = arrayOf(MediaStore.Audio.Media.DATA)
+        val selection = "${MediaStore.Audio.Media.DATA} IS NOT NULL"
+        try {
+            context.contentResolver.query(collection, projection, selection, null, null)?.use { cursor ->
+                val dataCol = cursor.getColumnIndex(MediaStore.Audio.Media.DATA)
+                if (dataCol != -1) {
+                    while (cursor.moveToNext()) {
+                        val filePath = cursor.getString(dataCol)
+                        if (!filePath.isNullOrBlank()) {
+                            val parent = File(filePath).parentFile?.name
+                            if (!parent.isNullOrBlank()) {
+                                folders.add(parent)
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (_: Exception) {
+        }
+        folders
+    }
 }

@@ -89,7 +89,11 @@ fun ArtistDetailScreen(
             onAddToPlaylist = { showAddToPlaylistDialog = true },
             onGoToAlbum = if (onNavigateToAlbum != null && menuTrack.album.isNotBlank() && menuTrack.album != "Unknown Album") {
                 { onNavigateToAlbum(menuTrack.album) }
-            } else null
+            } else null,
+            onHideTrack = {
+                viewModel.hideTrack(menuTrack)
+                Toast.makeText(context, context.getString(R.string.track_hidden_toast, menuTrack.title), Toast.LENGTH_SHORT).show()
+            }
         )
     }
 

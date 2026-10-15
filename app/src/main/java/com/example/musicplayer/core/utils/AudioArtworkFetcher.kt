@@ -2,6 +2,7 @@ package com.example.musicplayer.core.utils
 
 import android.content.ContentResolver
 import android.content.Context
+import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.drawable.BitmapDrawable
 import android.media.MediaMetadataRetriever
@@ -19,9 +20,10 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 /**
- * Custom Coil fetcher for loading audio album artwork.
- * Uses ContentResolver.loadThumbnail on API 29+ with fallback to MediaMetadataRetriever
- * on older versions or when scoped storage thumbnail generation is unavailable.
+ * Custom Coil fetcher for loading audio album artwork in highest possible quality.
+ * Prioritizes extracting the original embedded picture from the audio file tags
+ * at full 32-bit (ARGB_8888) resolution (supporting up to 2048px for large screen & full player displays).
+ * Falls back to scoped storage thumbnails or content streams only when embedded artwork is absent.
  */
 class AudioArtworkFetcher(
     private val context: Context,
@@ -29,15 +31,53 @@ class AudioArtworkFetcher(
     private val options: Options
 ) : Fetcher {
 
-    /** Edge length actually needed on screen; list rows ask for ~150px, the player for ~1000px. */
+    /** Edge length needed on screen; list rows request ~150px, full player / detail requests up to 1440px+. */
     private val targetEdge: Int = maxOf(
-        options.size.width.pxOrElse { 512 },
-        options.size.height.pxOrElse { 512 }
-    ).coerceIn(128, 768)
+        options.size.width.pxOrElse { 1080 },
+        options.size.height.pxOrElse { 1080 }
+    ).coerceIn(128, 2048)
 
     override suspend fun fetch(): FetchResult? = withContext(Dispatchers.IO) {
         val resolver = context.contentResolver
 
+        // 1. Prioritize original embedded picture from audio metadata for pristine high resolution
+        try {
+            val retriever = MediaMetadataRetriever()
+            retriever.setDataSource(context, uri)
+            val picture = retriever.embeddedPicture
+            try {
+                retriever.release()
+            } catch (_: Exception) {}
+
+            if (picture != null) {
+                val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                BitmapFactory.decodeByteArray(picture, 0, picture.size, bounds)
+
+                // Only downsample if image genuinely exceeds the target size or 2048px
+                var sample = 1
+                val maxLimit = maxOf(targetEdge, 1080).coerceAtMost(2048)
+                while (bounds.outWidth / (sample * 2) >= maxLimit && bounds.outHeight / (sample * 2) >= maxLimit) {
+                    sample *= 2
+                }
+
+                val decodeOptions = BitmapFactory.Options().apply {
+                    inSampleSize = sample
+                    inPreferredConfig = Bitmap.Config.ARGB_8888
+                }
+                val bitmap = BitmapFactory.decodeByteArray(picture, 0, picture.size, decodeOptions)
+                if (bitmap != null) {
+                    return@withContext DrawableResult(
+                        drawable = BitmapDrawable(context.resources, bitmap),
+                        isSampled = sample > 1,
+                        dataSource = DataSource.DISK
+                    )
+                }
+            }
+        } catch (_: Exception) {
+            // Embedded picture extraction failed or not available for this URI
+        }
+
+        // 2. Fall back to scoped storage loadThumbnail on Android Q+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             try {
                 val bitmap = resolver.loadThumbnail(uri, Size(targetEdge, targetEdge), null)
@@ -47,27 +87,14 @@ class AudioArtworkFetcher(
                     dataSource = DataSource.DISK
                 )
             } catch (_: Exception) {
-                // Fall back to embedded picture extraction
+                // Fall back to direct stream decode
             }
         }
 
+        // 3. Fall back to direct stream decode (e.g. for image file URIs)
         try {
-            val retriever = MediaMetadataRetriever()
-            retriever.setDataSource(context, uri)
-            val picture = retriever.embeddedPicture
-            try {
-                retriever.release()
-            } catch (_: Exception) {
-            }
-
-            if (picture != null) {
-                val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-                BitmapFactory.decodeByteArray(picture, 0, picture.size, bounds)
-                var sample = 1
-                while (bounds.outWidth / (sample * 2) >= targetEdge && bounds.outHeight / (sample * 2) >= targetEdge) sample *= 2
-                val bitmap = BitmapFactory.decodeByteArray(
-                    picture, 0, picture.size, BitmapFactory.Options().apply { inSampleSize = sample }
-                )
+            resolver.openInputStream(uri)?.use { stream ->
+                val bitmap = BitmapFactory.decodeStream(stream)
                 if (bitmap != null) {
                     return@withContext DrawableResult(
                         drawable = BitmapDrawable(context.resources, bitmap),
@@ -77,7 +104,7 @@ class AudioArtworkFetcher(
                 }
             }
         } catch (_: Exception) {
-            // No embedded artwork available
+            // No stream available
         }
 
         null

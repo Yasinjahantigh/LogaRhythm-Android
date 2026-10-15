@@ -18,6 +18,7 @@ import javax.inject.Inject
 class PlaylistDetailViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val playlistRepository: PlaylistRepository,
+    private val trackRepository: com.example.musicplayer.domain.repository.TrackRepository,
     private val playerController: PlayerController
 ) : ViewModel() {
 
@@ -103,6 +104,15 @@ class PlaylistDetailViewModel @Inject constructor(
         viewModelScope.launch {
             playlistRepository.deletePlaylist(playlistId)
             onDeleted()
+        }
+    }
+
+    fun hideTrack(track: Track) {
+        viewModelScope.launch {
+            if (playerController.currentTrack.value?.id == track.id) {
+                playerController.next()
+            }
+            trackRepository.hideTrack(track.id)
         }
     }
 }

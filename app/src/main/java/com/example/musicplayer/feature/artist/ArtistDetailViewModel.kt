@@ -12,6 +12,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 @HiltViewModel
@@ -62,5 +63,14 @@ class ArtistDetailViewModel @Inject constructor(
         val list = tracks.value
         val index = list.indexOfFirst { it.id == track.id }.coerceAtLeast(0)
         playerController.play(list, index)
+    }
+
+    fun hideTrack(track: Track) {
+        viewModelScope.launch {
+            if (currentTrack.value?.id == track.id) {
+                playerController.next()
+            }
+            trackRepository.hideTrack(track.id)
+        }
     }
 }

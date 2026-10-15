@@ -46,6 +46,8 @@ class SettingsViewModel @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
     val replayGainMode: StateFlow<String> = preferencesManager.replayGainMode
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "off")
+    val replayGainPreampDb: StateFlow<Float> = preferencesManager.replayGainPreampDb
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0f)
     val resumeOnHeadset: StateFlow<Boolean> = preferencesManager.resumeOnHeadset
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
     val splitArtists: StateFlow<Boolean> = preferencesManager.splitArtists
@@ -64,6 +66,7 @@ class SettingsViewModel @Inject constructor(
     fun setFadeSec(seconds: Int) { viewModelScope.launch { preferencesManager.setFadeBetweenSongsSec(seconds) } }
     fun setSkipSilence(enabled: Boolean) { viewModelScope.launch { preferencesManager.setSkipSilence(enabled) } }
     fun setReplayGainMode(mode: String) { viewModelScope.launch { preferencesManager.setReplayGainMode(mode) } }
+    fun setReplayGainPreampDb(db: Float) { viewModelScope.launch { preferencesManager.setReplayGainPreampDb(db) } }
     fun setResumeOnHeadset(enabled: Boolean) { viewModelScope.launch { preferencesManager.setResumeOnHeadset(enabled) } }
     fun setSplitArtists(enabled: Boolean) { viewModelScope.launch { preferencesManager.setSplitArtists(enabled) } }
     fun setArtistSeparators(raw: String?) {
@@ -130,7 +133,7 @@ class SettingsViewModel @Inject constructor(
         .stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5000),
-            initialValue = "fixed_color"
+            initialValue = "album_art"
         )
 
     val cornerRoundness: StateFlow<String> = preferencesManager.cornerRoundness
@@ -161,8 +164,14 @@ class SettingsViewModel @Inject constructor(
             initialValue = emptySet()
         )
 
-    val allFolders: StateFlow<List<String>> = trackRepository.getFolders()
-        .map { folders -> folders.map { it.name }.filter { it.isNotBlank() } }
+    val allFolders: StateFlow<List<String>> = trackRepository.getAllDeviceFolderNames()
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = emptyList()
+        )
+
+    val hiddenTracks: StateFlow<List<Track>> = trackRepository.getHiddenTracks()
         .stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5000),
@@ -228,6 +237,32 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch {
             preferencesManager.toggleExcludedFolder(folder)
             trackRepository.refreshTracks()
+        }
+    }
+
+    fun resetExcludedFoldersToDefault() {
+        viewModelScope.launch {
+            preferencesManager.resetExcludedFoldersToDefault()
+            trackRepository.refreshTracks()
+        }
+    }
+
+    fun clearAllExcludedFolders() {
+        viewModelScope.launch {
+            preferencesManager.clearAllExcludedFolders()
+            trackRepository.refreshTracks()
+        }
+    }
+
+    fun unhideTrack(trackId: String) {
+        viewModelScope.launch {
+            trackRepository.unhideTrack(trackId)
+        }
+    }
+
+    fun unhideAllTracks() {
+        viewModelScope.launch {
+            trackRepository.unhideAllTracks()
         }
     }
 

@@ -15,6 +15,7 @@ import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.clickable
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.geometry.Offset
@@ -53,18 +54,19 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ManageSearch
 import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material.icons.filled.FileUpload
-import androidx.compose.material.icons.filled.ManageSearch
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.OpenInBrowser
 import androidx.compose.material.icons.filled.RestartAlt
 import androidx.compose.material.icons.filled.SaveAlt
 import androidx.compose.material.icons.filled.Search
+import java.util.Locale
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -318,7 +320,7 @@ fun LyricsView(
                         val min = line.timestampMs / 60_000L
                         val sec = (line.timestampMs % 60_000L) / 1_000L
                         val frac = (line.timestampMs % 1_000L) / 10L
-                        String.format("[%02d:%02d.%02d]%s", min, sec, frac, line.text)
+                        String.format(Locale.US, "[%02d:%02d.%02d]%s", min, sec, frac, line.text)
                     }
                 } else it.plainText.orEmpty()
             }.orEmpty(),
@@ -515,7 +517,7 @@ fun LyricsView(
                             modifier = Modifier.size(44.dp).testTag("lyrics_candidates_search_button")
                         ) {
                             Icon(
-                                imageVector = Icons.Default.ManageSearch,
+                                imageVector = Icons.AutoMirrored.Filled.ManageSearch,
                                 contentDescription = stringResource(R.string.lyrics_search_candidates_btn),
                                 tint = MaterialTheme.colorScheme.primary
                             )

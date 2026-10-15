@@ -404,6 +404,13 @@ fun HomeScreen(
             onEditTrack = {
                 selectedTrackForMenu = null
                 selectedTrackForEdit = track
+            },
+            onHideTrack = {
+                viewModel.hideTrack(track)
+                selectedTrackForMenu = null
+                coroutineScope.launch {
+                    snackbarHostState.showSnackbar(context.getString(R.string.track_hidden_toast, track.title))
+                }
             }
         )
     }

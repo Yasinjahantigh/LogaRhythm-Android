@@ -115,7 +115,8 @@ fun SongsTabContent(
             }
             items(
                 items = tracks,
-                key = { it.id }
+                key = { it.id },
+                contentType = { "track" }
             ) { track ->
                 val isCurrent = track.id == currentTrackId
                 TrackListItem(

@@ -39,6 +39,7 @@ import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Lyrics
 import androidx.compose.material.icons.filled.RoundedCorner
 import androidx.compose.material.icons.filled.Timer
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.ViewStream
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -88,10 +89,12 @@ fun SettingsScreen(
     val fadeSec by viewModel.fadeSec.collectAsStateWithLifecycle()
     val skipSilence by viewModel.skipSilence.collectAsStateWithLifecycle()
     val replayGainMode by viewModel.replayGainMode.collectAsStateWithLifecycle()
+    val replayGainPreampDb by viewModel.replayGainPreampDb.collectAsStateWithLifecycle()
     val resumeOnHeadset by viewModel.resumeOnHeadset.collectAsStateWithLifecycle()
     val splitArtists by viewModel.splitArtists.collectAsStateWithLifecycle()
     val artistSeparators by viewModel.artistSeparators.collectAsStateWithLifecycle()
     val hiddenLyrics by viewModel.hiddenLyricsTracks.collectAsStateWithLifecycle()
+    val hiddenTracks by viewModel.hiddenTracks.collectAsStateWithLifecycle()
     val message by viewModel.message.collectAsStateWithLifecycle()
     val context = androidx.compose.ui.platform.LocalContext.current
 
@@ -117,8 +120,10 @@ fun SettingsScreen(
 
     var showFadeDialog by remember { mutableStateOf(false) }
     var showReplayGainDialog by remember { mutableStateOf(false) }
+    var showPreampDialog by remember { mutableStateOf(false) }
     var showSeparatorsDialog by remember { mutableStateOf(false) }
     var showHiddenLyricsDialog by remember { mutableStateOf(false) }
+    var showHiddenTracksDialog by remember { mutableStateOf(false) }
     var showLanguageDialog by remember { mutableStateOf(false) }
     var showThemeDialog by remember { mutableStateOf(false) }
     var showColorSourceDialog by remember { mutableStateOf(false) }
@@ -213,7 +218,24 @@ fun SettingsScreen(
             allFolders = allFolders,
             excludedFolders = excludedFolders,
             onToggleFolder = viewModel::toggleExcludedFolder,
+            onResetDefaults = viewModel::resetExcludedFoldersToDefault,
+            onClearAll = viewModel::clearAllExcludedFolders,
             onDismiss = { showFoldersDialog = false }
+        )
+    }
+
+    if (showHiddenTracksDialog) {
+        HiddenTracksDialog(
+            tracks = hiddenTracks,
+            onRestore = { trackId ->
+                viewModel.unhideTrack(trackId)
+                Toast.makeText(context, context.getString(R.string.track_restored_toast, ""), Toast.LENGTH_SHORT).show()
+            },
+            onRestoreAll = {
+                viewModel.unhideAllTracks()
+                Toast.makeText(context, context.getString(R.string.all_tracks_restored_toast), Toast.LENGTH_SHORT).show()
+            },
+            onDismiss = { showHiddenTracksDialog = false }
         )
     }
 
@@ -240,6 +262,19 @@ fun SettingsScreen(
             selectedKey = replayGainMode,
             onSelectKey = viewModel::setReplayGainMode,
             onDismiss = { showReplayGainDialog = false }
+        )
+    }
+
+    if (showPreampDialog) {
+        val offLabel = stringResource(R.string.settings_off)
+        SingleChoiceDialog(
+            title = stringResource(R.string.settings_replaygain_preamp_title),
+            options = listOf(-6, -4, -2, 0, 2, 4, 6).map { db ->
+                db.toFloat().toString() to if (db == 0) offLabel else "$db dB"
+            },
+            selectedKey = replayGainPreampDb.toInt().toFloat().toString(),
+            onSelectKey = { viewModel.setReplayGainPreampDb(it.toFloatOrNull() ?: 0f) },
+            onDismiss = { showPreampDialog = false }
         )
     }
 
@@ -397,6 +432,14 @@ fun SettingsScreen(
                             onClick = { showReplayGainDialog = true },
                             testTag = "settings_replaygain_item"
                         )
+                        SettingsActionItem(
+                            title = stringResource(R.string.settings_replaygain_preamp_title),
+                            subtitle = if (replayGainPreampDb == 0f) stringResource(R.string.settings_off)
+                            else "${replayGainPreampDb.toInt()} dB",
+                            icon = Icons.Filled.Tune,
+                            onClick = { showPreampDialog = true },
+                            testTag = "settings_replaygain_preamp_item"
+                        )
                         SettingsSwitchItem(
                             title = stringResource(R.string.settings_skip_silence_title),
                             subtitle = stringResource(R.string.settings_skip_silence_desc),
@@ -438,6 +481,13 @@ fun SettingsScreen(
                             icon = Icons.Filled.FolderOff,
                             onClick = { showFoldersDialog = true },
                             testTag = "settings_excluded_folders_item"
+                        )
+                        SettingsActionItem(
+                            title = stringResource(R.string.settings_hidden_tracks_title),
+                            subtitle = stringResource(R.string.settings_hidden_tracks_desc, hiddenTracks.size),
+                            icon = Icons.Filled.VisibilityOff,
+                            onClick = { showHiddenTracksDialog = true },
+                            testTag = "settings_hidden_tracks_item"
                         )
                         SettingsSwitchItem(
                             title = stringResource(R.string.settings_split_artists_title),

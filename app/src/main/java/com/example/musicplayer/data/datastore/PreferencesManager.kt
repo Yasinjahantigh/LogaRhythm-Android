@@ -6,6 +6,7 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
@@ -38,6 +39,7 @@ class PreferencesManager @Inject constructor(
     private val keyCompactMiniPlayer = booleanPreferencesKey("key_compact_mini_player")
     private val keyMinTrackLengthSec = intPreferencesKey("key_min_track_length_sec")
     private val keyExcludedFolders = stringPreferencesKey("key_excluded_folders")
+    private val keyHiddenTracks = stringPreferencesKey("key_hidden_track_ids")
     private val keyRecentSearches = stringPreferencesKey("key_recent_searches")
     private val keyQueueTrackIds = stringPreferencesKey("key_queue_track_ids")
     private val keyQueueCurrentIndex = intPreferencesKey("key_queue_current_index")
@@ -115,7 +117,7 @@ class PreferencesManager @Inject constructor(
     }
 
     val colorSource: Flow<String> = dataStore.data.map { preferences ->
-        preferences[keyColorSource] ?: "fixed_color"
+        preferences[keyColorSource] ?: "album_art"
     }
 
     suspend fun setColorSource(source: String) {
@@ -171,16 +173,81 @@ class PreferencesManager @Inject constructor(
         }
     }
 
+    suspend fun resetExcludedFoldersToDefault() {
+        dataStore.edit { preferences ->
+            preferences.remove(keyExcludedFolders)
+        }
+    }
+
+    suspend fun clearAllExcludedFolders() {
+        dataStore.edit { preferences ->
+            preferences[keyExcludedFolders] = ""
+        }
+    }
+
+    suspend fun excludeFolder(folder: String) {
+        dataStore.edit { preferences ->
+            val raw = preferences[keyExcludedFolders]
+            val current = if (raw == null) {
+                com.example.musicplayer.data.sources.LocalMusicSource.DEFAULT_EXCLUDED_FOLDERS.toMutableSet()
+            } else if (raw.isBlank()) {
+                mutableSetOf()
+            } else {
+                raw.split("\n").filter { it.isNotBlank() }.toMutableSet()
+            }
+            current.add(folder)
+            preferences[keyExcludedFolders] = current.joinToString("\n")
+        }
+    }
+
     suspend fun toggleExcludedFolder(folder: String) {
         dataStore.edit { preferences ->
-            val current = preferences[keyExcludedFolders].orEmpty()
-                .split("\n").filter { it.isNotBlank() }.toMutableSet()
+            val raw = preferences[keyExcludedFolders]
+            val current = if (raw == null) {
+                com.example.musicplayer.data.sources.LocalMusicSource.DEFAULT_EXCLUDED_FOLDERS.toMutableSet()
+            } else if (raw.isBlank()) {
+                mutableSetOf()
+            } else {
+                raw.split("\n").filter { it.isNotBlank() }.toMutableSet()
+            }
             if (current.contains(folder)) {
                 current.remove(folder)
             } else {
                 current.add(folder)
             }
             preferences[keyExcludedFolders] = current.joinToString("\n")
+        }
+    }
+
+    // ---- Hidden Tracks ----------------------------------------------------------------------
+
+    val hiddenTrackIds: Flow<Set<String>> = dataStore.data.map { preferences ->
+        val raw = preferences[keyHiddenTracks].orEmpty()
+        if (raw.isBlank()) emptySet()
+        else raw.split("\n").filter { it.isNotBlank() }.toSet()
+    }
+
+    suspend fun hideTrack(trackId: String) {
+        dataStore.edit { preferences ->
+            val current = preferences[keyHiddenTracks].orEmpty()
+                .split("\n").filter { it.isNotBlank() }.toMutableSet()
+            current.add(trackId)
+            preferences[keyHiddenTracks] = current.joinToString("\n")
+        }
+    }
+
+    suspend fun unhideTrack(trackId: String) {
+        dataStore.edit { preferences ->
+            val current = preferences[keyHiddenTracks].orEmpty()
+                .split("\n").filter { it.isNotBlank() }.toMutableSet()
+            current.remove(trackId)
+            preferences[keyHiddenTracks] = current.joinToString("\n")
+        }
+    }
+
+    suspend fun unhideAllTracks() {
+        dataStore.edit { preferences ->
+            preferences.remove(keyHiddenTracks)
         }
     }
 
@@ -294,13 +361,38 @@ class PreferencesManager @Inject constructor(
     private val keyOnboardingCompleted = booleanPreferencesKey("key_onboarding_completed")
 
     val isOnboardingCompleted: Flow<Boolean> = dataStore.data.map { preferences ->
-        preferences[keyOnboardingCompleted] ?: false
+        preferences[keyOnboardingCompleted] ?: readOnboardingBootstrap()
     }
 
     suspend fun setOnboardingCompleted(completed: Boolean = true) {
         dataStore.edit { preferences ->
             preferences[keyOnboardingCompleted] = completed
         }
+        writeOnboardingBootstrap(completed)
+    }
+
+    /**
+     * Synchronous SharedPreferences mirror so the first frame never guesses.
+     * DataStore reads are disk-async; without this the UI must start with `false` and flashes the
+     * onboarding menu for a few hundred ms on slow phones. The bootstrap value is only a starting
+     * point — the DataStore flow above remains the source of truth afterwards.
+     */
+    private fun readOnboardingBootstrap(): Boolean =
+        runCatching {
+            context.getSharedPreferences(BOOTSTRAP_PREFS, Context.MODE_PRIVATE)
+                .getBoolean(BOOTSTRAP_ONBOARDING_KEY, false)
+        }.getOrDefault(false)
+
+    private fun writeOnboardingBootstrap(completed: Boolean) {
+        runCatching {
+            context.getSharedPreferences(BOOTSTRAP_PREFS, Context.MODE_PRIVATE)
+                .edit().putBoolean(BOOTSTRAP_ONBOARDING_KEY, completed).apply()
+        }
+    }
+
+    companion object {
+        const val BOOTSTRAP_PREFS = "music_settings"
+        const val BOOTSTRAP_ONBOARDING_KEY = "onboarding_completed_bootstrap"
     }
 
     // ---- Playback quality -------------------------------------------------------------------
@@ -308,6 +400,7 @@ class PreferencesManager @Inject constructor(
     private val keyFadeSec = intPreferencesKey("key_fade_between_songs_sec")
     private val keySkipSilence = booleanPreferencesKey("key_skip_silence")
     private val keyReplayGain = stringPreferencesKey("key_replay_gain_mode")
+    private val keyReplayGainPreamp = floatPreferencesKey("key_replay_gain_preamp_db")
     private val keyResumeOnHeadset = booleanPreferencesKey("key_resume_on_headset")
 
     /** 0 = off. The player fades out/in around each song change (single player, no overlap). */
@@ -315,11 +408,14 @@ class PreferencesManager @Inject constructor(
     val skipSilence: Flow<Boolean> = dataStore.data.map { it[keySkipSilence] ?: false }
     /** "off" | "track" | "album". */
     val replayGainMode: Flow<String> = dataStore.data.map { it[keyReplayGain] ?: "off" }
+    /** Manual pre-amplifier added on top of the picked ReplayGain tag, in dB [-6, +6]. */
+    val replayGainPreampDb: Flow<Float> = dataStore.data.map { it[keyReplayGainPreamp] ?: 0f }
     val resumeOnHeadset: Flow<Boolean> = dataStore.data.map { it[keyResumeOnHeadset] ?: true }
 
     suspend fun setFadeBetweenSongsSec(seconds: Int) { dataStore.edit { it[keyFadeSec] = seconds.coerceIn(0, 12) } }
     suspend fun setSkipSilence(enabled: Boolean) { dataStore.edit { it[keySkipSilence] = enabled } }
     suspend fun setReplayGainMode(mode: String) { dataStore.edit { it[keyReplayGain] = mode } }
+    suspend fun setReplayGainPreampDb(db: Float) { dataStore.edit { it[keyReplayGainPreamp] = db.coerceIn(-6f, 6f) } }
     suspend fun setResumeOnHeadset(enabled: Boolean) { dataStore.edit { it[keyResumeOnHeadset] = enabled } }
 
     // ---- Library intelligence ---------------------------------------------------------------

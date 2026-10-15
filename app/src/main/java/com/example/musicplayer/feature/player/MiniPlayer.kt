@@ -42,7 +42,9 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.testTag
@@ -80,11 +82,14 @@ fun MiniPlayerContent(
     onExpand: () -> Unit,
     modifier: Modifier = Modifier,
     isCompact: Boolean = false,
-    onDismiss: (() -> Unit)? = null
+    onDismiss: (() -> Unit)? = null,
+    /** Artwork-derived tint; when null the player falls back to the theme's primary. */
+    tint: Color? = null
 ) {
     val scope = rememberCoroutineScope()
     val dragOffsetX = remember { Animatable(0f) }
     val scheme = MaterialTheme.colorScheme
+    val accent = tint ?: scheme.primary
 
     val title = track.title.cleanMetaOrNull() ?: stringResource(R.string.unknown_title)
     val artist = track.artist.cleanMetaOrNull() ?: stringResource(R.string.unknown_artist)
@@ -170,7 +175,7 @@ fun MiniPlayerContent(
                 horizontalArrangement = Arrangement.spacedBy(2.dp)
             ) {
                 val ringTrack = scheme.onSurface.copy(alpha = 0.12f)
-                val ringColor = scheme.primary
+                val ringColor = accent
                 Box(modifier = Modifier.size(ringSize), contentAlignment = Alignment.Center) {
                     // progress() is read in the draw phase only: playback ticks never recompose this.
                     Canvas(modifier = Modifier.fillMaxSize()) {
@@ -203,7 +208,7 @@ fun MiniPlayerContent(
                             .size(ringSize - 9.dp)
                             .testTag("mini_player_play_pause"),
                         colors = IconButtonDefaults.filledIconButtonColors(
-                            containerColor = scheme.primary,
+                            containerColor = accent,
                             contentColor = scheme.onPrimary
                         )
                     ) {
@@ -242,18 +247,32 @@ fun MiniPlayer(
     onExpand: () -> Unit,
     modifier: Modifier = Modifier,
     isCompact: Boolean = false,
-    onDismiss: (() -> Unit)? = null
+    onDismiss: (() -> Unit)? = null,
+    /** Artwork-derived tint; tints the card border/glow and the play button. */
+    tint: Color? = null
 ) {
     val scheme = MaterialTheme.colorScheme
     val shape = RoundedCornerShape(28.dp)
+    val accent = tint ?: scheme.primary
+    val cardColor = if (tint != null) {
+        // Blend the artwork color into the surface so text stays readable on any cover.
+        val blended = androidx.core.graphics.ColorUtils.blendARGB(
+            scheme.surfaceContainerHigh.toArgb(),
+            tint.toArgb(),
+            0.22f
+        )
+        Color(blended)
+    } else {
+        scheme.surfaceContainerHigh
+    }
     Surface(
         modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = 12.dp, vertical = 6.dp)
-            .shadow(10.dp, shape, ambientColor = scheme.primary.copy(alpha = 0.25f), spotColor = scheme.primary.copy(alpha = 0.35f)),
-        color = scheme.surfaceContainerHigh,
+            .shadow(10.dp, shape, ambientColor = accent.copy(alpha = 0.25f), spotColor = accent.copy(alpha = 0.35f)),
+        color = cardColor,
         shape = shape,
-        border = BorderStroke(0.8.dp, scheme.outlineVariant.copy(alpha = 0.6f))
+        border = BorderStroke(0.8.dp, accent.copy(alpha = 0.45f))
     ) {
         MiniPlayerContent(
             track = track,
@@ -264,7 +283,8 @@ fun MiniPlayer(
             onPrevious = onPrevious,
             onExpand = onExpand,
             isCompact = isCompact,
-            onDismiss = onDismiss
+            onDismiss = onDismiss,
+            tint = tint
         )
     }
 }

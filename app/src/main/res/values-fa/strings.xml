@@ -1,4 +1,4 @@
-<resources>
+<resources xmlns:tools="http://schemas.android.com/tools" tools:ignore="PluralsCandidate,UnusedResources">
     <string name="app_name">LogaRhythm</string>
     <string name="nav_home">خانه</string>
     <string name="nav_search">جستجو</string>
@@ -165,6 +165,14 @@
     <string name="sleep_timer_active">فعال: %1$s باقی‌مانده</string>
     <string name="sleep_timer_remaining">%1$s</string>
     <string name="sleep_timer_cancel">لغو تایمر</string>
+    <string name="sleep_timer_tab_minutes">تعداد دقیقه</string>
+    <string name="sleep_timer_tab_tracks">تعداد ترک</string>
+    <string name="sleep_timer_tracks_count">%1$d ترک</string>
+    <string name="sleep_timer_one_track">۱ ترک (پایان آهنگ فعلی)</string>
+    <string name="sleep_timer_tracks_remaining">%1$d ترک باقی‌مانده</string>
+    <string name="sleep_timer_start">تنظیم تایمر</string>
+    <string name="sleep_timer_minutes_count">%1$d دقیقه</string>
+    <string name="sleep_timer_tracks_desc">پخش پس از %1$d ترک متوقف خواهد شد</string>
     <string name="cd_sleep_timer">تایمر خواب</string>
 
     <string name="playback_speed_title">سرعت پخش</string>
@@ -427,6 +435,7 @@
     <string name="settings_replaygain_title">یکسان‌سازی صدا (ReplayGain)</string>
     <string name="settings_replaygain_track">براساس آهنگ</string>
     <string name="settings_replaygain_album">براساس آلبوم</string>
+    <string name="settings_replaygain_preamp_title">پیش‌تقویت یکسان‌سازی</string>
     <string name="settings_skip_silence_title">رد کردن سکوت</string>
     <string name="settings_skip_silence_desc">از روی سکوت‌های طولانی می‌پرد</string>
     <string name="settings_resume_headset_title">ادامه با هدفون</string>
@@ -462,4 +471,28 @@
     <string name="tools_no_duplicates">آهنگ تکراری پیدا نشد</string>
     <string name="tools_no_missing">همهٔ آهنگ‌ها عنوان، خواننده و آلبوم دارند</string>
     <string name="tools_duplicate_group">%1$d نسخه</string>
+
+    <!-- Hidden tracks & Folder exclusion enhancements -->
+    <string name="action_hide_track">مخفی کردن آهنگ</string>
+    <string name="dialog_hide_song_title">مخفی کردن آهنگ</string>
+    <string name="dialog_hide_song_confirm">آیا آهنگ «%1$s» از کتابخانه مخفی شود؟ هر زمان می‌توانید آن را از بخش تنظیمات یا ابزارهای کتابخانه بازگردانید.</string>
+    <string name="btn_hide">مخفی کردن</string>
+    <string name="btn_restore">بازیابی</string>
+    <string name="btn_restore_all">بازیابی همه</string>
+    <string name="track_hidden_toast">آهنگ «%1$s» مخفی شد</string>
+    <string name="track_restored_toast">آهنگ «%1$s» بازیابی شد</string>
+    <string name="all_tracks_restored_toast">همه آهنگ‌های مخفی بازگردانده شدند</string>
+    <string name="settings_hidden_tracks_title">آهنگ‌های مخفی‌شده</string>
+    <string name="settings_hidden_tracks_desc">%1$d آهنگ مخفی</string>
+    <string name="settings_hidden_tracks_empty">هیچ آهنگی در حال حاضر مخفی نیست.</string>
+    <string name="settings_unhide_all_confirm">همه آهنگ‌های مخفی‌شده به کتابخانه بازگردانده شوند؟</string>
+    <string name="tools_hidden_tracks">آهنگ‌های مخفی</string>
+    <string name="tools_no_hidden_tracks">هیچ آهنگی در حال حاضر مخفی نیست</string>
+    <string name="settings_reset_excluded_folders">بازنشانی به پیش‌فرض</string>
+    <string name="settings_clear_all_exclusions">حذف تمام استثناها</string>
+    <string name="settings_folder_excluded_badge">مستثنی شده</string>
+    <string name="action_exclude_folder">مستثنی کردن پوشه از کتابخانه</string>
+    <string name="dialog_exclude_folder_title">مستثنی کردن پوشه</string>
+    <string name="dialog_exclude_folder_confirm">پوشه «%1$s» از کتابخانه مستثنی شود؟ آهنگ‌های این پوشه دیگر نمایش داده نمی‌شوند. هر زمان می‌توانید از تنظیمات آن را بازگردانید.</string>
+    <string name="folder_excluded_toast">پوشه «%1$s» مستثنی شد</string>
 </resources>

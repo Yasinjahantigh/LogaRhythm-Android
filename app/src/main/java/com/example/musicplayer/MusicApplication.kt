@@ -16,7 +16,7 @@ class MusicApplication : Application(), ImageLoaderFactory {
                 add(AudioArtworkFetcher.Factory(this@MusicApplication))
             }
             .memoryCache { MemoryCache.Builder(this).maxSizePercent(0.20).build() }
-            .allowRgb565(true)
+            .allowRgb565(false)
             .crossfade(150)
             .build()
     }

@@ -18,7 +18,7 @@ class ArtistSplitterTest {
         assertEquals(listOf("Adele"), ArtistSplitter.split("Adele & adele"))
     }
     @Test fun customSeparators() {
-        assertEquals(listOf("Tyler", "The Creator"), ArtistSplitter.split("Tyler, The Creator", listOf(", ")))
+        assertEquals(listOf("John", "Paul"), ArtistSplitter.split("John, Paul", listOf(", ")))
         assertEquals(ArtistSplitter.DEFAULT_SEPARATORS, ArtistSplitter.parseSeparators(null))
     }
     @Test fun emptyInput() { assertEquals(emptyList<String>(), ArtistSplitter.split("  ")) }
