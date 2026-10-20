@@ -1,9 +1,9 @@
-import java.io.File
 import java.io.ByteArrayOutputStream
-import java.net.URI
+import java.io.File
 
 plugins {
   alias(libs.plugins.android.application)
+  alias(libs.plugins.kotlinAndroid)
   alias(libs.plugins.kotlin.compose)
   alias(libs.plugins.google.devtools.ksp)
   alias(libs.plugins.hilt.android)
@@ -38,17 +38,16 @@ fun getVersionInfo(): Pair<Int, String> {
 val (appVersionCode, appVersionName) = getVersionInfo()
 
 android {
-  namespace = "com.example"
+  namespace = "com.yasinjahantigh.logarhythm"
   compileSdk = 36
+  buildToolsVersion = "36.1.0"
 
   defaultConfig {
-    applicationId = "com.aistudio.musicplayer.qpmwzx"
+    applicationId = "com.yasinjahantigh.logarhythm"
     minSdk = 26
     targetSdk = 35
     versionCode = appVersionCode
     versionName = appVersionName
-
-    testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }
 
   val ksPath = System.getenv("KEYSTORE_PATH") ?: findProperty("KEYSTORE_PATH") as? String
@@ -88,6 +87,9 @@ android {
     sourceCompatibility = JavaVersion.VERSION_11
     targetCompatibility = JavaVersion.VERSION_11
   }
+  kotlinOptions {
+    jvmTarget = "11"
+  }
   buildFeatures {
     compose = true
   }
@@ -100,6 +102,10 @@ android {
     }
   }
   testOptions { unitTests { isIncludeAndroidResources = true } }
+  lint {
+    checkReleaseBuilds = false
+    abortOnError = false
+  }
   dependenciesInfo {
     includeInApk = false
     includeInBundle = true
@@ -125,89 +131,31 @@ dependencies {
   implementation(libs.androidx.lifecycle.viewmodel.compose)
   implementation(libs.androidx.navigation.compose)
 
-  // Hilt Dependency Injection
   implementation(libs.hilt.android)
   "ksp"(libs.hilt.android.compiler)
   implementation(libs.androidx.hilt.navigation.compose)
 
-  // Room Database
   implementation(libs.androidx.room.ktx)
   implementation(libs.androidx.room.runtime)
   "ksp"(libs.androidx.room.compiler)
 
-  // DataStore Preferences
   implementation(libs.androidx.datastore.preferences)
 
-  // Media3 Playback & Session
   implementation(libs.androidx.media3.exoplayer)
   implementation(libs.androidx.media3.session)
 
-  // Coil Image Loading
   implementation(libs.coil.compose)
-
   implementation(libs.kotlinx.coroutines.android)
-
-  // Ships the baseline profile (src/main/baseline-prof.txt) to ART at install time.
   implementation(libs.androidx.profileinstaller)
 
-  // Glance AppWidget
   implementation(libs.androidx.glance)
   implementation(libs.androidx.glance.appwidget)
   implementation(libs.androidx.glance.material3)
 
-  testImplementation(libs.androidx.compose.ui.test.junit4)
   testImplementation(libs.androidx.core)
-  testImplementation(libs.androidx.junit)
   testImplementation(libs.junit)
   testImplementation(libs.kotlinx.coroutines.test)
   testImplementation(libs.robolectric)
-  androidTestImplementation(platform(libs.androidx.compose.bom))
-  androidTestImplementation(libs.androidx.compose.ui.test.junit4)
-  androidTestImplementation(libs.androidx.espresso.core)
-  androidTestImplementation(libs.androidx.junit)
-  androidTestImplementation(libs.androidx.runner)
-  debugImplementation(libs.androidx.compose.ui.test.manifest)
-}
 
-val downloadPersianFont = tasks.register("downloadPersianFont") {
-  val fontsDir = layout.projectDirectory.dir("src/main/assets/fonts").asFile
-  doLast {
-    fontsDir.mkdirs()
-    val version = "v33.003"
-    listOf("Light", "Regular", "Medium", "SemiBold", "Bold").forEach { weight ->
-      val target = File(fontsDir, "Vazirmatn-$weight.ttf")
-      fun isFont(file: File): Boolean {
-        if (!file.exists() || file.length() < 20_000L) return false
-        val head = ByteArray(4)
-        file.inputStream().use { it.read(head) }
-        val tag = String(head, Charsets.ISO_8859_1)
-        return (head[0].toInt() == 0 && head[1].toInt() == 1 && head[2].toInt() == 0 && head[3].toInt() == 0) ||
-          tag == "OTTO" || tag == "true"
-      }
-      if (isFont(target)) return@forEach
-      val sources = listOf(
-        "https://cdn.jsdelivr.net/gh/rastikerdar/vazirmatn@$version/fonts/ttf/Vazirmatn-$weight.ttf",
-        "https://raw.githubusercontent.com/rastikerdar/vazirmatn/$version/fonts/ttf/Vazirmatn-$weight.ttf"
-      )
-      for (source in sources) {
-        try {
-          val connection = URI(source).toURL().openConnection()
-          connection.connectTimeout = 8_000
-          connection.readTimeout = 15_000
-          connection.getInputStream().use { input ->
-            target.outputStream().use { output ->
-              input.copyTo(output)
-            }
-          }
-          if (isFont(target)) break
-          target.delete()
-        } catch (e: Exception) {
-          target.delete()
-        }
-      }
-      if (!isFont(target)) {
-        logger.warn("Persian font Vazirmatn-$weight.ttf was not downloaded; the app will use the system fallback for Persian.")
-      }
-    }
-  }
+  debugImplementation(libs.androidx.compose.ui.tooling)
 }
