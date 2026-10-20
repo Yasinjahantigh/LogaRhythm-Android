@@ -1,21 +1,6 @@
-# راهنمای جامع انتشار و امضای برنامه‌ی LogaRhythm
+# Releasing
 
-این راهنما گام‌به‌گام نحوه ساخت کلید امضا (Keystore)، تنظیم گیت‌هاب (GitHub Secrets)، ساخت نسخه جدید با تگ گیت و بررسی فایل نهایی را به زبان فارسی و با دستورات آماده کپی توضیح می‌دهد.
-
----
-
-## ۱. کلید امضای اندروید (Signing Key) چیست و چرا حیاتی است؟
-
-سیستم‌عامل اندروید از کلید دیجیتال برای شناسایی هویت سازنده برنامه استفاده می‌کند. هنگامی که کاربری نسخه‌ای از برنامه را روی گوشی خود نصب دارد و نسخه جدیدتری منتشر می‌شود، سیستم‌عامل فقط در صورتی اجازه به‌روزرسانی (Update بدون پاک شدن اطلاعات قبلی) را می‌دهد که فایل APK جدید دقیقاً با همان کلید قبلی امضا شده باشد.
-
-> ⚠️ **هشدار مرگبار:**
-> اگر کلید اختصاصی انتشار (Keystore) را گم کنید یا رمز آن را فراموش نمایید، **هیچ راهی** در سیستم‌عامل اندروید برای بازیابی آن وجود ندارد. کاربران دیگر قادر به دریافت به‌روزرسانی نخواهند بود و مجبور می‌شوند نسخه قبلی را به همراه تمامی داده‌ها، تاریخچه، پلی‌لیست‌ها و تنظیمات پاک کرده و نسخه جدید را با کلیدی متفاوت از نو نصب کنند!
-
----
-
-## ۲. تولید کلید امضا با استفاده از `keytool`
-
-دستور زیر را در ترمینال (لینوکس، مک یا ویندوز) اجرا کنید تا یک فایل کلید امن با الگوریتم RSA 2048 بیتی و اعتبار ۱۰,۰۰۰ روز (بیش از ۲۷ سال) ساخته شود:
+## 1. Create a signing key (once)
 
 ```bash
 keytool -genkeypair -v \
@@ -23,137 +8,55 @@ keytool -genkeypair -v \
   -alias logarhythm-key \
   -keyalg RSA \
   -keysize 2048 \
-  -validity 10000 \
-  -storetype JKS
+  -validity 10000
 ```
 
-در حین اجرا، برنامه از شما یک رمز عبور قوی (مثلاً حداقل ۱۲ کاراکتر) و نام و مشخصات سازنده می‌خواهد. رمز عبور را به خاطر بسپارید یا در نرم‌افزار مدیریت رمز ذخیره کنید.
+Keep the keystore file and both passwords outside the repository. Losing the key means existing installations cannot be updated in place.
 
----
+## 2. Add repository secrets
 
-## ۳. پشتیبان‌گیری ایمن از فایل کلید
+In GitHub: **Settings -> Secrets and variables -> Actions -> New repository secret**.
 
-فایل `logarhythm-release.keystore` دارایی اصلی پروژه شماست. بلافاصله اقدامات زیر را انجام دهید:
-
-1. **نسخه ۱ در مدیریت رمز (Password Manager):** فایل کلید را به عنوان پیوست امن در 1Password، Bitwarden یا KeePass به همراه پسورد و نام مستعار (Alias) ذخیره کنید.
-2. **نسخه ۲ نسخه آفلاین (Offline Backup):** یک نسخه از فایل را روی فلش‌مموری آفلاین یا هارد اکسترنال در مکانی امن و مجزا نگهداری کنید.
-3. ❌ **هرگز** این فایل را در ریپازیتوری گیت کامیت نکنید. این فایل در `.gitignore` قرار گرفته است.
-
----
-
-## ۴. تبدیل فایل Keystore به فرمت Base64
-
-برای انتقال ایمن فایل باینری به GitHub Actions Secrets، باید آن را به فرمت متنی Base64 تبدیل کنیم:
-
-### در لینوکس (Linux):
-```bash
-base64 -w 0 logarhythm-release.keystore > keystore_base64.txt
-cat keystore_base64.txt
-```
-
-### در سیستم‌عامل مک (macOS):
-```bash
-base64 -i logarhythm-release.keystore -o keystore_base64.txt
-cat keystore_base64.txt
-```
-
-### در ویندوز (Windows PowerShell):
-```powershell
-[Convert]::ToBase64String([IO.File]::ReadAllBytes("logarhythm-release.keystore")) | Out-File -Encoding ascii keystore_base64.txt
-Get-Content keystore_base64.txt
-```
-
-*(کل متن تولید شده داخل `keystore_base64.txt` را کپی کنید)*
-
----
-
-## ۵. ثبت Secrets در ریپازیتوری GitHub
-
-به ریپازیتوری پروژه خود در گیت‌هاب بروید و مسیر زیر را دنبال کنید:
-**Settings** > **Secrets and variables** > **Actions** > **New repository secret**
-
-چهار متغیر زیر را ایجاد نمایید:
-
-| نام Secret | مقدار (Value) |
+| Secret | Value |
 | :--- | :--- |
-| `KEYSTORE_BASE64` | کل متن استخراج شده از مرحله قبل (محتوای `keystore_base64.txt`) |
-| `KEYSTORE_PASSWORD` | رمزی که در هنگام اجرای دستور `keytool` انتخاب کردید |
-| `KEY_ALIAS` | نام مستعار کلید؛ طبق دستور فوق: `logarhythm-key` |
-| `KEY_PASSWORD` | رمز کلید (معمولاً همان رمز Keystore است) |
+| `KEYSTORE_BASE64` | Base64 of the keystore file |
+| `KEYSTORE_PASSWORD` | Keystore password |
+| `KEY_ALIAS` | `logarhythm-key` |
+| `KEY_PASSWORD` | Key password |
 
----
-
-## ۶. ایجاد یک انتشار جدید (Release)
-
-فرآیند انتشار **کاملاً هوشمند و خودکار** شده است و به دو روش انجام می‌شود:
-
-### روش اول: انتشار خودکار (بدون نیاز به تگ دستی)
-نیازی نیست دستی تگ بزنید! کافی است تغییرات کد را روی شاخه اصلی پوش کنید:
-```bash
-git push origin main
-```
-ورک‌فلو به صورت خودکار:
-۱. آخرین تگ موجود در ریپازیتوری (مثلاً `v1.3.0`) را پیدا می‌کند.
-۲. یک اعشار (Patch) به رقم آخر اضافه می‌کند (مثلاً `v1.3.1`).
-۳. تگ جدید را روی گیت ثبت می‌کند.
-۴. بیلد Release امضا شده با نام `LogaRhythm-v1.3.1.apk` ساخته شده و در صفحه Releases گیت‌هاب قرار می‌گیرد.
-
-### روش دوم: تگ زدن دستی (برای نسخه‌های اصلی مثل v2.0.0)
-هر زمان که خواستید نسخه اصلی یا تغییر بزرگ برنید (مثلاً جهش از v1.3.0 به v2.0.0)، می‌توانید دستی تگ بزنید:
-```bash
-git tag v2.0.0
-git push origin v2.0.0
-```
-
-در هر دو روش، گیت‌هاب اکشنز فایل APK امضا شده، بهینه‌شده با R8 و بررسی‌شده با `apksigner` را می‌سازد و در بخش Releases منتشر می‌کند.
-
----
-
-## ۷. بررسی و راستی‌آزمایی امضای فایل دانلودی با `apksigner`
-
-پس از دانلود فایل APK از بخش Releases گیت‌هاب، می‌توانید اصالت امضا و گواهی امنیتی آن را با دستور زیر بررسی کنید:
+Encode the keystore with one of these commands:
 
 ```bash
-apksigner verify --verbose --print-certs LogaRhythm-1.2.0.apk
+# Linux
+base64 -w 0 logarhythm-release.keystore > keystore_base64.txt
 ```
 
-**خروجی موفقیت‌آمیز شامل موارد زیر است:**
-```text
-Verifies
-Verified using v1 scheme (JAR signing): true
-Verified using v2 scheme (APK Signature Scheme v2): true
-Verified using v3 scheme (APK Signature Scheme v3): true
-Number of signers: 1
-Signer #1 certificate DN: ...
-Signer #1 certificate SHA-256 digest: <اثر انگشت SHA-256 شما>
+```powershell
+# Windows PowerShell
+[Convert]::ToBase64String([IO.File]::ReadAllBytes("logarhythm-release.keystore")) | Out-File -Encoding ascii keystore_base64.txt
 ```
 
-اثر انگشت (SHA-256 digest) را با اثر انگشت کلید محلی خود مقایسه کنید:
+## 3. Publish a release
+
+Create and push a tag:
+
+```bash
+git tag v1.4.0
+git push origin v1.4.0
+```
+
+Alternatively, run **Build and release APK** from the Actions tab and leave the version input empty to increment the patch version automatically.
+
+The workflow runs the unit tests, builds a signed release APK, verifies it with `apksigner` and attaches it to a GitHub release.
+
+## 4. Verify a downloaded APK
+
+```bash
+apksigner verify --verbose --print-certs LogaRhythm-v1.4.0.apk
+```
+
+The reported certificate should match the local keystore:
+
 ```bash
 keytool -list -v -keystore logarhythm-release.keystore -alias logarhythm-key
 ```
-
-اگر هر دو برابر باشند، اطمینان دارید که فایل APK بدون کوچکترین تغییر و توسط کلید معتبر شما امضا شده است.
-
----
-
-## ۸. اگر کلید گم شود یا لو برود چه باید کرد؟
-
-- **در صورت لو رفتن (Secret Leak):**
-  اگر فایل Keystore یا پسورد آن در جایی عمومی فاش شد، مهاجم می‌تواند بدافزاری با همان امضا بسازد که روی دستگاه کاربران شما به عنوان آپدیت نصب شود. در این شرایط فوراً باید:
-  ۱. یک Keystore جدید با مشخصات جدید بسازید.
-  ۲. متغیرهای گیت‌هاب را با مقادیر کلید جدید به‌روزرسانی کنید.
-  ۳. به کاربران اطلاع دهید که به دلیل تغییر کلید، باید نسخه قبلی را پاک کرده و نسخه جدید را نصب کنند.
-
-- **در صورت گم شدن کلید (Lost Keystore):**
-  سیستم‌عامل اندروید هیچ مکانیزمی برای جایگزینی کلید گمشده ندارد. تنها راهکار این است که یک کلید جدید تولید کنید و کاربران برنامه قبلی را حذف و نسخه جدید را نصب نمایند. بنابراین داشتن دو بک‌آپ مستقل، حیاتی‌ترین اصل در نگهداری پروژه است.
-
----
-
-## ۹. نحوه نصب و آپدیت برای کاربران
-
-۱. **نصب برای بار اول:**
-   کاربران فایل `LogaRhythm-1.2.0.apk` را دانلود کرده و در صورت نیاز، دسترسی «نصب از منابع ناشناس» (Install from unknown sources) را در مرورگر یا مدیریت فایل گوشی فعال می‌کنند.
-
-۲. **به‌روزرسانی‌های بعدی:**
-   با دانلود هر نسخه جدیدتر (مثلاً `LogaRhythm-1.2.1.apk`)، سیستم‌عامل به‌طور خودکار بررسی می‌کند که امضای فایل جدید با فایل قبلی روی گوشی یکسان است. در صورت تطابق، عملیات **Update** بدون از دست رفتن هیچ‌گونه داده، پلی‌لیست یا تنظیماتی با موفقیت انجام می‌شود.

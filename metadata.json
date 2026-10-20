@@ -1,6 +1,0 @@
-{
-  "name": "LogaRhythm",
-  "description": "An independent, clean, offline-first Android music player with Material You design.",
-  "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
-}

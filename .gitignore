@@ -1,25 +1,34 @@
+# IDE
 *.iml
-.gradle
-.kotlin
-/local.properties
-/.idea/caches
-/.idea/libraries
-/.idea/modules.xml
-/.idea/workspace.xml
-/.idea/navEditor.xml
-/.idea/assetWizardSettings.xml
-.DS_Store
-/build
+.idea/
+.vscode/
+
+# Gradle / Kotlin
+.gradle/
+.kotlin/
 build/
 app/build/
-/captures
-.externalNativeBuild
-.cxx
+app/release/
+captures/
+.externalNativeBuild/
+.cxx/
+gradle/gradle-daemon-jvm.properties
+
+# Local configuration
 local.properties
 .env
-debug.keystore
+
+# Signing and secrets
 *.jks
 *.keystore
 keystore.properties
+keystore_base64.txt
+KEYSTORE_INFO.txt
+
+# Build outputs
 *.apk
 *.aab
+
+# OS files
+.DS_Store
+Thumbs.db
