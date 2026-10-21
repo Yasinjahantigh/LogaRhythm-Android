@@ -45,19 +45,28 @@ def ask_gemma(commits):
         "تبدیل کن. هر تغییر یک خط با بولت • باشد. حداکثر ۵ مورد. "
         "فقط تغییرات را بنویس بدون هیچ توضیح اضافه:\n\n" + commits
     )
-    body = json.dumps({"contents": [{"parts": [{"text": prompt}]}]}).encode()
+    body = json.dumps({
+        "contents": [{"parts": [{"text": prompt}]}],
+        "generationConfig": {"temperature": 0.4, "maxOutputTokens": 512},
+    }).encode()
     url = (
         "https://generativelanguage.googleapis.com/v1beta/models/"
         f"gemma-4-26b-a4b-it:generateContent?key={GEMINI_KEY}"
     )
     req = urllib.request.Request(url, data=body, headers={"Content-Type": "application/json"})
-    try:
-        with urllib.request.urlopen(req, timeout=30) as r:
-            data = json.load(r)
-        return data["candidates"][0]["content"]["parts"][0]["text"].strip()
-    except Exception as e:
-        print(f"Gemma error: {e}")
-        return None
+    for attempt in range(2):
+        try:
+            with urllib.request.urlopen(req, timeout=180) as r:
+                data = json.load(r)
+            parts = data["candidates"][0]["content"]["parts"]
+            text = "\n".join(
+                p["text"] for p in parts if p.get("text") and not p.get("thought")
+            ).strip()
+            if text:
+                return text
+        except Exception as e:
+            print(f"Gemma attempt {attempt + 1} failed: {e}")
+    return None
 
 
 def build_message(changelog):
