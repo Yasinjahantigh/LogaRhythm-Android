@@ -45,18 +45,19 @@ def ask_gemma(commits):
         "تبدیل کن. هر تغییر یک خط با بولت • باشد. حداکثر ۵ مورد. "
         "فقط تغییرات را بنویس بدون هیچ توضیح اضافه:\n\n" + commits
     )
-    body = json.dumps({
-        "contents": [{"parts": [{"text": prompt}]}],
-        "generationConfig": {"temperature": 0.4, "maxOutputTokens": 512},
-    }).encode()
+    body = json.dumps({"contents": [{"parts": [{"text": prompt}]}]}).encode()
     url = (
         "https://generativelanguage.googleapis.com/v1beta/models/"
-        f"gemma-4-26b-a4b-it:generateContent?key={GEMINI_KEY}"
+        "gemma-4-26b-a4b-it:generateContent"
     )
-    req = urllib.request.Request(url, data=body, headers={"Content-Type": "application/json"})
+    req = urllib.request.Request(
+        url,
+        data=body,
+        headers={"Content-Type": "application/json", "x-goog-api-key": GEMINI_KEY},
+    )
     for attempt in range(2):
         try:
-            with urllib.request.urlopen(req, timeout=180) as r:
+            with urllib.request.urlopen(req, timeout=240) as r:
                 data = json.load(r)
             parts = data["candidates"][0]["content"]["parts"]
             text = "\n".join(
@@ -64,6 +65,9 @@ def ask_gemma(commits):
             ).strip()
             if text:
                 return text
+            print(f"Gemma returned empty text: {json.dumps(data)[:500]}")
+        except urllib.error.HTTPError as e:
+            print(f"Gemma attempt {attempt + 1} failed: {e.code} {e.read().decode(errors='replace')[:500]}")
         except Exception as e:
             print(f"Gemma attempt {attempt + 1} failed: {e}")
     return None
