@@ -43,7 +43,7 @@ def ask_gemma(commits):
     body = json.dumps({"contents": [{"parts": [{"text": prompt}]}]}).encode()
     url = (
         "https://generativelanguage.googleapis.com/v1beta/models/"
-        f"gemma-3-27b-it:generateContent?key={GEMINI_KEY}"
+        f"gemma-3-12b-it:generateContent?key={GEMINI_KEY}"
     )
     req = urllib.request.Request(url, data=body, headers={"Content-Type": "application/json"})
     try:
