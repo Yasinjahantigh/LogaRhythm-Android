@@ -61,7 +61,7 @@ jobs:
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          if git rev-parse -q --verify "refs/tags/${TAG_NAME}" >/dev/null; then
+          if git rev-parse -q --verify "refs/tags/${TAG_NAME}" > /dev/null; then
             echo "Tag ${TAG_NAME} already exists, skipping creation."
           else
             git tag -a "${TAG_NAME}" -m "Release ${TAG_NAME}"
@@ -118,3 +118,11 @@ jobs:
           tag_name: ${{ steps.versioning.outputs.TAG_NAME }}
           files: LogaRhythm-*.apk
           generate_release_notes: true
+
+      - name: Post to Telegram
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHANNEL_ID: ${{ secrets.TELEGRAM_CHANNEL_ID }}
+          TAG_NAME: ${{ steps.versioning.outputs.TAG_NAME }}
+        run: python3 .github/scripts/telegram_release.py
