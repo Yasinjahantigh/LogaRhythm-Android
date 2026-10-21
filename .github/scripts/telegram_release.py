@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import html
 import json
 import os
 import subprocess
@@ -75,14 +76,24 @@ def ask_gemma(commits):
     return None
 
 
+def normalize_bullets(text):
+    lines = []
+    for line in text.splitlines():
+        line = line.strip().lstrip("-*•").strip()
+        if line:
+            lines.append("• " + line)
+    return "\n".join(lines[:5])
+
+
 def build_message(changelog):
-    body = changelog if changelog else "• بهبودهای کلی و رفع مشکلات"
+    body = normalize_bullets(changelog) if changelog else "• بهبودهای کلی و رفع مشکلات"
     return (
-        f"LogaRhythm {TAG} 🚀\n\n"
-        f"تغییرات این نسخه:\n{body}\n\n"
-        "دانلود از گیت‌هاب:\n"
+        f"<b>🎵 LogaRhythm {html.escape(TAG)}</b>\n\n"
+        f"<b>تغییرات این نسخه:</b>\n{html.escape(body)}\n\n"
+        "📥 <b>دانلود از گیت‌هاب:</b>\n"
         "https://github.com/Yasinjahantigh/LogaRhythm-Android/releases/latest\n\n"
-        "باگ یا پیشنهاد؟ زیر همین پست کامنت بذارید."
+        "💬 اگر باگ، ایراد یا پیشنهادی داشتید دایرکت بفرستین:\n"
+        "https://t.me/LogaRhythmApp?direct"
     )
 
 
@@ -102,6 +113,7 @@ def send_apk(caption):
     body = (
         field("chat_id", CHANNEL_ID)
         + field("caption", caption)
+        + field("parse_mode", "HTML")
         + (
             f"--{boundary}\r\n"
             f'Content-Disposition: form-data; name="document"; filename="{os.path.basename(APK_PATH)}"\r\n'
