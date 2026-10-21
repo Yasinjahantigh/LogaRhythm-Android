@@ -478,7 +478,10 @@ fun LyricsView(
                             "user_manual" -> stringResource(R.string.lyrics_source_manual)
                             "imported_file" -> stringResource(R.string.lyrics_source_imported)
                             "user_clipboard" -> stringResource(R.string.lyrics_source_clipboard)
-                            "lrclib", "netease", "kugou", "lyrics_ovh" -> stringResource(R.string.lyrics_source_online, lyrics!!.source!!.uppercase())
+                            "lrclib" -> stringResource(R.string.lyrics_source_online, stringResource(R.string.lyrics_provider_lrclib))
+                            "netease" -> stringResource(R.string.lyrics_source_online, stringResource(R.string.lyrics_provider_netease))
+                            "kugou" -> stringResource(R.string.lyrics_source_online, stringResource(R.string.lyrics_provider_kugou))
+                            "lyrics_ovh" -> stringResource(R.string.lyrics_source_online, stringResource(R.string.lyrics_provider_lyrics_ovh))
                             else -> stringResource(R.string.lyrics_source_cached)
                         }
 

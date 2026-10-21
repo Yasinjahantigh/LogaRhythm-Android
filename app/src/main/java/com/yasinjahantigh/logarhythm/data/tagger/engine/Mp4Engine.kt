@@ -10,8 +10,6 @@ import java.io.RandomAccessFile
  * data, shifts every stco/co64 chunk offset so playback keeps pointing at the right bytes.
  */
 object Mp4Engine : TagEngine {
-    override val label = "M4A / MP4"
-
     private const val MAX_MOOV = 64 * 1024 * 1024
 
     private class Box(val type: String, val offset: Long, val size: Long, val headerSize: Int)

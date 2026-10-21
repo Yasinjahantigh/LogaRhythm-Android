@@ -17,10 +17,7 @@ import javax.inject.Singleton
 
 /**
  * Online lyrics provider querying the public LRCLIB API (https://lrclib.net).
- *
- * Implements a dual-phase query:
- * 1. Fast exact matching via /api/get with sanitized title and artist (relaxed duration).
- * 2. Smart fallback via /api/search?q=... to find closest match with synced or plain lyrics.
+ * Tries an exact match first and falls back to a fuzzy search with synced results preferred.
  */
 @Singleton
 class LrclibLyricsSource @Inject constructor() : LyricsSource {
@@ -39,19 +36,16 @@ class LrclibLyricsSource @Inject constructor() : LyricsSource {
         if (cleanTitle.isBlank()) return@withContext null
         val cleanArtist = sanitizeArtist(track.artist)
 
-        // Phase 1: Try /api/get with clean metadata
         val getLyrics = fetchFromGetEndpoint(cleanTitle, cleanArtist)
         if (getLyrics != null && !getLyrics.isEmpty) {
             return@withContext getLyrics
         }
 
-        // Phase 2: Try /api/search with fuzzy query
         val searchLyrics = fetchFromSearchEndpoint(cleanTitle, cleanArtist)
         if (searchLyrics != null && !searchLyrics.isEmpty) {
             return@withContext searchLyrics
         }
 
-        // Phase 3: Fallback query with title only if artist was present but yielded no results
         if (cleanArtist.isNotBlank()) {
             val titleOnlyLyrics = fetchFromSearchEndpoint(cleanTitle, "")
             if (titleOnlyLyrics != null && !titleOnlyLyrics.isEmpty) {

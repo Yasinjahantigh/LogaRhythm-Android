@@ -112,10 +112,6 @@ class PreferencesManager @Inject constructor(
         preferences[keyDarkTheme]
     }
 
-    suspend fun setDarkTheme(isDark: Boolean) {
-        setThemeMode(if (isDark) "dark" else "light")
-    }
-
     val colorSource: Flow<String> = dataStore.data.map { preferences ->
         preferences[keyColorSource] ?: "album_art"
     }

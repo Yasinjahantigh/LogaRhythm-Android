@@ -25,15 +25,15 @@ import androidx.compose.material.icons.filled.ColorLens
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.FolderOff
 import androidx.compose.material.icons.filled.Backup
-import androidx.compose.material.icons.filled.CallSplit
+import androidx.compose.material.icons.automirrored.filled.CallSplit
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Headset
 import androidx.compose.material.icons.filled.LibraryMusic
-import androidx.compose.material.icons.filled.PlaylistAdd
+import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
 import androidx.compose.material.icons.filled.Restore
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.VisibilityOff
-import androidx.compose.material.icons.filled.VolumeUp
+import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.Upload
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Lyrics
@@ -71,10 +71,10 @@ import com.yasinjahantigh.logarhythm.ui.designsystem.LocalPlaybackBottomPadding
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
+    modifier: Modifier = Modifier,
     onNavigateToStats: () -> Unit = {},
     onNavigateToEqualizer: () -> Unit = {},
     onNavigateToLibraryTools: () -> Unit = {},
-    modifier: Modifier = Modifier,
     viewModel: SettingsViewModel = hiltViewModel()
 ) {
     val themeMode by viewModel.themeMode.collectAsStateWithLifecycle()
@@ -417,7 +417,7 @@ fun SettingsScreen(
                             title = stringResource(R.string.settings_fade_title),
                             subtitle = if (fadeSec == 0) stringResource(R.string.settings_off)
                             else stringResource(R.string.settings_seconds_fmt, fadeSec),
-                            icon = Icons.Filled.VolumeUp,
+                            icon = Icons.AutoMirrored.Filled.VolumeUp,
                             onClick = { showFadeDialog = true },
                             testTag = "settings_fade_item"
                         )
@@ -492,7 +492,7 @@ fun SettingsScreen(
                         SettingsSwitchItem(
                             title = stringResource(R.string.settings_split_artists_title),
                             subtitle = stringResource(R.string.settings_split_artists_desc),
-                            icon = Icons.Filled.CallSplit,
+                            icon = Icons.AutoMirrored.Filled.CallSplit,
                             checked = splitArtists,
                             onCheckedChange = viewModel::setSplitArtists,
                             rowTag = "settings_split_artists_item",
@@ -502,7 +502,7 @@ fun SettingsScreen(
                             SettingsActionItem(
                                 title = stringResource(R.string.settings_separators_title),
                                 subtitle = artistSeparators.joinToString("  ") { "\u2066" + it.trim() + "\u2069" },
-                                icon = Icons.Filled.CallSplit,
+                                icon = Icons.AutoMirrored.Filled.CallSplit,
                                 onClick = { showSeparatorsDialog = true },
                                 testTag = "settings_separators_item"
                             )
@@ -567,7 +567,7 @@ fun SettingsScreen(
                         SettingsActionItem(
                             title = stringResource(R.string.settings_import_m3u_title),
                             subtitle = stringResource(R.string.settings_import_m3u_desc),
-                            icon = Icons.Filled.PlaylistAdd,
+                            icon = Icons.AutoMirrored.Filled.PlaylistAdd,
                             onClick = { importPlaylistsLauncher.launch(arrayOf("*/*")) },
                             testTag = "settings_import_m3u_item"
                         )

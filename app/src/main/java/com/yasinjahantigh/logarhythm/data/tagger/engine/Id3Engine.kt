@@ -10,8 +10,6 @@ import java.io.RandomAccessFile
  * comments, ratings, ...) are carried over byte-for-byte; v2.2 tags are upgraded to v2.3.
  */
 object Id3Engine : TagEngine {
-    override val label = "MP3 (ID3v2)"
-
     private const val MAX_TAG = 32 * 1024 * 1024
     private const val PADDING = 256
 

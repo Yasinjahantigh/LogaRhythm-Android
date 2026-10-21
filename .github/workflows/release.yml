@@ -41,7 +41,7 @@ jobs:
           else
             LATEST_TAG=$(git tag -l "v*.*.*" | sort -V | tail -n 1)
             if [ -z "$LATEST_TAG" ]; then
-              LATEST_TAG="v1.3.0"
+              LATEST_TAG="v1.3.1"
             fi
             TAG_NO_V=${LATEST_TAG#v}
             IFS='.' read -r MAJOR MINOR PATCH <<< "$TAG_NO_V"
@@ -91,7 +91,7 @@ jobs:
       - name: Build release APK
         env:
           KEYSTORE_PATH: ${{ runner.temp }}/release.jks
-          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD || secrets.STORE_PASSWORD }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
           REQUIRE_RELEASE_SIGNING: "true"

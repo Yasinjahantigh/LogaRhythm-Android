@@ -34,9 +34,6 @@ data class AudioTags(
 class UnsupportedTagException(message: String) : Exception(message)
 
 interface TagEngine {
-    /** Human-readable container name, e.g. "MP3 (ID3v2)". */
-    val label: String
-
     fun read(file: File): AudioTags
 
     /**

@@ -78,9 +78,6 @@ class AudioFileTagWriter @Inject constructor(
         }
     }
 
-    /** Which formats can be written, for user-facing messages. */
-    fun supportedFormats(): List<String> = TagEngines.supportedLabels
-
     private fun editFor(track: Track, title: String, artist: String, album: String, genre: String): TagEdit {
         fun field(new: String, old: String, placeholder: String): String? {
             val n = new.trim()

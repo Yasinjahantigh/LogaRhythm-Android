@@ -31,6 +31,4 @@ object TagEngines {
             }
         } catch (_: Exception) { Id3Engine }
     }
-
-    val supportedLabels: List<String> = listOf("MP3", "FLAC", "M4A / MP4", "OGG / OPUS")
 }

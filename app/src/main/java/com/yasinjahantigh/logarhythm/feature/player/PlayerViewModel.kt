@@ -45,7 +45,6 @@ class PlayerViewModel @Inject constructor(
     val repeatMode: StateFlow<Int> = playerController.repeatMode
     val queue: StateFlow<List<Track>> = playerController.queue
 
-    // Phase 7: Extras
     val playbackSpeed: StateFlow<Float> = playerController.playbackSpeed
     val sleepTimerRemainingMs: StateFlow<Long?> = playerController.sleepTimerRemainingMs
     val sleepTimerRemainingTracks: StateFlow<Int?> = playerController.sleepTimerRemainingTracks
@@ -102,7 +101,6 @@ class PlayerViewModel @Inject constructor(
     fun playQueueItem(index: Int) = playerController.playQueueItem(index)
     fun clearQueue() = playerController.clearQueue()
 
-    // Phase 7: Extras methods
     fun setPlaybackSpeed(speed: Float) = playerController.setPlaybackSpeed(speed)
     fun setSleepTimer(minutes: Int) = playerController.setSleepTimer(minutes)
     fun setSleepTimerTracks(tracks: Int) = playerController.setSleepTimerTracks(tracks)

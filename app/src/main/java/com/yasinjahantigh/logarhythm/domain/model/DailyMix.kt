@@ -5,8 +5,6 @@ package com.yasinjahantigh.logarhythm.domain.model
  */
 data class DailyMix(
     val id: String,
-    val title: String,
-    val description: String,
     val tracks: List<Track>,
     val seedDate: Long
 )

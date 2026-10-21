@@ -23,10 +23,6 @@ object ReplayGain {
     fun parseR128(value: String?): Float? =
         value?.let { NUMBER.find(it)?.value?.replace(',', '.')?.toFloatOrNull()?.div(256f) }
 
-    /** Legacy attenuation-only mapping, kept for the `player.volume` stage and old tests. */
-    fun volumeFor(gainDb: Float?): Float =
-        if (gainDb == null) 1f else 10f.pow(gainDb / 20f).coerceIn(0.05f, 1f)
-
     fun pick(mode: ReplayGainMode, trackGainDb: Float?, albumGainDb: Float?): Float? = when (mode) {
         ReplayGainMode.OFF -> null
         ReplayGainMode.TRACK -> trackGainDb ?: albumGainDb

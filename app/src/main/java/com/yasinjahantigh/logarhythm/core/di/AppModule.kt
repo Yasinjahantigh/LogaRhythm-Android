@@ -32,14 +32,7 @@ object AppModule {
             MusicDatabase::class.java,
             "music_player.db"
         )
-            .addMigrations(
-                MusicDatabase.MIGRATION_5_6,
-                MusicDatabase.MIGRATION_6_7,
-                MusicDatabase.MIGRATION_7_8
-            )
-            // Only schemas that predate every migration may be rebuilt from scratch. A future
-            // mistake must crash loudly in testing instead of silently wiping playlists and stats.
-            .fallbackToDestructiveMigrationFrom(1, 2, 3, 4)
+            .addMigrations(*MusicDatabase.ALL_MIGRATIONS)
             .build()
     }
 

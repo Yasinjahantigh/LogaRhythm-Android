@@ -31,7 +31,7 @@ fun getVersionInfo(): Pair<Int, String> {
     val name = "$major.$minor.$patch"
     Pair(code, name)
   } else {
-    Pair(10300, "1.3.0")
+    Pair(10301, "1.3.1")
   }
 }
 
@@ -45,7 +45,7 @@ android {
   defaultConfig {
     applicationId = "com.yasinjahantigh.logarhythm"
     minSdk = 26
-    targetSdk = 35
+    targetSdk = 36
     versionCode = appVersionCode
     versionName = appVersionName
   }
@@ -79,7 +79,7 @@ android {
       isMinifyEnabled = true
       isShrinkResources = true
       proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-      signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
+      signingConfig = signingConfigs.findByName("release")
     }
     debug { }
   }
@@ -96,16 +96,17 @@ android {
   androidResources {
     localeFilters += listOf("en", "fa")
   }
+  bundle {
+    language {
+      enableSplit = false
+    }
+  }
   packaging {
     resources {
       excludes += listOf("/META-INF/{AL2.0,LGPL2.1}", "/META-INF/*.version", "/kotlin/**", "DebugProbesKt.bin")
     }
   }
   testOptions { unitTests { isIncludeAndroidResources = true } }
-  lint {
-    checkReleaseBuilds = false
-    abortOnError = false
-  }
   dependenciesInfo {
     includeInApk = false
     includeInBundle = true
@@ -119,7 +120,6 @@ ksp {
 dependencies {
   implementation(platform(libs.androidx.compose.bom))
   implementation(libs.androidx.activity.compose)
-  implementation(libs.androidx.compose.material.icons.core)
   implementation(libs.androidx.compose.material.icons.extended)
   implementation(libs.androidx.compose.material3)
   implementation(libs.androidx.compose.ui)
@@ -127,7 +127,6 @@ dependencies {
   implementation(libs.androidx.compose.ui.tooling.preview)
   implementation(libs.androidx.core.ktx)
   implementation(libs.androidx.lifecycle.runtime.compose)
-  implementation(libs.androidx.lifecycle.runtime.ktx)
   implementation(libs.androidx.lifecycle.viewmodel.compose)
   implementation(libs.androidx.navigation.compose)
 
@@ -135,7 +134,6 @@ dependencies {
   "ksp"(libs.hilt.android.compiler)
   implementation(libs.androidx.hilt.navigation.compose)
 
-  implementation(libs.androidx.room.ktx)
   implementation(libs.androidx.room.runtime)
   "ksp"(libs.androidx.room.compiler)
 
@@ -150,7 +148,6 @@ dependencies {
 
   implementation(libs.androidx.glance)
   implementation(libs.androidx.glance.appwidget)
-  implementation(libs.androidx.glance.material3)
 
   testImplementation(libs.androidx.core)
   testImplementation(libs.junit)

@@ -24,11 +24,7 @@ import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 
-/**
- * Warm, slightly desaturated colour pairs. Anything without embedded artwork (artists, genres,
- * playlists, songs with no cover) gets one of these, picked deterministically from its name, so
- * the same item always looks the same and a list never degrades into a wall of grey placeholders.
- */
+/** Deterministic warm gradients for artists, genres and songs without embedded artwork. */
 private val ArtPalette: List<Pair<Color, Color>> = listOf(
     Color(0xFFF4B266) to Color(0xFFB8572B),
     Color(0xFF7FB7BE) to Color(0xFF3A6EA5),
@@ -56,13 +52,7 @@ fun artBrushFor(key: String): Brush {
 fun monogramOf(name: String): String =
     name.trim().firstOrNull { it.isLetterOrDigit() }?.uppercaseChar()?.toString() ?: "♪"
 
-/**
- * Artwork with a built-in fallback.
- *
- * The gradient (with a monogram or [icon]) is always drawn underneath; the real image is drawn on
- * top once it loads. If there is no picture, or it fails to decode, the fallback simply stays, so
- * there is no placeholder flash and no empty box.
- */
+/** Draws the real artwork over its gradient fallback, so missing or broken images stay invisible. */
 @Composable
 fun ArtworkImage(
     uri: String?,

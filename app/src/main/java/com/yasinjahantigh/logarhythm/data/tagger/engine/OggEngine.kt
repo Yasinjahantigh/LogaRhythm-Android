@@ -12,8 +12,6 @@ import java.io.RandomAccessFile
  * in which case only their sequence numbers and CRCs are refreshed.
  */
 object OggEngine : TagEngine {
-    override val label = "Ogg"
-
     private class Page(
         val headerType: Int, val granule: Long, val serial: Long, val seq: Long,
         val segments: IntArray, val data: ByteArray, val offset: Long, val totalSize: Int

@@ -11,7 +11,7 @@ fun String?.cleanMetaOrNull(): String? {
     val value = this?.trim().orEmpty()
     if (value.isEmpty()) return null
     return when (value.lowercase()) {
-        "<unknown>", "unknown", "null", "unknown artist", "unknown album", "unknown genre" -> null
+        "<unknown>", "unknown", "null", "unknown title", "unknown artist", "unknown album", "unknown genre" -> null
         else -> value
     }
 }

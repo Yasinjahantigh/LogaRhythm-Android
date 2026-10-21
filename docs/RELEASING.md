@@ -47,7 +47,18 @@ git push origin v1.4.0
 
 Alternatively, run **Build and release APK** from the Actions tab and leave the version input empty to increment the patch version automatically.
 
-The workflow runs the unit tests, builds a signed release APK, verifies it with `apksigner` and attaches it to a GitHub release.
+The workflow runs the unit tests, builds a signed release APK, verifies it with `apksigner` and attaches it to a GitHub release. It fails instead of publishing an unsigned APK when a signing secret is missing.
+
+To build a signed release locally, point the same variables at the keystore:
+
+```powershell
+$env:KEYSTORE_PATH = "C:\path\to\logarhythm-release.keystore"
+$env:KEYSTORE_PASSWORD = "..."
+$env:KEY_ALIAS = "logarhythm-key"
+$env:KEY_PASSWORD = "..."
+$env:REQUIRE_RELEASE_SIGNING = "true"
+./gradlew :app:assembleRelease
+```
 
 ## 4. Verify a downloaded APK
 

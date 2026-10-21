@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 108 108" role="img" aria-label="LogaRhythm">
+  <defs>
+    <linearGradient id="ink" x1="0" y1="0" x2="108" y2="108" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#0E1013"/>
+      <stop offset="1" stop-color="#3A2100"/>
+    </linearGradient>
+    <linearGradient id="ember" x1="22" y1="43" x2="86" y2="55" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#F4B266"/>
+      <stop offset="1" stop-color="#D9772E"/>
+    </linearGradient>
+  </defs>
+  <rect width="108" height="108" rx="25" fill="url(#ink)"/>
+  <path d="M0,80 C28,66 45,100 74,82 S98,73 108,77" fill="none" stroke="#F4B266" stroke-opacity="0.18" stroke-width="1.5"/>
+  <path d="M22,54 C27,54 27,43 32,43 C37,43 37,66 42,66 C47,66 47,32 53,32 C59,32 59,76 65,76 C71,76 71,44 76,44 C81,44 81,55 86,55" fill="none" stroke="url(#ember)" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M47,44 C49,35 51,32 53,32 C56,32 57,40 58,49" fill="none" stroke="#A8CFB5" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

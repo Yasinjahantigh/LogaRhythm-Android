@@ -13,7 +13,6 @@ interface LyricsRepository {
     suspend fun deleteLyrics(track: Track, removeFromFile: Boolean = true): Boolean
     suspend fun resetLyricsToDefault(trackId: String)
     suspend fun fetchOnlineLyrics(track: Track): Lyrics?
-    suspend fun fetchOnlineLyricsWithCustomQuery(track: Track, title: String, artist: String): Lyrics?
     suspend fun searchLyricsCandidates(title: String, artist: String): List<com.yasinjahantigh.logarhythm.domain.model.LyricsCandidate>
 
     /** Per-song timing correction in ms (positive = lyrics appear earlier); 0 when none is set. */

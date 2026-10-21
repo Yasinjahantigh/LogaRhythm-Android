@@ -469,6 +469,6 @@ private fun shareAudioTrack(context: Context, track: Track) {
         }
         context.startActivity(Intent.createChooser(shareIntent, context.getString(R.string.action_share_song)))
     } catch (_: Exception) {
-        Toast.makeText(context, "Cannot share file", Toast.LENGTH_SHORT).show()
+        Toast.makeText(context, context.getString(R.string.cannot_share_file), Toast.LENGTH_SHORT).show()
     }
 }

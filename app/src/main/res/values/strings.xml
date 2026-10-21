@@ -1,4 +1,4 @@
-<resources xmlns:tools="http://schemas.android.com/tools" tools:ignore="PluralsCandidate,UnusedResources">
+<resources xmlns:tools="http://schemas.android.com/tools">
     <string name="app_name">LogaRhythm</string>
     <string name="nav_home">Home</string>
     <string name="nav_search">Search</string>
@@ -13,7 +13,7 @@
     <string name="cd_library_icon">Library destination</string>
     <string name="cd_settings_icon">Settings destination</string>
 
-    <!-- Phase 1: Local Library & Permissions -->
+    <!-- Library -->
     <string name="permission_audio_title">Audio Permission Required</string>
     <string name="permission_audio_desc">LogaRhythm needs access to audio files to organize and play your local music.</string>
     <string name="permission_grant_button">Grant Permission</string>
@@ -28,7 +28,7 @@
     <string name="cd_rescan">Rescan music library</string>
     <string name="cd_permission_icon">Audio permission icon</string>
 
-    <!-- Phase 2: Playback Core -->
+    <!-- Playback -->
     <string name="cd_play">Play</string>
     <string name="cd_pause">Pause</string>
     <string name="cd_skip_next">Next track</string>
@@ -43,7 +43,7 @@
     <string name="unknown_album">Unknown album</string>
     <string name="now_playing">Now Playing</string>
 
-    <!-- Phase 3: Browsing and Search -->
+    <!-- Browsing and search -->
     <string name="tab_songs">Songs</string>
     <string name="tab_albums">Albums</string>
     <string name="tab_artists">Artists</string>
@@ -73,7 +73,7 @@
     <string name="cd_artist_item">Artist %1$s</string>
     <string name="cd_folder_item">Folder %1$s</string>
 
-    <!-- Phase 4: Queue, Playlists & Favorites -->
+    <!-- Queue and playlists -->
     <string name="tab_playlists">Playlists</string>
     <string name="queue_title">Playing Queue</string>
     <string name="queue_empty">Queue is empty</string>
@@ -108,7 +108,7 @@
     <string name="cd_unfavorite">Remove from favorites</string>
     <string name="cd_playlist_menu">Playlist options</string>
 
-    <!-- Phase 5: Statistics & Insights -->
+    <!-- Statistics -->
     <string name="stats_title">Listening Statistics</string>
     <string name="stats_range_week">This Week</string>
     <string name="stats_range_month">This Month</string>
@@ -127,7 +127,7 @@
     <string name="home_stats_card_action">View listening statistics</string>
     <string name="settings_stats_title">Listening Statistics</string>
 
-    <!-- Phase 6: Lyrics -->
+    <!-- Lyrics -->
     <string name="lyrics_loading">Loading lyrics…</string>
     <string name="lyrics_empty_title">No lyrics found</string>
     <string name="btn_import_lrc">Import .lrc</string>
@@ -135,7 +135,7 @@
     <string name="settings_lrclib_title">Online Lyrics (LRCLIB)</string>
     <string name="settings_lrclib_desc">Fetch synced lyrics automatically from lrclib.net</string>
 
-    <!-- Phase 7: Extras (Sleep timer, Equalizer, Playback speed) -->
+    <!-- Sleep timer, equalizer and playback speed -->
     <string name="sleep_timer_title">Sleep Timer</string>
     <string name="sleep_timer_end_of_track">End of current track</string>
     <string name="sleep_timer_active">Active: %1$s remaining</string>
@@ -160,7 +160,7 @@
     <string name="equalizer_not_supported">Equalizer is not supported on this device/emulator</string>
     <string name="equalizer_band_db">%1$+d dB</string>
 
-    <!-- Phase 8: Smart Mixes & Personalization -->
+    <!-- Daily mixes and appearance -->
     <string name="daily_mix_title_rotation">In your rotation</string>
     <string name="daily_mix_title_rediscover">Time to revisit</string>
     <string name="daily_mix_title_discovery">Off the beaten track</string>
@@ -205,7 +205,7 @@
     <string name="settings_excluded_folders_dialog_title">Exclude Folders</string>
     <string name="settings_no_folders_found">No folders found in library</string>
 
-    <!-- Phase 9: Widget & Onboarding -->
+    <!-- Widget and onboarding -->
     <string name="widget_description">Quick controls and your currently playing track</string>
     <string name="no_track_playing">Not Playing</string>
     <string name="cd_widget_play_pause">Play or pause</string>
@@ -225,7 +225,7 @@
     <string name="onboarding_permission_info">To get started, we need access to your local audio library and notifications for playback controls.</string>
     <string name="onboarding_btn_start">Get Started</string>
 
-    <!-- Overhaul: Genres, Sorting, Fast Scroll, and Enhanced Controls -->
+    <!-- Genres, sorting and player controls -->
     <string name="tab_genres">Genres</string>
     <string name="empty_genres">No genres found</string>
     <string name="empty_genre_tracks">No tracks found in this genre</string>
@@ -263,7 +263,7 @@
     <string name="mood_acoustic_morning">Acoustic morning</string>
     <string name="mood_empty">There aren’t any tracks available for this mix yet. Add music to your library and try again.</string>
 
-    <!-- Enhanced Menus & Lyrics Actions -->
+    <!-- Song menus and lyrics actions -->
     <string name="action_view_lyrics">View / Edit Lyrics</string>
     <string name="action_search_lyrics_google">Search Lyrics on Google</string>
     <string name="action_delete_lyrics">Delete Lyrics</string>
@@ -352,7 +352,7 @@
     <string name="lyrics_source_online">Online (%1$s)</string>
     <string name="home_rescan">Scan for music</string>
 
-    <!-- UI redesign -->
+    <!-- Player and home -->
     <string name="player_action_lyrics">Lyrics</string>
     <string name="player_action_queue">Queue</string>
     <string name="player_action_timer">Timer</string>
@@ -420,7 +420,7 @@
     <string name="tools_no_missing">Every song has title, artist and album</string>
     <string name="tools_duplicate_group">%1$d copies</string>
 
-    <!-- Hidden tracks & Folder exclusion enhancements -->
+    <!-- Hidden tracks and folder exclusions -->
     <string name="action_hide_track">Hide song</string>
     <string name="dialog_hide_song_title">Hide song</string>
     <string name="dialog_hide_song_confirm">Hide \"%1$s\" from your library? You can restore it anytime in Settings or Library Tools.</string>
@@ -442,4 +442,11 @@
     <string name="dialog_exclude_folder_title">Exclude folder</string>
     <string name="dialog_exclude_folder_confirm">Exclude \"%1$s\" from your library? Its songs will be hidden. You can un-exclude it anytime in Settings.</string>
     <string name="folder_excluded_toast">Folder \"%1$s\" excluded from library</string>
+    <string name="cannot_share_file">Couldn\'t share this file</string>
+    <string name="imported_playlist">Imported playlist</string>
+    <string name="speed_multiplier">%1$s×</string>
+    <string name="lyrics_provider_lrclib">LRCLIB</string>
+    <string name="lyrics_provider_netease">NetEase</string>
+    <string name="lyrics_provider_kugou">Kugou</string>
+    <string name="lyrics_provider_lyrics_ovh">Lyrics.ovh</string>
 </resources>
