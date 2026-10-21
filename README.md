@@ -5,13 +5,20 @@
 <h1>LogaRhythm</h1>
 
 <p>
+  <a href="https://github.com/Yasinjahantigh/LogaRhythm-Android/releases/latest"><img alt="Download APK" src="https://img.shields.io/badge/Download-APK-2ea44f?logo=android&logoColor=white" /></a>
+  <a href="https://t.me/LogaRhythmApp"><img alt="Telegram Channel" src="https://img.shields.io/badge/Telegram-@LogaRhythmApp-2CA5E0?logo=telegram&logoColor=white" /></a>
   <img alt="Android 8.0+" src="https://img.shields.io/badge/Android-8.0%2B-3DDC84?logo=android&logoColor=white" />
   <img alt="Kotlin" src="https://img.shields.io/badge/Kotlin-2.0-7F52FF?logo=kotlin&logoColor=white" />
   <img alt="License: Apache 2.0" src="https://img.shields.io/badge/License-Apache%202.0-blue.svg" />
   <a href="https://github.com/Yasinjahantigh/LogaRhythm-Android/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/Yasinjahantigh/LogaRhythm-Android/actions/workflows/ci.yml/badge.svg" /></a>
 </p>
 
-<p><a href="#english">English</a> · <a href="#فارسی">فارسی</a></p>
+<p>
+  <a href="https://github.com/Yasinjahantigh/LogaRhythm-Android/releases/latest"><b>Download Latest APK</b></a> · 
+  <a href="https://t.me/LogaRhythmApp">Telegram Channel</a> · 
+  <a href="#english">English</a> · 
+  <a href="#فارسی">فارسی</a>
+</p>
 
 </div>
 
@@ -61,6 +68,11 @@ Requires JDK 21 and Android SDK 36. Gradle wrapper included. On Windows: `gradle
 
 > If Google Maven is unreachable on your network, add `logarhythm.mirrors=true` to `local.properties`.
 
+### Download & Community
+
+- **Download APK**: Grab the latest build from [GitHub Releases](https://github.com/Yasinjahantigh/LogaRhythm-Android/releases/latest).
+- **Updates & Feedback**: Join the Telegram channel [@LogaRhythmApp](https://t.me/LogaRhythmApp) for announcements, changelogs, and direct feedback.
+
 ### License
 
 Apache 2.0 — see [LICENSE](LICENSE).
@@ -104,6 +116,13 @@ Apache 2.0 — see [LICENSE](LICENSE).
 ### طراحی
 
 پالت پیش‌فرض **Ink & Ember** نام دارد: یک نزدیک‌به‌مشکی گرم (`#0E1013`)، لهجهٔ کهربایی (`#F4B266`)، سربی و مریم‌گلی برای نقش‌های فرعی. چیزی شبیه یک صحنه که از یک طرف نور می‌خورد. می‌توانید رنگ کاور آهنگ در حال پخش را جای آن بگذارید، یا آن را به Material You و والپیپرتان بسپارید.
+
+---
+
+### دریافت و ارتباط
+
+- **دانلود نسخهٔ نهایی**: فایل APK را از [صفحهٔ انتشار گیت‌هاب](https://github.com/Yasinjahantigh/LogaRhythm-Android/releases/latest) دریافت کنید.
+- **کانال تلگرام و گزارش باگ**: برای دریافت آپدیت‌ها، تغییرات و ارسال باگ/پیشنهاد به [@LogaRhythmApp](https://t.me/LogaRhythmApp) بپیوندید.
 
 ---
 
