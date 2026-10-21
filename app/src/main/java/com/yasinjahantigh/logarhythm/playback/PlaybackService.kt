@@ -2,6 +2,7 @@ package com.yasinjahantigh.logarhythm.playback
 
 import android.app.PendingIntent
 import android.content.Intent
+import android.os.Bundle
 import androidx.annotation.OptIn
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
@@ -11,15 +12,27 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.analytics.AnalyticsListener
+import androidx.media3.session.CommandButton
 import androidx.media3.session.DefaultMediaNotificationProvider
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
+import androidx.media3.session.SessionCommand
+import androidx.media3.session.SessionError
+import androidx.media3.session.SessionResult
+import com.google.common.util.concurrent.Futures
+import com.google.common.util.concurrent.ListenableFuture
 import com.yasinjahantigh.logarhythm.R
 import com.yasinjahantigh.logarhythm.MainActivity
 import com.yasinjahantigh.logarhythm.data.datastore.PreferencesManager
 import com.yasinjahantigh.logarhythm.data.room.MusicDao
 import com.yasinjahantigh.logarhythm.widget.MusicWidgetUpdater
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 /**
@@ -34,7 +47,12 @@ class PlaybackService : MediaSessionService() {
         const val ACTION_PLAY_PAUSE = "com.yasinjahantigh.logarhythm.action.PLAY_PAUSE"
         const val ACTION_NEXT = "com.yasinjahantigh.logarhythm.action.NEXT"
         const val ACTION_PREVIOUS = "com.yasinjahantigh.logarhythm.action.PREVIOUS"
+        private const val ACTION_TOGGLE_SHUFFLE = "com.yasinjahantigh.logarhythm.action.TOGGLE_SHUFFLE"
+        private const val ACTION_CYCLE_REPEAT = "com.yasinjahantigh.logarhythm.action.CYCLE_REPEAT"
     }
+
+    @Inject
+    lateinit var playerController: PlayerController
 
     @Inject
     lateinit var equalizerManager: EqualizerManager
@@ -50,6 +68,44 @@ class PlaybackService : MediaSessionService() {
 
     private var mediaSession: MediaSession? = null
     private var enhancer: PlaybackEnhancer? = null
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+
+    private val sessionCallback = object : MediaSession.Callback {
+        @OptIn(UnstableApi::class)
+        override fun onConnect(
+            session: MediaSession,
+            controller: MediaSession.ControllerInfo
+        ): MediaSession.ConnectionResult {
+            val commands = MediaSession.ConnectionResult.DEFAULT_SESSION_COMMANDS.buildUpon()
+                .add(SessionCommand(ACTION_TOGGLE_SHUFFLE, Bundle.EMPTY))
+                .add(SessionCommand(ACTION_CYCLE_REPEAT, Bundle.EMPTY))
+                .build()
+            return MediaSession.ConnectionResult.AcceptedResultBuilder(session)
+                .setAvailableSessionCommands(commands)
+                .build()
+        }
+
+        @OptIn(UnstableApi::class)
+        override fun onCustomCommand(
+            session: MediaSession,
+            controller: MediaSession.ControllerInfo,
+            customCommand: SessionCommand,
+            args: Bundle
+        ): ListenableFuture<SessionResult> {
+            when (customCommand.customAction) {
+                ACTION_TOGGLE_SHUFFLE -> playerController.toggleShuffle()
+                ACTION_CYCLE_REPEAT -> playerController.cycleRepeat()
+                else -> return Futures.immediateFuture(
+                    SessionResult(SessionError.ERROR_NOT_SUPPORTED)
+                )
+            }
+            return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
+        }
+
+        override fun onPostConnect(session: MediaSession, controller: MediaSession.ControllerInfo) {
+            updateNotificationButtons()
+        }
+    }
 
     @OptIn(UnstableApi::class)
     override fun onCreate() {
@@ -129,6 +185,7 @@ class PlaybackService : MediaSessionService() {
         mediaSession = MediaSession.Builder(this, player)
             .setSessionActivity(sessionActivity)
             .setBitmapLoader(bitmapLoader)
+            .setCallback(sessionCallback)
             .build()
 
         setMediaNotificationProvider(
@@ -137,6 +194,44 @@ class PlaybackService : MediaSessionService() {
                 .apply {
                     setSmallIcon(R.drawable.ic_music_placeholder)
                 }
+        )
+
+        updateNotificationButtons()
+        scope.launch {
+            combine(playerController.shuffle, playerController.repeatMode) { _, _ -> }
+                .collect { updateNotificationButtons() }
+        }
+    }
+
+    @OptIn(UnstableApi::class)
+    private fun updateNotificationButtons() {
+        val session = mediaSession ?: return
+        val shuffle = playerController.shuffle.value
+        val repeatMode = playerController.repeatMode.value
+        session.setMediaButtonPreferences(
+            listOf(
+                CommandButton.Builder(
+                    if (shuffle) CommandButton.ICON_SHUFFLE_ON else CommandButton.ICON_SHUFFLE_OFF
+                )
+                    .setSessionCommand(SessionCommand(ACTION_TOGGLE_SHUFFLE, Bundle.EMPTY))
+                    .setDisplayName(getString(R.string.cd_shuffle))
+                    .build(),
+                CommandButton.Builder(
+                    when (repeatMode) {
+                        Player.REPEAT_MODE_ONE -> CommandButton.ICON_REPEAT_ONE
+                        Player.REPEAT_MODE_ALL -> CommandButton.ICON_REPEAT_ALL
+                        else -> CommandButton.ICON_REPEAT_OFF
+                    }
+                )
+                    .setSessionCommand(SessionCommand(ACTION_CYCLE_REPEAT, Bundle.EMPTY))
+                    .setDisplayName(
+                        getString(
+                            if (repeatMode == Player.REPEAT_MODE_ONE) R.string.cd_repeat_one
+                            else R.string.cd_repeat
+                        )
+                    )
+                    .build()
+            )
         )
     }
 
@@ -178,6 +273,7 @@ class PlaybackService : MediaSessionService() {
     }
 
     override fun onDestroy() {
+        scope.cancel()
         enhancer?.release()
         enhancer = null
         sleepTimerManager.detachPlayer()
