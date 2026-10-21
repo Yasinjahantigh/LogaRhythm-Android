@@ -2,14 +2,19 @@
 import json
 import os
 import subprocess
+import urllib.error
 import urllib.request
-import urllib.parse
 
-TAG = os.environ["TAG_NAME"]
-GEMINI_KEY = os.environ.get("GEMINI_API_KEY", "")
-BOT_TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
-CHANNEL_ID = os.environ["TELEGRAM_CHANNEL_ID"]
+TAG = os.environ["TAG_NAME"].strip()
+GEMINI_KEY = os.environ.get("GEMINI_API_KEY", "").strip()
+BOT_TOKEN = os.environ["TELEGRAM_BOT_TOKEN"].strip()
+CHANNEL_ID = os.environ["TELEGRAM_CHANNEL_ID"].strip()
 APK_PATH = f"LogaRhythm-{TAG}.apk"
+
+if not CHANNEL_ID:
+    raise SystemExit("TELEGRAM_CHANNEL_ID secret is empty or missing.")
+if not BOT_TOKEN:
+    raise SystemExit("TELEGRAM_BOT_TOKEN secret is empty or missing.")
 
 
 def get_commits():
@@ -43,7 +48,7 @@ def ask_gemma(commits):
     body = json.dumps({"contents": [{"parts": [{"text": prompt}]}]}).encode()
     url = (
         "https://generativelanguage.googleapis.com/v1beta/models/"
-        f"gemma-3-12b-it:generateContent?key={GEMINI_KEY}"
+        f"gemma-4-26b-a4b-it:generateContent?key={GEMINI_KEY}"
     )
     req = urllib.request.Request(url, data=body, headers={"Content-Type": "application/json"})
     try:
@@ -96,10 +101,13 @@ def send_apk(caption):
         data=body,
         headers={"Content-Type": f"multipart/form-data; boundary={boundary}"},
     )
-    with urllib.request.urlopen(req, timeout=120) as r:
-        result = json.load(r)
+    try:
+        with urllib.request.urlopen(req, timeout=120) as r:
+            result = json.load(r)
+    except urllib.error.HTTPError as e:
+        raise SystemExit(f"Telegram HTTP {e.code}: {e.read().decode(errors='replace')}")
     if not result.get("ok"):
-        raise RuntimeError(f"Telegram error: {result}")
+        raise SystemExit(f"Telegram error: {result}")
     print("Telegram message sent.")
 
 
