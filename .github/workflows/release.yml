@@ -118,3 +118,69 @@ jobs:
           tag_name: ${{ steps.versioning.outputs.TAG_NAME }}
           files: LogaRhythm-*.apk
           generate_release_notes: true
+
+      - name: Generate changelog with Gemma
+        id: changelog
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          TAG_NAME: ${{ steps.versioning.outputs.TAG_NAME }}
+        run: |
+          set -euo pipefail
+
+          PREV_TAG=$(git tag -l "v*.*.*" | sort -V | tail -n 2 | head -n 1)
+          if [ -z "$PREV_TAG" ] || [ "$PREV_TAG" = "$TAG_NAME" ]; then
+            COMMITS="اولین نسخه"
+          else
+            COMMITS=$(git log "${PREV_TAG}..HEAD" --pretty=format:"- %s" \
+              | grep -v -E "^- (docs|ci|chore|build|style|test):" \
+              | head -20)
+          fi
+
+          if [ -z "$COMMITS" ]; then
+            COMMITS="بهبودهای کلی و رفع مشکلات"
+          fi
+
+          PROMPT="کامیت‌های زیر تغییرات نسخه جدید نرم‌افزار LogaRhythm هستند (یک پخش‌کننده موسیقی اندرویدی). آن‌ها را به فارسی روان و کاربرپسند تبدیل کن. هر تغییر یک خط با بولت • باشد. حداکثر ۵ مورد. فقط تغییرات را بنویس بدون هیچ توضیح اضافه:\n\n${COMMITS}"
+
+          RESPONSE=$(curl -s \
+            "https://generativelanguage.googleapis.com/v1beta/models/gemma-3-27b-it:generateContent?key=${GEMINI_API_KEY}" \
+            -H "Content-Type: application/json" \
+            -d "{\"contents\":[{\"parts\":[{\"text\":$(echo "$PROMPT" | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()))')}]}]}")
+
+          CHANGELOG=$(echo "$RESPONSE" | python3 -c "
+          import json, sys
+          data = json.load(sys.stdin)
+          try:
+              print(data['candidates'][0]['content']['parts'][0]['text'].strip())
+          except:
+              print('بهبودهای کلی و رفع مشکلات')
+          ")
+
+          echo "CHANGELOG<<EOF" >> "$GITHUB_OUTPUT"
+          echo "$CHANGELOG" >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
+
+      - name: Send Telegram notification
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHANNEL_ID: ${{ secrets.TELEGRAM_CHANNEL_ID }}
+          TAG_NAME: ${{ steps.versioning.outputs.TAG_NAME }}
+          CHANGELOG: ${{ steps.changelog.outputs.CHANGELOG }}
+        run: |
+          set -euo pipefail
+
+          MESSAGE="🎵 LogaRhythm ${TAG_NAME}
+
+تغییرات این نسخه:
+${CHANGELOG}
+
+📥 دانلود از گیت‌هاب:
+https://github.com/Yasinjahantigh/LogaRhythm-Android/releases/tag/${TAG_NAME}
+
+💬 باگ یا پیشنهاد؟ همین پایین کامنت بذارید."
+
+          curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendDocument" \
+            -F "chat_id=${TELEGRAM_CHANNEL_ID}" \
+            -F "document=@LogaRhythm-${TAG_NAME}.apk" \
+            -F "caption=${MESSAGE}" \
+            -F "parse_mode=HTML"
