@@ -27,7 +27,8 @@ def get_commits():
             return ""
         prev = tags[-2]
         log = subprocess.check_output(
-            ["git", "log", f"{prev}..HEAD", "--pretty=format:- %s"], text=True
+            ["git", "log", f"{prev}..HEAD", "--pretty=format:- %s", "--", "app/src"],
+            text=True,
         )
         skip = ("docs:", "ci:", "chore:", "build:", "style:", "test:")
         lines = [l for l in log.splitlines() if not any(l.startswith(f"- {p}") for p in skip)]
@@ -40,10 +41,11 @@ def ask_gemma(commits):
     if not GEMINI_KEY or not commits:
         return None
     prompt = (
-        "کامیت‌های زیر تغییرات نسخه جدید نرم‌افزار LogaRhythm هستند "
-        "(یک پخش‌کننده موسیقی اندرویدی). آن‌ها را به فارسی روان و کاربرپسند "
-        "تبدیل کن. هر تغییر یک خط با بولت • باشد. حداکثر ۵ مورد. "
-        "فقط تغییرات را بنویس بدون هیچ توضیح اضافه:\n\n" + commits
+        "کامیت‌های زیر تغییرات نسخه جدید اپ اندروید LogaRhythm (پخش‌کننده موسیقی) هستند. "
+        "آن‌ها را به فارسی روان و کاربرپسند برای کاربر نهایی بازنویسی کن. "
+        "هر تغییر یک خط با بولت • باشد، حداکثر ۵ خط. "
+        "تغییرات مربوط به زیرساخت، CI، تلگرام، مستندات و کارهای فنی داخلی را نادیده بگیر. "
+        "فقط فهرست تغییرات را بنویس، بدون مقدمه و توضیح اضافه:\n\n" + commits
     )
     body = json.dumps({"contents": [{"parts": [{"text": prompt}]}]}).encode()
     url = (
@@ -74,13 +76,13 @@ def ask_gemma(commits):
 
 
 def build_message(changelog):
-    body = changelog if changelog else "بهبودهای کلی و رفع مشکلات"
+    body = changelog if changelog else "• بهبودهای کلی و رفع مشکلات"
     return (
-        f"LogaRhythm {TAG}\n\n"
+        f"LogaRhythm {TAG} 🚀\n\n"
         f"تغییرات این نسخه:\n{body}\n\n"
-        f"دانلود:\n"
-        f"https://github.com/Yasinjahantigh/LogaRhythm-Android/releases/tag/{TAG}\n\n"
-        "باگ یا پیشنهاد؟ همین پایین کامنت بذارید."
+        "دانلود از گیت‌هاب:\n"
+        "https://github.com/Yasinjahantigh/LogaRhythm-Android/releases/latest\n\n"
+        "باگ یا پیشنهاد؟ زیر همین پست کامنت بذارید."
     )
 
 
