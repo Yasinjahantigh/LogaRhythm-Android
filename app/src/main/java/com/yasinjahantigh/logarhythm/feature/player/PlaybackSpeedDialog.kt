@@ -87,9 +87,9 @@ fun PlaybackSpeedDialog(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Text(text = "0.5x", style = MaterialTheme.typography.labelSmall)
-                    Text(text = "1.0x", style = MaterialTheme.typography.labelSmall)
-                    Text(text = "2.0x", style = MaterialTheme.typography.labelSmall)
+                    Text(text = stringResource(R.string.speed_multiplier, "0.5"), style = MaterialTheme.typography.labelSmall)
+                    Text(text = stringResource(R.string.speed_multiplier, "1.0"), style = MaterialTheme.typography.labelSmall)
+                    Text(text = stringResource(R.string.speed_multiplier, "2.0"), style = MaterialTheme.typography.labelSmall)
                 }
 
                 Spacer(modifier = Modifier.height(16.dp))

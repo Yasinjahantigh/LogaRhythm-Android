@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.Uri
 import android.provider.DocumentsContract
 import androidx.room.withTransaction
+import com.yasinjahantigh.logarhythm.R
 import com.yasinjahantigh.logarhythm.data.room.MusicDao
 import com.yasinjahantigh.logarhythm.data.room.MusicDatabase
 import com.yasinjahantigh.logarhythm.data.room.PlaylistDao
@@ -61,7 +62,7 @@ class PlaylistFileService @Inject constructor(
                 val result = M3uCodec.match(M3uCodec.parse(text), library)
                 missing += result.missing.size
                 if (result.matched.isEmpty()) continue
-                val name = displayName(uri).substringBeforeLast('.').ifBlank { "Imported playlist" }
+                val name = displayName(uri).substringBeforeLast('.').ifBlank { context.getString(R.string.imported_playlist) }
                 database.withTransaction {
                     val id = playlistDao.insertPlaylist(PlaylistEntity(name = name))
                     val seen = HashSet<String>()

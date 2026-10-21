@@ -378,27 +378,6 @@ class LyricsViewModel @Inject constructor(
         }
     }
 
-    fun searchCustomOnlineLyrics(
-        title: String,
-        artist: String,
-        onComplete: (Boolean) -> Unit = {}
-    ) {
-        val track = currentTrack.value ?: return
-        viewModelScope.launch {
-            _isLoading.value = true
-            try {
-                val found = lyricsRepository.fetchOnlineLyricsWithCustomQuery(track, title, artist)
-                onComplete(found != null && !found.isEmpty)
-            } catch (cancelled: CancellationException) {
-                throw cancelled
-            } catch (_: Exception) {
-                onComplete(false)
-            } finally {
-                _isLoading.value = false
-            }
-        }
-    }
-
     private fun findActiveLineIndex(lines: List<LyricLine>, currentPosMs: Long): Int {
         var active = -1
         for (i in lines.indices) {

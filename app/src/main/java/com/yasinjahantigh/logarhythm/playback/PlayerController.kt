@@ -3,10 +3,7 @@ package com.yasinjahantigh.logarhythm.playback
 import com.yasinjahantigh.logarhythm.domain.model.Track
 import kotlinx.coroutines.flow.StateFlow
 
-/**
- * Controller interface wrapping media playback operations.
- * UI components interact with audio playback strictly through this abstraction.
- */
+/** Playback operations exposed to the UI. */
 interface PlayerController {
     val currentTrack: StateFlow<Track?>
     val isPlaying: StateFlow<Boolean>
@@ -16,7 +13,6 @@ interface PlayerController {
     val repeatMode: StateFlow<Int>
     val queue: StateFlow<List<Track>>
 
-    // Phase 7: Extras
     val playbackSpeed: StateFlow<Float>
     val sleepTimerRemainingMs: StateFlow<Long?>
     val sleepTimerRemainingTracks: StateFlow<Int?>
@@ -45,7 +41,6 @@ interface PlayerController {
     fun playQueueItem(index: Int)
     fun clearQueue()
 
-    // Phase 7: Extras
     fun setPlaybackSpeed(speed: Float)
     fun setSleepTimer(minutes: Int)
     fun setSleepTimerTracks(tracks: Int)

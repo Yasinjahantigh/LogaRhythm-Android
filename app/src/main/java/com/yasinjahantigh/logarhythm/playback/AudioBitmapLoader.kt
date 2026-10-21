@@ -110,8 +110,7 @@ class AudioBitmapLoader(private val context: Context) : BitmapLoader {
             // 2. Try scoped storage loadThumbnail on Android Q+
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 try {
-                    val bitmap = context.contentResolver.loadThumbnail(uri, Size(targetEdge, targetEdge), null)
-                    if (bitmap != null) return bitmap
+                    return context.contentResolver.loadThumbnail(uri, Size(targetEdge, targetEdge), null)
                 } catch (_: Exception) {}
             }
 

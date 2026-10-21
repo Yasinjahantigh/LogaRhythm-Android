@@ -48,8 +48,7 @@ class PlayScrobbler @Inject constructor(
         lastTickTimestamp = System.currentTimeMillis()
     }
 
-    @Suppress("UNUSED_PARAMETER")
-    fun onTick(isPlaying: Boolean, track: Track?, durationMs: Long, scope: CoroutineScope) {
+    fun onTick(isPlaying: Boolean, track: Track?, durationMs: Long) {
         val now = System.currentTimeMillis()
         if (currentTrackId == null && track != null) currentTrackId = track.id
         if (isPlaying && track != null && track.id == currentTrackId) {

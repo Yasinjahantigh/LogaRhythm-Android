@@ -30,7 +30,7 @@ class PlayerControllerImpl @Inject constructor(
     private val playScrobbler: PlayScrobbler,
     private val sleepTimerManager: SleepTimerManager,
     private val equalizerManager: EqualizerManager
-) : PlayerController, PlaybackController {
+) : PlayerController {
 
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
     private var mediaController: MediaController? = null
@@ -46,11 +46,9 @@ class PlayerControllerImpl @Inject constructor(
 
     private val _position = MutableStateFlow(0L)
     override val position: StateFlow<Long> = _position.asStateFlow()
-    override val currentPositionMs: StateFlow<Long> = _position.asStateFlow()
 
     private val _duration = MutableStateFlow(0L)
     override val duration: StateFlow<Long> = _duration.asStateFlow()
-    override val durationMs: StateFlow<Long> = _duration.asStateFlow()
 
     private val _shuffle = MutableStateFlow(false)
     override val shuffle: StateFlow<Boolean> = _shuffle.asStateFlow()
@@ -141,7 +139,7 @@ class PlayerControllerImpl @Inject constructor(
                 _isPlaying.value = playing
                 _position.value = controller.currentPosition.coerceAtLeast(0L)
                 if (controller.duration > 0L) _duration.value = controller.duration
-                playScrobbler.onTick(playing, _currentTrack.value, _duration.value, scope)
+                playScrobbler.onTick(playing, _currentTrack.value, _duration.value)
             }
         }
     }
@@ -421,10 +419,4 @@ class PlayerControllerImpl @Inject constructor(
         }
         _queue.value = _queue.value.map { if (it.id == updatedTrack.id) updatedTrack else it }
     }
-
-    override fun playTrack(track: Track) = play(listOf(track), 0)
-    override fun playQueue(tracks: List<Track>, startIndex: Int) = play(tracks, startIndex)
-    override fun skipToNext() = next()
-    override fun skipToPrevious() = previous()
-    override fun stop() = pause()
 }

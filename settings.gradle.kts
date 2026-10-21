@@ -7,9 +7,16 @@ pluginManagement {
     }
   }
   repositories {
-    maven("https://maven.aliyun.com/repository/google")
-    maven("https://maven.aliyun.com/repository/public")
-    maven("https://maven.aliyun.com/repository/gradle-plugin")
+    // Opt-in mirrors for networks where Google Maven is blocked: logarhythm.mirrors=true
+    val mirrors = java.util.Properties().apply {
+      val file = java.io.File("local.properties")
+      if (file.isFile) file.inputStream().use { load(it) }
+    }.getProperty("logarhythm.mirrors") == "true"
+    if (mirrors) {
+      maven("https://maven.aliyun.com/repository/google")
+      maven("https://maven.aliyun.com/repository/public")
+      maven("https://maven.aliyun.com/repository/gradle-plugin")
+    }
     google()
     mavenCentral()
     gradlePluginPortal()
@@ -19,10 +26,16 @@ pluginManagement {
 plugins { id("org.gradle.toolchains.foojay-resolver-convention") version "1.0.0" }
 
 dependencyResolutionManagement {
-  repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+  repositoriesMode.set(RepositoriesMode.PREFER_SETTINGS)
   repositories {
-    maven("https://maven.aliyun.com/repository/google")
-    maven("https://maven.aliyun.com/repository/public")
+    val mirrors = java.util.Properties().apply {
+      val file = java.io.File("local.properties")
+      if (file.isFile) file.inputStream().use { load(it) }
+    }.getProperty("logarhythm.mirrors") == "true"
+    if (mirrors) {
+      maven("https://maven.aliyun.com/repository/google")
+      maven("https://maven.aliyun.com/repository/public")
+    }
     google()
     mavenCentral()
   }

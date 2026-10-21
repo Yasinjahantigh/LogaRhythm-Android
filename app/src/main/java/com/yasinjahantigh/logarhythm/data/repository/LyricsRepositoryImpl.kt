@@ -91,21 +91,6 @@ class LyricsRepositoryImpl @Inject constructor(
         null
     }
 
-    override suspend fun fetchOnlineLyricsWithCustomQuery(
-        track: Track,
-        title: String,
-        artist: String
-    ): Lyrics? = withContext(Dispatchers.IO) {
-        val queryTrack = track.copy(title = title.trim(), artist = artist.trim())
-        val foundLyrics = searchAllOnlineSources(queryTrack)
-        if (foundLyrics != null && !foundLyrics.lyrics.isEmpty) {
-            val sourcedLyrics = foundLyrics.lyrics.copy(source = foundLyrics.sourceName)
-            cacheLyrics(track.id, sourcedLyrics, foundLyrics.sourceName)
-            return@withContext sourcedLyrics
-        }
-        null
-    }
-
     override suspend fun searchLyricsCandidates(
         title: String,
         artist: String
@@ -121,15 +106,10 @@ class LyricsRepositoryImpl @Inject constructor(
 
     private data class LyricsSearchResult(val lyrics: Lyrics, val sourceName: String)
 
-    /**
-     * Searches multiple online lyrics banks with strict priority:
-     * 1. High priority: SYNCED lyrics (LRCLIB, Netease, Kugou)
-     * 2. Low priority: PLAIN/UNSYNCED lyrics (LRCLIB plain, Lyrics.ovh)
-     */
+    /** Online providers, synced results first, with the first plain result kept as a fallback. */
     private suspend fun searchAllOnlineSources(track: Track): LyricsSearchResult? {
         var fallbackPlainLyrics: LyricsSearchResult? = null
 
-        // --- Bank 1: LRCLIB (Fast, exact synced tags) ---
         try {
             val lrclibRes = lrclibLyricsSource.getLyrics(track)
             if (lrclibRes != null && !lrclibRes.isEmpty) {
@@ -144,7 +124,6 @@ class LyricsRepositoryImpl @Inject constructor(
         } catch (_: Exception) {
         }
 
-        // --- Bank 2: Netease Cloud Music (Massive synced LRC bank) ---
         try {
             val neteaseRes = neteaseLyricsSource.getLyrics(track)
             if (neteaseRes != null && !neteaseRes.isEmpty) {
@@ -159,7 +138,6 @@ class LyricsRepositoryImpl @Inject constructor(
         } catch (_: Exception) {
         }
 
-        // --- Bank 3: Kugou Music (Massive synced LRC bank) ---
         try {
             val kugouRes = kugouLyricsSource.getLyrics(track)
             if (kugouRes != null && !kugouRes.isEmpty) {
@@ -174,12 +152,10 @@ class LyricsRepositoryImpl @Inject constructor(
         } catch (_: Exception) {
         }
 
-        // If synced lyrics found, we already returned. If not, return plain lyrics if any bank had them
         if (fallbackPlainLyrics != null) {
             return fallbackPlainLyrics
         }
 
-        // --- Bank 4: Lyrics.ovh (Plain lyrics fallback) ---
         try {
             val ovhRes = lyricsOvhLyricsSource.getLyrics(track)
             if (ovhRes != null && !ovhRes.isEmpty) {
@@ -213,20 +189,8 @@ class LyricsRepositoryImpl @Inject constructor(
                     source = source
                 )
             )
-            // A sidecar file is only written by the explicit companion save below.
             localFileLyricsSource.saveEmbeddedLyrics(track, cleanContent)
         }
-
-    /** Explicit companion-file fallback, separate from embedded tag writing. */
-    suspend fun saveLyricsCompanion(track: Track, content: String): Boolean = withContext(Dispatchers.IO) {
-        val cleanContent = content.trim()
-        if (cleanContent.isBlank()) return@withContext false
-        val parsed = LrcParser.parse(cleanContent)
-        lyricsDao.insertLyrics(
-            LyricsEntity(trackId = track.id, content = cleanContent, isSynced = parsed.isSynced, source = "companion_file")
-        )
-        localFileLyricsSource.saveCompanionLrc(track, cleanContent)
-    }
 
     override suspend fun deleteLyrics(trackId: String) = withContext(Dispatchers.IO) {
         lyricsDao.insertLyrics(

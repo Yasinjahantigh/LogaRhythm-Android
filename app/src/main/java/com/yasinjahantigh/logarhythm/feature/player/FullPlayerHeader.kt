@@ -17,7 +17,7 @@ import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.OpenInBrowser
-import androidx.compose.material.icons.filled.PlaylistAddCheck
+import androidx.compose.material.icons.automirrored.filled.PlaylistAddCheck
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.DropdownMenu
@@ -59,8 +59,8 @@ fun FullPlayerHeader(
     onOpenSongDetails: () -> Unit,
     onShareSong: () -> Unit,
     onEditSongDetails: () -> Unit,
-    onHideSong: (() -> Unit)? = null,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onHideSong: (() -> Unit)? = null
 ) {
     var showMoreMenu by remember { mutableStateOf(false) }
     val scheme = MaterialTheme.colorScheme
@@ -129,7 +129,7 @@ fun FullPlayerHeader(
             ) {
                 DropdownMenuItem(
                     text = { Text(stringResource(R.string.action_add_to_playlist)) },
-                    leadingIcon = { Icon(Icons.Default.PlaylistAddCheck, contentDescription = null) },
+                    leadingIcon = { Icon(Icons.AutoMirrored.Filled.PlaylistAddCheck, contentDescription = null) },
                     onClick = { showMoreMenu = false; onAddToPlaylist() }
                 )
                 DropdownMenuItem(

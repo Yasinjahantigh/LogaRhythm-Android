@@ -67,17 +67,15 @@ fun DailyMixCard(
     val titleRes = when (mix.id) {
         "daily_mix_1" -> R.string.daily_mix_title_rotation
         "daily_mix_2" -> R.string.daily_mix_title_rediscover
-        "daily_mix_3" -> R.string.daily_mix_title_discovery
-        else -> null
+        else -> R.string.daily_mix_title_discovery
     }
-    val descriptionFallbacks = mapOf(
-        "Familiar tracks and favorites" to R.string.daily_mix_desc_rotation,
-        "Music worth hearing again" to R.string.daily_mix_desc_rediscover,
-        "Less-played corners of your library" to R.string.daily_mix_desc_discovery
-    )
-    val displayTitle = if (titleRes != null) stringResource(titleRes) else mix.title
-    val descriptionRes = descriptionFallbacks[mix.description]
-    val displayDescription = if (descriptionRes != null) stringResource(descriptionRes) else mix.description
+    val descriptionRes = when (mix.id) {
+        "daily_mix_1" -> R.string.daily_mix_desc_rotation
+        "daily_mix_2" -> R.string.daily_mix_desc_rediscover
+        else -> R.string.daily_mix_desc_discovery
+    }
+    val displayTitle = stringResource(titleRes)
+    val displayDescription = stringResource(descriptionRes)
 
     Card(
         modifier = modifier
@@ -203,17 +201,15 @@ fun DailyMixDetailBottomSheet(
     val titleRes = when (mix.id) {
         "daily_mix_1" -> R.string.daily_mix_title_rotation
         "daily_mix_2" -> R.string.daily_mix_title_rediscover
-        "daily_mix_3" -> R.string.daily_mix_title_discovery
-        else -> null
+        else -> R.string.daily_mix_title_discovery
     }
-    val descriptionFallbacks = mapOf(
-        "Familiar tracks and favorites" to R.string.daily_mix_desc_rotation,
-        "Music worth hearing again" to R.string.daily_mix_desc_rediscover,
-        "Less-played corners of your library" to R.string.daily_mix_desc_discovery
-    )
-    val displayTitle = if (titleRes != null) stringResource(titleRes) else mix.title
-    val descriptionRes = descriptionFallbacks[mix.description]
-    val displayDescription = if (descriptionRes != null) stringResource(descriptionRes) else mix.description
+    val descriptionRes = when (mix.id) {
+        "daily_mix_1" -> R.string.daily_mix_desc_rotation
+        "daily_mix_2" -> R.string.daily_mix_desc_rediscover
+        else -> R.string.daily_mix_desc_discovery
+    }
+    val displayTitle = stringResource(titleRes)
+    val displayDescription = stringResource(descriptionRes)
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,

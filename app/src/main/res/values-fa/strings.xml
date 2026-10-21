@@ -1,4 +1,4 @@
-<resources xmlns:tools="http://schemas.android.com/tools" tools:ignore="PluralsCandidate,UnusedResources">
+<resources xmlns:tools="http://schemas.android.com/tools">
     <string name="app_name">LogaRhythm</string>
     <string name="nav_home">خانه</string>
     <string name="nav_search">جستجو</string>
@@ -13,7 +13,7 @@
     <string name="cd_library_icon">برگه کتابخانه</string>
     <string name="cd_settings_icon">برگه تنظیمات</string>
 
-    <!-- Phase 1: Local Library & Permissions -->
+    <!-- Library -->
     <string name="permission_audio_title">دسترسی به فایل‌های صوتی لازم است</string>
     <string name="permission_audio_desc">LogaRhythm برای مرتب‌سازی و پخش موسیقی‌های دستگاه به دسترسی فایل‌های صوتی نیاز دارد.</string>
     <string name="permission_grant_button">اعطای دسترسی</string>
@@ -28,7 +28,7 @@
     <string name="cd_rescan">اسکن مجدد کتابخانه موسیقی</string>
     <string name="cd_permission_icon">آیکون دسترسی فایل‌های صوتی</string>
 
-    <!-- Phase 2: Playback Core -->
+    <!-- Playback -->
     <string name="cd_play">پخش</string>
     <string name="cd_pause">توقف</string>
     <string name="cd_skip_next">آهنگ بعدی</string>
@@ -43,7 +43,7 @@
     <string name="unknown_album">آلبوم نامشخص</string>
     <string name="now_playing">در حال پخش</string>
 
-    <!-- Phase 3: Browsing and Search -->
+    <!-- Browsing and search -->
     <string name="tab_songs">آهنگ‌ها</string>
     <string name="tab_albums">آلبوم‌ها</string>
     <string name="tab_artists">هنرمندان</string>
@@ -73,7 +73,7 @@
     <string name="cd_artist_item">هنرمند %1$s</string>
     <string name="cd_folder_item">پوشه %1$s</string>
 
-    <!-- Phase 4: Queue, Playlists & Favorites -->
+    <!-- Queue and playlists -->
     <string name="tab_playlists">لیست‌های پخش</string>
     <string name="queue_title">صف پخش</string>
     <string name="queue_empty">صف پخش خالی است</string>
@@ -108,7 +108,7 @@
     <string name="cd_unfavorite">حذف از علاقه‌مندی‌ها</string>
     <string name="cd_playlist_menu">گزینه‌های لیست پخش</string>
 
-    <!-- Phase 5: Statistics & Insights -->
+    <!-- Statistics -->
     <string name="stats_title">آمار گوش دادن</string>
     <string name="stats_range_week">این هفته</string>
     <string name="stats_range_month">این ماه</string>
@@ -127,7 +127,7 @@
     <string name="home_stats_card_action">مشاهده آمار گوش دادن</string>
     <string name="settings_stats_title">آمار گوش دادن</string>
 
-    <!-- Phase 6: Lyrics -->
+    <!-- Lyrics -->
     <string name="lyrics_loading">در حال دریافت متن آهنگ…</string>
     <string name="lyrics_empty_title">متن آهنگی یافت نشد</string>
     <string name="btn_import_lrc">وارد کردن فایل .lrc</string>
@@ -135,7 +135,7 @@
     <string name="settings_lrclib_title">متن آهنگ آنلاین (LRCLIB)</string>
     <string name="settings_lrclib_desc">دریافت خودکار متن همگام‌سازی شده از lrclib.net</string>
 
-    <!-- Phase 7: Extras (Sleep timer, Equalizer, Playback speed) -->
+    <!-- Sleep timer, equalizer and playback speed -->
     <string name="sleep_timer_title">تایمر خواب</string>
     <string name="sleep_timer_end_of_track">پایان آهنگ فعلی</string>
     <string name="sleep_timer_active">فعال: %1$s باقی‌مانده</string>
@@ -160,7 +160,7 @@
     <string name="equalizer_not_supported">اکولایزر در این دستگاه/شبیه‌ساز پشتیبانی نمی‌شود</string>
     <string name="equalizer_band_db">%1$+d دسی‌بل</string>
 
-    <!-- Phase 8: Smart Mixes & Personalization -->
+    <!-- Daily mixes and appearance -->
     <string name="daily_mix_title_rotation">حال‌وهوای همیشگی</string>
     <string name="daily_mix_title_rediscover">وقت مرور دوباره</string>
     <string name="daily_mix_title_discovery">کشف‌های تازه</string>
@@ -205,7 +205,7 @@
     <string name="settings_excluded_folders_dialog_title">نادیده گرفتن پوشه‌ها</string>
     <string name="settings_no_folders_found">هیچ پوشه‌ای در کتابخانه یافت نشد</string>
 
-    <!-- Phase 9: Widget & Onboarding -->
+    <!-- Widget and onboarding -->
     <string name="widget_description">کنترل سریع پخش و آهنگ در حال پخش</string>
     <string name="no_track_playing">در حال پخش نیست</string>
     <string name="cd_widget_play_pause">پخش یا توقف</string>
@@ -225,7 +225,7 @@
     <string name="onboarding_permission_info">برای شروع، دسترسی به فایل‌های صوتی برای اسکن کتابخانه و دسترسی به اعلان‌ها برای کنترل پخش لازم است.</string>
     <string name="onboarding_btn_start">شروع کنید</string>
  
-    <!-- Overhaul: Genres, Sorting, Fast Scroll, and Enhanced Controls -->
+    <!-- Genres, sorting and player controls -->
     <string name="tab_genres">سبک‌ها</string>
     <string name="empty_genres">هیچ سبکی یافت نشد</string>
     <string name="empty_genre_tracks">هیچ آهنگی در این سبک وجود ندارد</string>
@@ -263,7 +263,7 @@
     <string name="mood_acoustic_morning">صبح آکوستیک</string>
     <string name="mood_empty">هنوز آهنگی برای این میکس در دسترس نیست، چند آهنگ به کتابخانه اضافه کنید و دوباره امتحان کنید</string>
 
-    <!-- Enhanced Menus & Lyrics Actions -->
+    <!-- Song menus and lyrics actions -->
     <string name="action_view_lyrics">مشاهده و ویرایش متن آهنگ</string>
     <string name="action_search_lyrics_google">جستجوی متن در گوگل</string>
     <string name="action_delete_lyrics">حذف متن آهنگ</string>
@@ -352,7 +352,7 @@
     <string name="lyrics_source_online">آنلاین (%1$s)</string>
     <string name="home_rescan">جست‌وجوی موسیقی</string>
 
-    <!-- UI redesign -->
+    <!-- Player and home -->
     <string name="player_action_lyrics">متن آهنگ</string>
     <string name="player_action_queue">صف پخش</string>
     <string name="player_action_timer">تایمر</string>
@@ -420,7 +420,7 @@
     <string name="tools_no_missing">همهٔ آهنگ‌ها عنوان، خواننده و آلبوم دارند</string>
     <string name="tools_duplicate_group">%1$d نسخه</string>
 
-    <!-- Hidden tracks & Folder exclusion enhancements -->
+    <!-- Hidden tracks and folder exclusions -->
     <string name="action_hide_track">مخفی کردن آهنگ</string>
     <string name="dialog_hide_song_title">مخفی کردن آهنگ</string>
     <string name="dialog_hide_song_confirm">آیا آهنگ «%1$s» از کتابخانه مخفی شود؟ هر زمان می‌توانید آن را از بخش تنظیمات یا ابزارهای کتابخانه بازگردانید.</string>
@@ -442,4 +442,11 @@
     <string name="dialog_exclude_folder_title">مستثنی کردن پوشه</string>
     <string name="dialog_exclude_folder_confirm">پوشه «%1$s» از کتابخانه مستثنی شود؟ آهنگ‌های این پوشه دیگر نمایش داده نمی‌شوند. هر زمان می‌توانید از تنظیمات آن را بازگردانید.</string>
     <string name="folder_excluded_toast">پوشه «%1$s» مستثنی شد</string>
+    <string name="cannot_share_file">اشتراک‌گذاری این فایل ممکن نشد</string>
+    <string name="imported_playlist">پلی‌لیست واردشده</string>
+    <string name="speed_multiplier">%1$s×</string>
+    <string name="lyrics_provider_lrclib">LRCLIB</string>
+    <string name="lyrics_provider_netease">NetEase</string>
+    <string name="lyrics_provider_kugou">Kugou</string>
+    <string name="lyrics_provider_lyrics_ovh">Lyrics.ovh</string>
 </resources>

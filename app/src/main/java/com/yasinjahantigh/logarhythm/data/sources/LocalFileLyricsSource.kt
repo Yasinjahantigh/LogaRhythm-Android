@@ -107,19 +107,6 @@ class LocalFileLyricsSource @Inject constructor(
         return audioFileTagWriter.clearEmbeddedLyrics(track)
     }
 
-    /** Writes a sibling .lrc file. This is not embedded audio metadata. */
-    suspend fun saveCompanionLrc(track: Track, content: String): Boolean = withContext(Dispatchers.IO) {
-        val audioFilePath = resolveAudioFilePath(track) ?: return@withContext false
-        val lrcPath = audioFilePath.substringBeforeLast('.') + ".lrc"
-        try {
-            val file = File(lrcPath)
-            file.writeText(content, Charsets.UTF_8)
-            file.exists() && file.length() > 0L && file.readText(Charsets.UTF_8) == content
-        } catch (_: Exception) {
-            false
-        }
-    }
-
     /** Deletes the companion .lrc file next to the audio file if it exists. */
     suspend fun deleteCompanionLrc(track: Track): Boolean = withContext(Dispatchers.IO) {
         val audioFilePath = resolveAudioFilePath(track) ?: return@withContext false
@@ -133,8 +120,6 @@ class LocalFileLyricsSource @Inject constructor(
             false
         }
     }
-
-    fun getAudioFilePath(track: Track): String? = resolveAudioFilePath(track)
 
     private fun resolveAudioFilePath(track: Track): String? {
         if (!track.id.startsWith("local:")) return null

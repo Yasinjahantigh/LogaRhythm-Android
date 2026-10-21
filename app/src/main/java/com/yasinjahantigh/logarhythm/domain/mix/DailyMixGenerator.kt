@@ -80,22 +80,9 @@ class DailyMixGenerator {
         val discovery = diversifyByArtist(lowPlayedRanked.take(MIX_SIZE), Random(seedDate * 31L + 33L))
 
         val sets = listOf(familiar, rediscovery, discovery)
-        val titles = listOf("In Your Rotation", "Time to Revisit", "Off the Beaten Track")
-        val descriptions = listOf(
-            "Familiar tracks and favorites",
-            "Music worth hearing again",
-            "Less-played corners of your library"
-        )
-
         return sets.mapIndexed { index, selected ->
-            val artists = selected.map { it.artist.trim() }
-                .filter { it.isNotBlank() && !it.equals("Unknown Artist", ignoreCase = true) }
-                .distinct()
-                .take(3)
             DailyMix(
                 id = "daily_mix_${index + 1}",
-                title = titles[index],
-                description = artists.takeIf { it.isNotEmpty() }?.joinToString(", ") ?: descriptions[index],
                 tracks = selected,
                 seedDate = seedDate
             )
