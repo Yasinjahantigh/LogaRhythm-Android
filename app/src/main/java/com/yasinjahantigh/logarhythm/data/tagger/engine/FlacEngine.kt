@@ -6,8 +6,6 @@ import java.io.RandomAccessFile
 
 /** Native FLAC: edits the VORBIS_COMMENT metadata block and leaves every other block and frame alone. */
 object FlacEngine : TagEngine {
-    override val label = "FLAC"
-
     private class Block(val type: Int, val data: ByteArray)
 
     private class Layout(val prefixEnd: Long, val blocks: List<Block>, val audioStart: Long)

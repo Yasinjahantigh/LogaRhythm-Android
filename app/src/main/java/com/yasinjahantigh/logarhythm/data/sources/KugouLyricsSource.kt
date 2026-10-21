@@ -25,9 +25,9 @@ class KugouLyricsSource @Inject constructor() : LyricsSource {
     override val name: String = "kugou"
 
     companion object {
-        private const val SEARCH_URL = "http://krcs.kugou.com/search"
-        private const val DOWNLOAD_URL = "http://krcs.kugou.com/download"
-        private const val USER_AGENT = "LogaRhythm/1.0 (Android)"
+        private const val SEARCH_URL = "https://krcs.kugou.com/search"
+        private const val DOWNLOAD_URL = "https://krcs.kugou.com/download"
+        private const val USER_AGENT = "LogaRhythm (Android)"
         private const val TIMEOUT_MS = 6000
     }
 
@@ -65,7 +65,7 @@ class KugouLyricsSource @Inject constructor() : LyricsSource {
         try {
             val encodedKeyword = URLEncoder.encode(keyword, "UTF-8")
             val durationParam = if (durationMs > 0) durationMs.toString() else ""
-            val url = URL("$SEARCH_URL?ver=1&man=yes&client=mobi&keyword=$encodedKeyword&duration=$durationParam&hash=")
+            val url = URL("$SEARCH_URL?ver=1&man=yes&client=mobi&keyword=$encodedKeyword&duration=$durationParam")
 
             connection = (url.openConnection() as HttpURLConnection).apply {
                 requestMethod = "GET"

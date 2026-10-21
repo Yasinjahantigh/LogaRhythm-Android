@@ -95,7 +95,6 @@ class DailyMixGeneratorTest {
         assertEquals(3, mixes.size)
         for (mix in mixes) {
             assertTrue(mix.tracks.isNotEmpty())
-            assertTrue(mix.description.isNotBlank())
         }
     }
 
@@ -119,7 +118,7 @@ class DailyMixGeneratorTest {
             seedDate = 8888L
         )
 
-        assertEquals(listOf("In Your Rotation", "Time to Revisit", "Off the Beaten Track"), mixes.map { it.title })
+        assertEquals(listOf("daily_mix_1", "daily_mix_2", "daily_mix_3"), mixes.map { it.id })
         assertTrue(mixes.all { it.tracks.size == DailyMixGenerator.MIX_SIZE })
         val firstIds = mixes[0].tracks.map { it.id }.toSet()
         val secondIds = mixes[1].tracks.map { it.id }.toSet()

@@ -168,7 +168,7 @@ fun SleepTimerDialog(
                     }
                 }
 
-                // 1. Minutes Slider Card (نوار اول: تعداد دقیقه)
+                // Minutes slider card
                 val isMinutesSelected = selectedMode == SleepTimerSelectionMode.MINUTES
                 OutlinedCard(
                     onClick = { selectedMode = SleepTimerSelectionMode.MINUTES },
@@ -223,7 +223,7 @@ fun SleepTimerDialog(
 
                         Spacer(modifier = Modifier.height(4.dp))
 
-                        // Minutes Slider (نوار دقیقه)
+                        // Minutes slider
                         Slider(
                             value = minutesSliderValue,
                             onValueChange = {
@@ -270,7 +270,7 @@ fun SleepTimerDialog(
 
                 Spacer(modifier = Modifier.height(14.dp))
 
-                // 2. Track Count Slider Card (نوار دوم: تعداد ترک)
+                // Track-count slider card
                 val isTracksSelected = selectedMode == SleepTimerSelectionMode.TRACKS
                 OutlinedCard(
                     onClick = { selectedMode = SleepTimerSelectionMode.TRACKS },
@@ -329,7 +329,7 @@ fun SleepTimerDialog(
 
                         Spacer(modifier = Modifier.height(4.dp))
 
-                        // Tracks Slider (نوار تعداد ترک)
+                        // Tracks slider
                         Slider(
                             value = tracksSliderValue,
                             onValueChange = {

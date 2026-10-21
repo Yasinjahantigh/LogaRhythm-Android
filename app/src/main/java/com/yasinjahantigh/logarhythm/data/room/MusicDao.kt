@@ -98,15 +98,6 @@ interface MusicDao {
     """)
     fun getAllFolders(): Flow<List<FolderQueryResult>>
 
-    @Query("""
-        SELECT genre, COUNT(*) AS trackCount 
-        FROM tracks 
-        WHERE genre != '' 
-        GROUP BY genre 
-        ORDER BY genre COLLATE NOCASE ASC
-    """)
-    fun getAllGenres(): Flow<List<GenreQueryResult>>
-
     @Query("SELECT * FROM tracks WHERE album = :album ORDER BY title COLLATE NOCASE ASC")
     fun getTracksByAlbum(album: String): Flow<List<TrackEntity>>
 

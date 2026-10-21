@@ -23,17 +23,9 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
- * One place that answers "may LogaRhythm modify this song's file right now?" for tag edits,
- * lyrics embedding and file deletion.
- *
- *  - Android 11+ (API 30): the system's own write/delete consent sheet via MediaStore. A grant the
- *    app already holds for the item is reused, so editing the same song twice never asks twice.
- *  - Android 10 and older (API 26-29): there is no per-file sheet; the legacy WRITE_EXTERNAL_STORAGE
- *    runtime permission is requested once, on first use.
- *
- * Every failure path calls the cancelled callback; nothing here ever "assumes" access. The caller
- * still verifies the real file operation afterwards. MainActivity handles configuration changes
- * itself so a rotation never discards a request that is waiting on the system dialog.
+ * Asks for permission before tag edits, lyrics embedding or file deletion: the MediaStore
+ * consent sheet on Android 11+, and WRITE_EXTERNAL_STORAGE on API 26-29. Every failure path
+ * reports cancellation, and callers still verify the file operation afterwards.
  */
 @Composable
 fun rememberMediaStoreConsent(): MediaStoreConsentActions {
@@ -174,7 +166,7 @@ private fun libraryItemExists(context: Context, track: Track): Boolean? {
     }
 }
 
-data class MediaStoreConsentActions internal constructor(
+class MediaStoreConsentActions internal constructor(
     private val requestWrite: (Track, () -> Unit, () -> Unit) -> Unit,
     private val requestDelete: (Track, (Track) -> Unit, (Track) -> Unit) -> Unit
 ) {

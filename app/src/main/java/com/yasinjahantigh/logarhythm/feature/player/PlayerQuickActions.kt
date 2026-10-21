@@ -30,12 +30,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.yasinjahantigh.logarhythm.R
 
-/**
- * The four things people reach for while a song plays, one thumb-tap away and labelled:
- * Lyrics, Queue, Sleep timer, Speed. Active ones (lyrics open, timer running, speed changed)
- * light up and show their live value, so the player never needs a settings trip to answer
- * "is my timer on?".
- */
+/** Lyrics, queue, sleep timer and speed controls with live labels for active states. */
 @Composable
 fun PlayerQuickActions(
     showLyrics: Boolean,

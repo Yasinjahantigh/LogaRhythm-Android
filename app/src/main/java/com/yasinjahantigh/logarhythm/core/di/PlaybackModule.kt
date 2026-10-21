@@ -1,6 +1,5 @@
 package com.yasinjahantigh.logarhythm.core.di
 
-import com.yasinjahantigh.logarhythm.playback.PlaybackController
 import com.yasinjahantigh.logarhythm.playback.PlayerController
 import com.yasinjahantigh.logarhythm.playback.PlayerControllerImpl
 import dagger.Binds
@@ -18,10 +17,4 @@ abstract class PlaybackModule {
     abstract fun bindPlayerController(
         impl: PlayerControllerImpl
     ): PlayerController
-
-    @Binds
-    @Singleton
-    abstract fun bindPlaybackController(
-        impl: PlayerControllerImpl
-    ): PlaybackController
 }

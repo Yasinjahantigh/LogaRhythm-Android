@@ -4,8 +4,8 @@ import com.yasinjahantigh.logarhythm.domain.model.Track
 import kotlin.random.Random
 
 /**
- * Builds a queue that fits a listener's available time without relying on network/AI services.
- * Familiar tracks are gently preferred, while artist repetition is penalized to keep the session varied.
+ * Builds a queue that fits the listener's available time using only the local library.
+ * Familiar tracks are preferred; artist repetition is penalized to keep the session varied.
  */
 object ListeningSessionPlanner {
     fun buildSession(
