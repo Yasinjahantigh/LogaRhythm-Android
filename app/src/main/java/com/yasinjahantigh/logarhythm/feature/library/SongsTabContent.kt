@@ -44,7 +44,11 @@ fun SongsTabContent(
     isPlaying: Boolean = false,
     onTrackMenuClick: ((Track) -> Unit)? = null,
     onPlayAll: (() -> Unit)? = null,
-    onShuffleAll: (() -> Unit)? = null
+    onShuffleAll: (() -> Unit)? = null,
+    selectionMode: Boolean = false,
+    selectedTrackIds: Set<String> = emptySet(),
+    onTrackLongClick: ((Track) -> Unit)? = null,
+    onToggleSelect: ((Track) -> Unit)? = null
 ) {
     if (tracks.isEmpty()) {
         LibraryEmptyHint(
@@ -58,11 +62,12 @@ fun SongsTabContent(
     val listState = rememberLazyListState()
     val bottomPadding = LocalPlaybackBottomPadding.current
 
+    val leadingItems = if (selectionMode) 0 else 1
     FastScroller(
         listState = listState,
-        itemCount = tracks.size + 1,
+        itemCount = tracks.size + leadingItems,
         getItemLetter = { index ->
-            tracks.getOrNull((index - 1).coerceAtLeast(0))?.title?.firstOrNull()?.uppercase() ?: ""
+            tracks.getOrNull((index - leadingItems).coerceAtLeast(0))?.title?.firstOrNull()?.uppercase() ?: ""
         },
         modifier = modifier
     ) {
@@ -71,7 +76,7 @@ fun SongsTabContent(
             contentPadding = PaddingValues(bottom = bottomPadding + 16.dp),
             modifier = Modifier.fillMaxSize().testTag("track_list")
         ) {
-            item(key = "play_shuffle_bar") {
+            if (!selectionMode) item(key = "play_shuffle_bar") {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -121,10 +126,15 @@ fun SongsTabContent(
                 val isCurrent = track.id == currentTrackId
                 TrackListItem(
                     track = track,
-                    onClick = { onTrackClick(track) },
+                    onClick = {
+                        if (selectionMode) onToggleSelect?.invoke(track) else onTrackClick(track)
+                    },
                     isCurrentTrack = isCurrent,
                     isPlaying = isCurrent && isPlaying,
-                    onMenuClick = onTrackMenuClick?.let { { it(track) } }
+                    onMenuClick = onTrackMenuClick?.let { { it(track) } },
+                    selectionMode = selectionMode,
+                    isSelected = track.id in selectedTrackIds,
+                    onLongClick = onTrackLongClick?.let { { it(track) } }
                 )
             }
         }

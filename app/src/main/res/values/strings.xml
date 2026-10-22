@@ -91,6 +91,18 @@
     <string name="added_to_playlist">Added to %1$s</string>
     <string name="removed_from_playlist">Removed from playlist</string>
     <string name="cd_song_menu">Song options for %1$s</string>
+    <string name="selection_count">%1$d selected</string>
+    <string name="selection_select_all">Select all</string>
+    <string name="selection_unselect_all">Unselect all</string>
+    <string name="selection_close">Exit selection</string>
+    <string name="selection_play">Play</string>
+    <string name="selection_favorite">Favorite</string>
+    <string name="selection_playing_next">%1$d songs will play next</string>
+    <string name="selection_added_to_queue">%1$d songs added to queue</string>
+    <string name="selection_added_to_favorites">%1$d songs added to favorites</string>
+    <string name="selection_hidden">%1$d songs hidden</string>
+    <string name="selection_added_to_playlist">%1$d songs added to %2$s</string>
+    <string name="selection_removed_from_playlist">%1$d songs removed from playlist</string>
     <string name="playlist_favorites">Favorites</string>
     <string name="playlist_create">New Playlist</string>
     <string name="playlist_name_hint">Playlist name</string>
@@ -134,6 +146,8 @@
     <string name="cd_import_lrc">Import .lrc file</string>
     <string name="settings_lrclib_title">Online Lyrics (LRCLIB)</string>
     <string name="settings_lrclib_desc">Fetch synced lyrics automatically from lrclib.net</string>
+    <string name="settings_genius_title">Genius fallback</string>
+    <string name="settings_genius_desc">Use Genius for plain lyrics when no timed source finds the song</string>
 
     <!-- Sleep timer, equalizer and playback speed -->
     <string name="sleep_timer_title">Sleep Timer</string>
@@ -184,10 +198,34 @@
     <string name="settings_theme_system">Follow System</string>
     <string name="settings_theme_light">Light</string>
     <string name="settings_theme_dark">Dark</string>
-    <string name="settings_color_source_title">Color Source</string>
-    <string name="settings_color_wallpaper">System Wallpaper (Material You)</string>
-    <string name="settings_color_album_art">Album Art Dynamic Color</string>
-    <string name="settings_color_fixed">LogaRhythm Ink &amp; Ember</string>
+    <string name="settings_theme_studio_title">Theme Studio</string>
+    <string name="theme_studio_title">Theme Studio</string>
+    <string name="theme_presets_title">Presets</string>
+    <string name="theme_preset_default">Ink &amp; Ember</string>
+    <string name="theme_preset_default_desc">The original warm LogaRhythm palette</string>
+    <string name="theme_preset_oled">OLED Black</string>
+    <string name="theme_preset_oled_desc">True black surfaces, made for OLED</string>
+    <string name="theme_preset_album_art">Album Art</string>
+    <string name="theme_preset_album_art_desc">Colors follow the playing artwork</string>
+    <string name="theme_preset_wallpaper">Wallpaper</string>
+    <string name="theme_preset_wallpaper_desc">Material You colors from the wallpaper</string>
+    <string name="theme_preset_custom">Custom</string>
+    <string name="theme_preset_custom_desc">Pick your own accent and base</string>
+    <string name="theme_custom_title">Custom theme</string>
+    <string name="theme_custom_base">Base</string>
+    <string name="theme_base_dark">Dark</string>
+    <string name="theme_base_light">Light</string>
+    <string name="theme_base_oled">OLED</string>
+    <string name="theme_custom_accent">Accent color</string>
+    <string name="theme_hue">Hue</string>
+    <string name="theme_saturation">Saturation</string>
+    <string name="theme_mode_title">Light or dark</string>
+    <string name="theme_mode_note">Applies to Ink &amp; Ember, Album Art and Wallpaper. OLED and Custom use their own base above.</string>
+    <string name="theme_album_wallpaper_note">Album Art uses the current cover; it falls back to Ink &amp; Ember when nothing is playing or the cover has no artwork. Wallpaper needs Android 12 or newer.</string>
+    <string name="theme_preview_track">Now playing</string>
+    <string name="theme_preview_album">Live theme preview</string>
+    <string name="theme_preview_chip_primary">Primary</string>
+    <string name="theme_preview_chip_secondary">Secondary</string>
     <string name="settings_corner_title">Corner Roundness</string>
     <string name="settings_corner_standard">Standard</string>
     <string name="settings_corner_soft">Soft &amp; Rounded</string>
@@ -449,4 +487,5 @@
     <string name="lyrics_provider_netease">NetEase</string>
     <string name="lyrics_provider_kugou">Kugou</string>
     <string name="lyrics_provider_lyrics_ovh">Lyrics.ovh</string>
+    <string name="lyrics_provider_genius">Genius</string>
 </resources>

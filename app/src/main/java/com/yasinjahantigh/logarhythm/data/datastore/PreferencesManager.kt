@@ -35,6 +35,9 @@ class PreferencesManager @Inject constructor(
     private val keyAppLanguage = stringPreferencesKey("key_app_language")
     private val keyThemeMode = stringPreferencesKey("key_theme_mode")
     private val keyColorSource = stringPreferencesKey("key_color_source")
+    private val keyThemeStyle = stringPreferencesKey("key_theme_style")
+    private val keyCustomAccent = longPreferencesKey("key_custom_accent")
+    private val keyCustomBase = stringPreferencesKey("key_custom_base")
     private val keyCornerRoundness = stringPreferencesKey("key_corner_roundness")
     private val keyCompactMiniPlayer = booleanPreferencesKey("key_compact_mini_player")
     private val keyMinTrackLengthSec = intPreferencesKey("key_min_track_length_sec")
@@ -45,6 +48,7 @@ class PreferencesManager @Inject constructor(
     private val keyQueueCurrentIndex = intPreferencesKey("key_queue_current_index")
     private val keyQueuePositionMs = longPreferencesKey("key_queue_position_ms")
     private val keyLrclibEnabled = booleanPreferencesKey("key_lrclib_enabled")
+    private val keyGeniusEnabled = booleanPreferencesKey("key_genius_enabled")
     private val keyEqualizerEnabled = booleanPreferencesKey("key_equalizer_enabled")
     private val keyEqualizerPreset = intPreferencesKey("key_equalizer_preset")
     private val keyEqualizerBandLevels = stringPreferencesKey("key_equalizer_band_levels")
@@ -120,6 +124,42 @@ class PreferencesManager @Inject constructor(
         dataStore.edit { preferences ->
             preferences[keyColorSource] = source
         }
+    }
+
+    /**
+     * default | oled | album_art | wallpaper | custom.
+     * Older builds stored only a color source; map it on first read so nobody loses their pick.
+     */
+    val themeStyle: Flow<String> = dataStore.data.map { preferences ->
+        preferences[keyThemeStyle] ?: when (preferences[keyColorSource]) {
+            "wallpaper" -> "wallpaper"
+            "album_art" -> "album_art"
+            else -> "default"
+        }
+    }
+
+    val customAccentColor: Flow<Long> = dataStore.data.map { preferences ->
+        preferences[keyCustomAccent] ?: 0xFFF4B266
+    }
+
+    /** dark | light | oled. */
+    val customBase: Flow<String> = dataStore.data.map { preferences ->
+        preferences[keyCustomBase] ?: "dark"
+    }
+
+    suspend fun setThemeStyle(style: String) {
+        val normalized = style.takeIf { it in setOf("default", "oled", "album_art", "wallpaper", "custom") }
+            ?: "default"
+        dataStore.edit { preferences -> preferences[keyThemeStyle] = normalized }
+    }
+
+    suspend fun setCustomAccentColor(argb: Long) {
+        dataStore.edit { preferences -> preferences[keyCustomAccent] = argb }
+    }
+
+    suspend fun setCustomBase(base: String) {
+        val normalized = base.takeIf { it in setOf("dark", "light", "oled") } ?: "dark"
+        dataStore.edit { preferences -> preferences[keyCustomBase] = normalized }
     }
 
     val cornerRoundness: Flow<String> = dataStore.data.map { preferences ->
@@ -254,6 +294,16 @@ class PreferencesManager @Inject constructor(
     suspend fun setLrclibEnabled(enabled: Boolean) {
         dataStore.edit { preferences ->
             preferences[keyLrclibEnabled] = enabled
+        }
+    }
+
+    val isGeniusEnabled: Flow<Boolean> = dataStore.data.map { preferences ->
+        preferences[keyGeniusEnabled] ?: true
+    }
+
+    suspend fun setGeniusEnabled(enabled: Boolean) {
+        dataStore.edit { preferences ->
+            preferences[keyGeniusEnabled] = enabled
         }
     }
 

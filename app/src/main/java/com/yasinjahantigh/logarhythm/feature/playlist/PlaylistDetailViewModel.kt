@@ -82,9 +82,50 @@ class PlaylistDetailViewModel @Inject constructor(
     fun playNext(track: Track) = playerController.playNext(track)
     fun addToQueue(track: Track) = playerController.addToQueue(track)
 
+    fun playTracks(selected: List<Track>) {
+        if (selected.isEmpty()) return
+        playerController.setShuffleEnabled(false)
+        playerController.play(selected, 0)
+    }
+
+    fun playNext(selected: List<Track>) {
+        selected.asReversed().forEach(playerController::playNext)
+    }
+
+    fun addToQueue(selected: List<Track>) {
+        selected.forEach(playerController::addToQueue)
+    }
+
     fun addTrackToPlaylist(targetPlaylistId: Long, trackId: String) {
         viewModelScope.launch {
             playlistRepository.addTrackToPlaylist(targetPlaylistId, trackId)
+        }
+    }
+
+    fun addTracksToPlaylist(targetPlaylistId: Long, trackIds: List<String>) {
+        viewModelScope.launch {
+            trackIds.forEach { playlistRepository.addTrackToPlaylist(targetPlaylistId, it) }
+        }
+    }
+
+    fun addTracksToFavorites(selected: List<Track>) {
+        viewModelScope.launch {
+            playlistRepository.addFavorites(selected.map { it.id })
+        }
+    }
+
+    fun removeTracks(trackIds: List<String>) {
+        viewModelScope.launch {
+            trackIds.forEach { playlistRepository.removeTrackFromPlaylist(playlistId, it) }
+        }
+    }
+
+    fun hideTracks(selected: List<Track>) {
+        viewModelScope.launch {
+            if (selected.any { it.id == playerController.currentTrack.value?.id }) {
+                playerController.next()
+            }
+            selected.forEach { trackRepository.hideTrack(it.id) }
         }
     }
 

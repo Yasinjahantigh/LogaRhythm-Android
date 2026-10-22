@@ -90,7 +90,9 @@ class MainActivity : ComponentActivity() {
         ).getBoolean(PreferencesManager.BOOTSTRAP_ONBOARDING_KEY, false)
         setContent {
             val themeMode by preferencesManager.themeMode.collectAsStateWithLifecycle(initialValue = "system")
-            val colorSource by preferencesManager.colorSource.collectAsStateWithLifecycle(initialValue = "album_art")
+            val themeStyle by preferencesManager.themeStyle.collectAsStateWithLifecycle(initialValue = "default")
+            val customAccent by preferencesManager.customAccentColor.collectAsStateWithLifecycle(initialValue = 0xFFF4B266)
+            val customBase by preferencesManager.customBase.collectAsStateWithLifecycle(initialValue = "dark")
             val cornerRoundness by preferencesManager.cornerRoundness.collectAsStateWithLifecycle(initialValue = "standard")
             val isOnboardingCompleted by preferencesManager.isOnboardingCompleted.collectAsStateWithLifecycle(
                 initialValue = onboardingBootstrap
@@ -101,9 +103,9 @@ class MainActivity : ComponentActivity() {
             var seedArtworkColor by remember { mutableStateOf<Color?>(null) }
 
             // Decoded once per song (cached, 64px, debounced), drives the artwork color theme.
-            LaunchedEffect(currentTrack?.artworkUri, colorSource) {
+            LaunchedEffect(currentTrack?.artworkUri, themeStyle) {
                 val uri = currentTrack?.artworkUri
-                if (uri != null) {
+                if (uri != null && themeStyle == "album_art") {
                     delay(120)
                     seedArtworkColor = ArtworkColorExtractor.extractDominantColor(
                         this@MainActivity,
@@ -116,7 +118,9 @@ class MainActivity : ComponentActivity() {
 
             LogaRhythmTheme(
                 themeMode = themeMode,
-                colorSource = colorSource,
+                themeStyle = themeStyle,
+                customAccentColor = Color(customAccent),
+                customBase = customBase,
                 cornerRoundness = cornerRoundness,
                 seedArtworkColor = seedArtworkColor
             ) {

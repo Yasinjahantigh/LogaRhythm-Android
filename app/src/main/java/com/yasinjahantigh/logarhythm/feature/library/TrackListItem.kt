@@ -1,7 +1,9 @@
 package com.yasinjahantigh.logarhythm.feature.library
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.border
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -12,8 +14,10 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -43,6 +47,7 @@ import com.yasinjahantigh.logarhythm.ui.theme.LogaRhythmTheme
  * The track row used across the app. Untagged songs get a generated gradient cover, and the
  * playing track is marked with a tinted row and live equalizer bars.
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun TrackListItem(
     track: Track,
@@ -50,11 +55,18 @@ fun TrackListItem(
     modifier: Modifier = Modifier,
     isCurrentTrack: Boolean = false,
     isPlaying: Boolean = false,
-    onMenuClick: (() -> Unit)? = null
+    onMenuClick: (() -> Unit)? = null,
+    selectionMode: Boolean = false,
+    isSelected: Boolean = false,
+    onLongClick: (() -> Unit)? = null
 ) {
     val scheme = MaterialTheme.colorScheme
     // Plain colour switch: hundreds of rows must not each own an animation object.
-    val container = if (isCurrentTrack) scheme.primaryContainer.copy(alpha = 0.55f) else Color.Transparent
+    val container = when {
+        isSelected -> scheme.primaryContainer.copy(alpha = 0.55f)
+        isCurrentTrack -> scheme.primaryContainer.copy(alpha = 0.30f)
+        else -> Color.Transparent
+    }
 
     val title = track.title.cleanMetaOrNull() ?: stringResource(R.string.unknown_title)
     val artist = track.artist.cleanMetaOrNull() ?: stringResource(R.string.unknown_artist)
@@ -69,10 +81,40 @@ fun TrackListItem(
             .background(container)
             .defaultMinSize(minHeight = 64.dp)
             .testTag("track_item_${track.id}")
-            .clickable(onClick = onClick)
-            .padding(start = 8.dp, end = if (onMenuClick != null) 0.dp else 12.dp, top = 6.dp, bottom = 6.dp),
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
+            .padding(
+                start = 8.dp,
+                end = if (onMenuClick != null && !selectionMode) 0.dp else 12.dp,
+                top = 6.dp,
+                bottom = 6.dp
+            ),
         verticalAlignment = Alignment.CenterVertically
     ) {
+        if (selectionMode) {
+            Box(
+                modifier = Modifier
+                    .size(24.dp)
+                    .clip(CircleShape)
+                    .background(if (isSelected) scheme.primary else Color.Transparent)
+                    .border(
+                        width = 2.dp,
+                        color = if (isSelected) scheme.primary else scheme.outline,
+                        shape = CircleShape
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                if (isSelected) {
+                    Icon(
+                        imageVector = Icons.Filled.Check,
+                        contentDescription = null,
+                        tint = scheme.onPrimary,
+                        modifier = Modifier.size(15.dp)
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.width(10.dp))
+        }
+
         Box(modifier = Modifier.size(52.dp), contentAlignment = Alignment.Center) {
             ArtworkImage(
                 uri = track.artworkUri,
@@ -106,7 +148,7 @@ fun TrackListItem(
                 text = title,
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold,
-                color = if (isCurrentTrack) scheme.primary else scheme.onSurface,
+                color = if (isCurrentTrack || isSelected) scheme.primary else scheme.onSurface,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
@@ -128,7 +170,7 @@ fun TrackListItem(
             maxLines = 1
         )
 
-        if (onMenuClick != null) {
+        if (onMenuClick != null && !selectionMode) {
             IconButton(
                 onClick = onMenuClick,
                 modifier = Modifier

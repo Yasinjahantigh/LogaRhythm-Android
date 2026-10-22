@@ -10,17 +10,17 @@ import androidx.compose.ui.unit.sp
 import com.yasinjahantigh.logarhythm.R
 
 object AppFonts {
-    /** Poppins mapped onto the weights the type scale uses (SemiBold shares the Medium cut). */
-    val Poppins: FontFamily = FontFamily(
-        Font(R.font.poppins_light, FontWeight.Light),
-        Font(R.font.poppins_regular, FontWeight.Normal),
-        Font(R.font.poppins_medium, FontWeight.Medium),
-        Font(R.font.poppins_medium, FontWeight.SemiBold),
-        Font(R.font.poppins_bold, FontWeight.Bold)
+    /** Vazirmatn covers Persian and Latin, so Arabic-script text no longer falls back to the device font. */
+    val Vazirmatn: FontFamily = FontFamily(
+        Font(R.font.vazirmatn_light, FontWeight.Light),
+        Font(R.font.vazirmatn_regular, FontWeight.Normal),
+        Font(R.font.vazirmatn_medium, FontWeight.Medium),
+        Font(R.font.vazirmatn_semibold, FontWeight.SemiBold),
+        Font(R.font.vazirmatn_bold, FontWeight.Bold)
     )
 }
 
-val DisplayFontFamily: FontFamily = AppFonts.Poppins
+val DisplayFontFamily: FontFamily = AppFonts.Vazirmatn
 
 // Zero tracking and untrimmed line boxes keep Arabic-script joins and diacritics intact.
 private val Roomy = LineHeightStyle(
@@ -33,7 +33,7 @@ private fun style(
     size: Int,
     line: Int
 ) = TextStyle(
-    fontFamily = AppFonts.Poppins,
+    fontFamily = AppFonts.Vazirmatn,
     fontWeight = weight,
     fontSize = size.sp,
     lineHeight = line.sp,

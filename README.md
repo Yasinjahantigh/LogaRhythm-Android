@@ -36,7 +36,9 @@ Your library, your play history, your playlists, your edited tags, your lyrics: 
 
 **ReplayGain** across MP3, FLAC, M4A and Ogg. Track and album modes, user preamp, 5-band EQ, bass boost. Volume levels between albums finally behave.
 
-**Lyrics** from wherever they exist — embedded in the file, a `.lrc` beside it, or fetched from LRCLIB, NetEase, Kugou and others. Synced scrolling, per-song timing offset, manual editing, import and export.
+**Lyrics** from wherever they exist — embedded in the file, a `.lrc` beside it, or fetched from LRCLIB, NetEase, Kugou and others. When no timed source has the song, Genius supplies plain lyrics as a last fallback. Synced scrolling, per-song timing offset, manual editing, import and export.
+
+**Multi-select** — long-press a song to select it, then pick more and act once: play next, queue, add to a playlist, favorite, hide, or remove from a playlist.
 
 **Tag editing** that doesn't guess the format from the extension. The first 12 bytes of the file decide — ID3/MP3, FLAC, Ogg, or MP4. Writes to a staged copy, verifies it, and only then replaces the original. Rolls back on failure.
 
@@ -54,7 +56,7 @@ Your library, your play history, your playlists, your edited tags, your lyrics: 
 
 ### Design
 
-The default palette is called **Ink & Ember**: a warm near-black surface (`#0E1013`), amber accent (`#F4B266`), slate and sage for secondary roles. Something like a stage lit from one side. You can also let the playing track's artwork set the colors, or hand it to Material You and your wallpaper.
+The default palette is called **Ink & Ember**: a warm near-black surface (`#0E1013`), amber accent (`#F4B266`), slate and sage for secondary roles. Something like a stage lit from one side. The Theme Studio adds presets for **true-black OLED**, artwork-driven colors and the wallpaper's Material You palette, plus a custom theme where you pick the accent hue, saturation and base (dark, light or OLED).
 
 ### Build
 
@@ -77,6 +79,8 @@ Requires JDK 21 and Android SDK 36. Gradle wrapper included. On Windows: `gradle
 
 Apache 2.0 — see [LICENSE](LICENSE).
 
+Bundled [Vazirmatn](https://github.com/rastikerdar/vazirmatn) font © 2015 The Vazirmatn Project Authors, licensed under SIL OFL 1.1 — see [OFL.txt](app/src/main/assets/OFL.txt).
+
 ---
 
 <div dir="rtl">
@@ -95,7 +99,9 @@ Apache 2.0 — see [LICENSE](LICENSE).
 
 **ReplayGain** برای MP3، FLAC، M4A و Ogg. حالت آهنگ و آلبوم، پیش‌تقویت دستی، اکولایزر پنج‌باندی و bass boost. اختلاف صدا بین آلبوم‌ها بالاخره درست می‌شود.
 
-**متن ترانه** از هر جایی که وجود داشته باشد — داخل فایل، یک `.lrc` کنارش، یا دریافت از LRCLIB، NetEase، Kugou و بقیه. اسکرول همگام، تنظیم زمان به‌ازای هر آهنگ، ویرایش دستی، ورود و خروج.
+**متن ترانه** از هر جایی که وجود داشته باشد — داخل فایل، یک `.lrc` کنارش، یا دریافت از LRCLIB، NetEase، Kugou و بقیه. وقتی هیچ منبع همگامی آهنگ را نداشته باشد، Genius متن ساده را به‌عنوان آخرین گزینه می‌دهد. اسکرول همگام، تنظیم زمان به‌ازای هر آهنگ، ویرایش دستی، ورود و خروج.
+
+**انتخاب چندتایی** — با نگه‌داشتن یک آهنگ انتخاب را شروع کنید، چند آهنگ دیگر را اضافه کنید و یک‌جا عملیات را انجام دهید: پخش بعدی، صف، افزودن به پلی‌لیست، علاقه‌مندی، مخفی‌کردن یا حذف از پلی‌لیست.
 
 **ویرایش تگ** که فرمت را از پسوند فایل حدس نمی‌زند. ۱۲ بایت اول فایل تصمیم می‌گیرد — ID3/MP3، FLAC، Ogg یا MP4. روی یک نسخهٔ موقت می‌نویسد، بررسی می‌کند، و فقط بعد از آن فایل اصلی را جایگزین می‌کند. در صورت خطا برمی‌گردد.
 
@@ -115,7 +121,7 @@ Apache 2.0 — see [LICENSE](LICENSE).
 
 ### طراحی
 
-پالت پیش‌فرض **Ink & Ember** نام دارد: یک نزدیک‌به‌مشکی گرم (`#0E1013`)، لهجهٔ کهربایی (`#F4B266`)، سربی و مریم‌گلی برای نقش‌های فرعی. چیزی شبیه یک صحنه که از یک طرف نور می‌خورد. می‌توانید رنگ کاور آهنگ در حال پخش را جای آن بگذارید، یا آن را به Material You و والپیپرتان بسپارید.
+پالت پیش‌فرض **Ink & Ember** نام دارد: یک نزدیک‌به‌مشکی گرم (`#0E1013`)، لهجهٔ کهربایی (`#F4B266`)، سربی و مریم‌گلی برای نقش‌های فرعی. چیزی شبیه یک صحنه که از یک طرف نور می‌خورد. استودیوی پوسته پوسته‌های **مشکی خالص OLED**، رنگ‌های برگرفته از کاور و پالت Material You والپیپر را دارد، به‌علاوهٔ یک پوستهٔ سفارشی که در آن خودتان رنگ تأکید، اشباع رنگ و پایه (تاریک، روشن یا OLED) را انتخاب می‌کنید.
 
 ---
 

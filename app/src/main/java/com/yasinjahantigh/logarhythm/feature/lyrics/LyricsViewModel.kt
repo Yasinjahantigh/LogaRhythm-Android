@@ -70,6 +70,9 @@ class LyricsViewModel @Inject constructor(
     val isOnlineEnabled: StateFlow<Boolean> = preferencesManager.isLrclibEnabled
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
 
+    val isGeniusEnabled: StateFlow<Boolean> = preferencesManager.isGeniusEnabled
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
+
     /** Live playback position; only the active karaoke line collects it. */
     val livePositionMs: StateFlow<Long> = positionMs
 
@@ -266,6 +269,28 @@ class LyricsViewModel @Inject constructor(
                 }
             } catch (_: Exception) {
             }
+        }
+    }
+
+    /**
+     * Retries every enabled online source (including Genius) before opening the picker.
+     * The automatic lookup runs once per track; without this a transient network failure leaves
+     * the screen stuck on "no lyrics" until the next song.
+     */
+    fun retryOnlineLyrics() {
+        val track = currentTrack.value ?: return
+        viewModelScope.launch {
+            _isLoading.value = true
+            val found = try {
+                lyricsRepository.fetchOnlineLyrics(track)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                null
+            } finally {
+                _isLoading.value = false
+            }
+            if (found == null) searchCandidatesOnline()
         }
     }
 

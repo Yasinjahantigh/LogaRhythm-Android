@@ -91,6 +91,18 @@
     <string name="added_to_playlist">به «%1$s» افزوده شد</string>
     <string name="removed_from_playlist">از لیست پخش حذف شد</string>
     <string name="cd_song_menu">گزینه‌های آهنگ %1$s</string>
+    <string name="selection_count">%1$d آهنگ انتخاب شد</string>
+    <string name="selection_select_all">انتخاب همه</string>
+    <string name="selection_unselect_all">لغو انتخاب همه</string>
+    <string name="selection_close">خروج از انتخاب</string>
+    <string name="selection_play">پخش</string>
+    <string name="selection_favorite">علاقه‌مندی</string>
+    <string name="selection_playing_next">%1$d آهنگ به‌عنوان بعدی پخش می‌شود</string>
+    <string name="selection_added_to_queue">%1$d آهنگ به صف افزوده شد</string>
+    <string name="selection_added_to_favorites">%1$d آهنگ به علاقه‌مندی‌ها افزوده شد</string>
+    <string name="selection_hidden">%1$d آهنگ پنهان شد</string>
+    <string name="selection_added_to_playlist">%1$d آهنگ به «%2$s» افزوده شد</string>
+    <string name="selection_removed_from_playlist">%1$d آهنگ از لیست پخش حذف شد</string>
     <string name="playlist_favorites">علاقه‌مندی‌ها</string>
     <string name="playlist_create">لیست پخش جدید</string>
     <string name="playlist_name_hint">نام لیست پخش</string>
@@ -134,6 +146,8 @@
     <string name="cd_import_lrc">وارد کردن فایل متن آهنگ</string>
     <string name="settings_lrclib_title">متن آهنگ آنلاین (LRCLIB)</string>
     <string name="settings_lrclib_desc">دریافت خودکار متن همگام‌سازی شده از lrclib.net</string>
+    <string name="settings_genius_title">متن جایگزین از Genius</string>
+    <string name="settings_genius_desc">وقتی هیچ منبع همگام متنی پیدا نکرد، متن ساده را از Genius بگیر</string>
 
     <!-- Sleep timer, equalizer and playback speed -->
     <string name="sleep_timer_title">تایمر خواب</string>
@@ -184,10 +198,34 @@
     <string name="settings_theme_system">پیروی از سیستم</string>
     <string name="settings_theme_light">روشن</string>
     <string name="settings_theme_dark">تاریک</string>
-    <string name="settings_color_source_title">منبع رنگ</string>
-    <string name="settings_color_wallpaper">تصویر پس‌زمینه سیستم (متریال یو)</string>
-    <string name="settings_color_album_art">رنگ پویای کاور آلبوم</string>
-    <string name="settings_color_fixed">جوهر و شراره LogaRhythm</string>
+    <string name="settings_theme_studio_title">استودیوی پوسته</string>
+    <string name="theme_studio_title">استودیوی پوسته</string>
+    <string name="theme_presets_title">پوسته‌های آماده</string>
+    <string name="theme_preset_default">جوهر و شراره</string>
+    <string name="theme_preset_default_desc">پالت گرم اصلی LogaRhythm</string>
+    <string name="theme_preset_oled">مشکی OLED</string>
+    <string name="theme_preset_oled_desc">سطوح کاملاً مشکی، مناسب نمایشگر OLED</string>
+    <string name="theme_preset_album_art">کاور آهنگ</string>
+    <string name="theme_preset_album_art_desc">رنگ‌ها با کاور در حال پخش هماهنگ می‌شوند</string>
+    <string name="theme_preset_wallpaper">پس‌زمینه</string>
+    <string name="theme_preset_wallpaper_desc">رنگ‌های Material You از تصویر پس‌زمینه</string>
+    <string name="theme_preset_custom">سفارشی</string>
+    <string name="theme_preset_custom_desc">رنگ و پایهٔ دلخواه خودت را انتخاب کن</string>
+    <string name="theme_custom_title">پوستهٔ سفارشی</string>
+    <string name="theme_custom_base">پایه</string>
+    <string name="theme_base_dark">تاریک</string>
+    <string name="theme_base_light">روشن</string>
+    <string name="theme_base_oled">OLED</string>
+    <string name="theme_custom_accent">رنگ تأکید</string>
+    <string name="theme_hue">رنگ‌پایه (Hue)</string>
+    <string name="theme_saturation">اشباع رنگ</string>
+    <string name="theme_mode_title">روشن یا تاریک</string>
+    <string name="theme_mode_note">روی جوهر و شراره، کاور و پس‌زمینه اثر دارد. OLED و سفارشی از پایهٔ انتخاب‌شدهٔ بالا استفاده می‌کنند.</string>
+    <string name="theme_album_wallpaper_note">کاور آهنگ از کاور فعلی استفاده می‌کند و اگر آهنگی در حال پخش نباشد به جوهر و شراره برمی‌گردد. پس‌زمینه به اندروید ۱۲ یا بالاتر نیاز دارد.</string>
+    <string name="theme_preview_track">در حال پخش</string>
+    <string name="theme_preview_album">پیش‌نمایش زندهٔ پوسته</string>
+    <string name="theme_preview_chip_primary">اصلی</string>
+    <string name="theme_preview_chip_secondary">فرعی</string>
     <string name="settings_corner_title">گردی گوشه‌ها</string>
     <string name="settings_corner_standard">استاندارد</string>
     <string name="settings_corner_soft">نرم و گرد</string>
@@ -449,4 +487,5 @@
     <string name="lyrics_provider_netease">NetEase</string>
     <string name="lyrics_provider_kugou">Kugou</string>
     <string name="lyrics_provider_lyrics_ovh">Lyrics.ovh</string>
+    <string name="lyrics_provider_genius">Genius</string>
 </resources>
