@@ -93,7 +93,8 @@ def build_message(changelog):
         "📥 <b>دانلود از گیت‌هاب:</b>\n"
         "https://github.com/Yasinjahantigh/LogaRhythm-Android/releases/latest\n\n"
         "💬 اگر باگ، ایراد یا پیشنهادی داشتید دایرکت بفرستین:\n"
-        "https://t.me/LogaRhythmApp?direct"
+        "https://t.me/LogaRhythmApp?direct\n\n"
+        "📢 @LogaRhythmApp"
     )
 
 
