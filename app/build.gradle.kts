@@ -81,7 +81,10 @@ android {
       proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
       signingConfig = signingConfigs.findByName("release")
     }
-    debug { }
+    debug {
+      applicationIdSuffix = ".debug"
+      versionNameSuffix = "-debug"
+    }
   }
   compileOptions {
     sourceCompatibility = JavaVersion.VERSION_11
@@ -103,7 +106,28 @@ android {
   }
   packaging {
     resources {
-      excludes += listOf("/META-INF/{AL2.0,LGPL2.1}", "/META-INF/*.version", "/kotlin/**", "DebugProbesKt.bin")
+      excludes += listOf(
+        "/META-INF/{AL2.0,LGPL2.1}",
+        "/META-INF/LICENSE",
+        "/META-INF/LICENSE.txt",
+        "/META-INF/NOTICE",
+        "/META-INF/NOTICE.txt",
+        "/META-INF/DEPENDENCIES",
+        "/META-INF/*.version",
+        "/kotlin/**",
+        "DebugProbesKt.bin"
+      )
+    }
+    // yt-dlp runs its bundled Python and ffmpeg from nativeLibraryDir, so the .so payload
+    // must be extracted at install time instead of loaded straight from the APK.
+    jniLibs { useLegacyPackaging = true }
+  }
+  splits {
+    abi {
+      isEnable = true
+      reset()
+      include("armeabi-v7a", "arm64-v8a", "x86", "x86_64")
+      isUniversalApk = false
     }
   }
   testOptions { unitTests { isIncludeAndroidResources = true } }
@@ -148,6 +172,12 @@ dependencies {
 
   implementation(libs.androidx.glance)
   implementation(libs.androidx.glance.appwidget)
+
+  implementation(libs.androidx.work.runtime)
+  implementation(libs.androidx.hilt.work)
+  "ksp"(libs.androidx.hilt.compiler)
+  implementation(libs.okhttp)
+  implementation(libs.youtubedl.android)
 
   testImplementation(libs.androidx.core)
   testImplementation(libs.junit)

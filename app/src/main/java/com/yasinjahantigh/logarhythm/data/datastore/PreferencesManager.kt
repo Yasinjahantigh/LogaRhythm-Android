@@ -42,6 +42,7 @@ class PreferencesManager @Inject constructor(
     private val keyCompactMiniPlayer = booleanPreferencesKey("key_compact_mini_player")
     private val keyMinTrackLengthSec = intPreferencesKey("key_min_track_length_sec")
     private val keyExcludedFolders = stringPreferencesKey("key_excluded_folders")
+    private val keyShowSystemAudio = booleanPreferencesKey("key_show_system_audio")
     private val keyHiddenTracks = stringPreferencesKey("key_hidden_track_ids")
     private val keyRecentSearches = stringPreferencesKey("key_recent_searches")
     private val keyQueueTrackIds = stringPreferencesKey("key_queue_track_ids")
@@ -253,6 +254,27 @@ class PreferencesManager @Inject constructor(
             }
             preferences[keyExcludedFolders] = current.joinToString("\n")
         }
+    }
+
+    /** System sounds and recordings stay out of the library unless the user opts in. */
+    val showSystemAudio: Flow<Boolean> = dataStore.data.map { preferences ->
+        preferences[keyShowSystemAudio] ?: false
+    }
+
+    suspend fun setShowSystemAudio(show: Boolean) {
+        dataStore.edit { preferences ->
+            preferences[keyShowSystemAudio] = show
+        }
+    }
+
+    /**
+     * Folders the user explicitly excluded. Unlike [excludedFolders] this does not fall back to
+     * the built-in list, so turning on system audio can drop those defaults without losing custom
+     * exclusions the user made on purpose.
+     */
+    val customExcludedFolders: Flow<Set<String>> = dataStore.data.map { preferences ->
+        val raw = preferences[keyExcludedFolders]
+        if (raw.isNullOrBlank()) emptySet() else raw.split("\n").filter { it.isNotBlank() }.toSet()
     }
 
     // ---- Hidden Tracks ----------------------------------------------------------------------
@@ -482,5 +504,47 @@ class PreferencesManager @Inject constructor(
     }
     suspend fun setLibraryGeneration(value: String?) {
         dataStore.edit { if (value == null) it.remove(keyLibraryGeneration) else it[keyLibraryGeneration] = value }
+    }
+
+    // ---- Music download ---------------------------------------------------------------------
+
+    private val keyDownloadRecentSearches = stringPreferencesKey("key_download_recent_searches")
+    private val keyYtdlpFirstUpdateDone = booleanPreferencesKey("key_ytdlp_first_update_done")
+
+    val downloadRecentSearches: Flow<List<String>> = dataStore.data.map { preferences ->
+        val raw = preferences[keyDownloadRecentSearches].orEmpty()
+        if (raw.isBlank()) emptyList() else raw.split("\n").filter { it.isNotBlank() }
+    }
+
+    suspend fun addDownloadRecentSearch(query: String) {
+        val trimmed = query.trim()
+        if (trimmed.isBlank()) return
+        dataStore.edit { preferences ->
+            val current = preferences[keyDownloadRecentSearches].orEmpty()
+                .split("\n")
+                .filter { it.isNotBlank() && !it.equals(trimmed, ignoreCase = true) }
+            preferences[keyDownloadRecentSearches] =
+                (listOf(trimmed) + current).take(10).joinToString("\n")
+        }
+    }
+
+    suspend fun removeDownloadRecentSearch(query: String) {
+        val trimmed = query.trim()
+        dataStore.edit { preferences ->
+            val current = preferences[keyDownloadRecentSearches].orEmpty()
+                .split("\n")
+                .filter { it.isNotBlank() && !it.equals(trimmed, ignoreCase = true) }
+            preferences[keyDownloadRecentSearches] = current.joinToString("\n")
+        }
+    }
+
+    suspend fun clearDownloadRecentSearches() {
+        dataStore.edit { it.remove(keyDownloadRecentSearches) }
+    }
+
+    val ytdlpFirstUpdateDone: Flow<Boolean> = dataStore.data.map { it[keyYtdlpFirstUpdateDone] ?: false }
+
+    suspend fun setYtdlpFirstUpdateDone(done: Boolean) {
+        dataStore.edit { it[keyYtdlpFirstUpdateDone] = done }
     }
 }

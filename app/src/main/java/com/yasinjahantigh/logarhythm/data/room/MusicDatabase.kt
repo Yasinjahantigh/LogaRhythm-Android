@@ -13,15 +13,17 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         PlaylistTrackEntity::class,
         LyricsEntity::class,
         LyricsOffsetEntity::class,
-        ResumePositionEntity::class
+        ResumePositionEntity::class,
+        DownloadEntity::class
     ],
-    version = 8,
+    version = 9,
     exportSchema = true
 )
 abstract class MusicDatabase : RoomDatabase() {
     abstract fun musicDao(): MusicDao
     abstract fun playlistDao(): PlaylistDao
     abstract fun lyricsDao(): LyricsDao
+    abstract fun downloadDao(): DownloadDao
 
     companion object {
         val MIGRATION_1_2: Migration = object : Migration(1, 2) {
@@ -84,6 +86,30 @@ abstract class MusicDatabase : RoomDatabase() {
             }
         }
 
+        /** Adds the music-download history; existing player data is untouched. */
+        val MIGRATION_8_9: Migration = object : Migration(8, 9) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS download_history (" +
+                        "id TEXT NOT NULL, title TEXT NOT NULL, artist TEXT NOT NULL, album TEXT NOT NULL, " +
+                        "durationMs INTEGER NOT NULL, source TEXT NOT NULL, sourceUrl TEXT NOT NULL, " +
+                        "videoId TEXT NOT NULL, quality TEXT NOT NULL, status TEXT NOT NULL, " +
+                        "progress INTEGER NOT NULL, etaSeconds INTEGER NOT NULL, artworkUrl TEXT, " +
+                        "mediaStoreId INTEGER, contentUri TEXT, filePath TEXT, fileSizeBytes INTEGER NOT NULL, " +
+                        "errorKind TEXT, errorMessage TEXT, statusDetail TEXT, usedFallback INTEGER NOT NULL, " +
+                        "createdAt INTEGER NOT NULL, updatedAt INTEGER NOT NULL, PRIMARY KEY(id))"
+                )
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS index_download_history_createdAt " +
+                        "ON download_history (createdAt)"
+                )
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS index_download_history_status " +
+                        "ON download_history (status)"
+                )
+            }
+        }
+
         val ALL_MIGRATIONS: Array<Migration> = arrayOf(
             MIGRATION_1_2,
             MIGRATION_2_3,
@@ -91,7 +117,8 @@ abstract class MusicDatabase : RoomDatabase() {
             MIGRATION_4_5,
             MIGRATION_5_6,
             MIGRATION_6_7,
-            MIGRATION_7_8
+            MIGRATION_7_8,
+            MIGRATION_8_9
         )
     }
 }

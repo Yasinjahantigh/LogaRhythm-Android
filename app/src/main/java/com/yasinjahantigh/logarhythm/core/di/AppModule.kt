@@ -5,6 +5,7 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.preferencesDataStore
 import androidx.room.Room
+import com.yasinjahantigh.logarhythm.data.room.DownloadDao
 import com.yasinjahantigh.logarhythm.data.room.LyricsDao
 import com.yasinjahantigh.logarhythm.data.room.MusicDao
 import com.yasinjahantigh.logarhythm.data.room.MusicDatabase
@@ -49,6 +50,11 @@ object AppModule {
     @Provides
     fun provideLyricsDao(database: MusicDatabase): LyricsDao {
         return database.lyricsDao()
+    }
+
+    @Provides
+    fun provideDownloadDao(database: MusicDatabase): DownloadDao {
+        return database.downloadDao()
     }
 
     @Provides

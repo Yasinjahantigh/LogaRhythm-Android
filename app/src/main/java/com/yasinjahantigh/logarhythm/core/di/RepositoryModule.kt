@@ -1,10 +1,12 @@
 package com.yasinjahantigh.logarhythm.core.di
 
+import com.yasinjahantigh.logarhythm.data.repository.DownloadRepositoryImpl
 import com.yasinjahantigh.logarhythm.data.repository.LyricsRepositoryImpl
 import com.yasinjahantigh.logarhythm.data.repository.PlaylistRepositoryImpl
 import com.yasinjahantigh.logarhythm.data.repository.StatsRepositoryImpl
 import com.yasinjahantigh.logarhythm.data.repository.TrackRepositoryImpl
 import com.yasinjahantigh.logarhythm.data.sources.LocalMusicSource
+import com.yasinjahantigh.logarhythm.domain.repository.DownloadRepository
 import com.yasinjahantigh.logarhythm.domain.repository.LyricsRepository
 import com.yasinjahantigh.logarhythm.domain.repository.PlaylistRepository
 import com.yasinjahantigh.logarhythm.domain.repository.StatsRepository
@@ -49,4 +51,10 @@ abstract class RepositoryModule {
     abstract fun bindLyricsRepository(
         impl: LyricsRepositoryImpl
     ): LyricsRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindDownloadRepository(
+        impl: DownloadRepositoryImpl
+    ): DownloadRepository
 }

@@ -33,7 +33,10 @@ object Id3Engine : TagEngine {
             val lyrics = parsed.frames.firstOrNull { it.id == "USLT" }?.let { decodeUslt(it.payload) }
             return AudioTags(
                 title = text("TIT2"), artist = text("TPE1"), album = text("TALB"),
-                genre = text("TCON"), lyrics = lyrics
+                genre = text("TCON"), lyrics = lyrics, year = text("TDRC", "TYER"),
+                trackNumber = text("TRCK")?.substringBefore('/')?.trim()?.toIntOrNull(),
+                discNumber = text("TPOS")?.substringBefore('/')?.trim()?.toIntOrNull(),
+                composer = text("TCOM")
             )
         }
     }
@@ -168,6 +171,19 @@ object Id3Engine : TagEngine {
                 frames.removeAll { it.id == "USLT" }
                 if (edit.lyrics.isNotBlank()) frames.add(Frame("USLT", 0, encodeUslt(edit.lyrics, major)))
             }
+            if (edit.artwork != null) {
+                frames.removeAll { it.id == "APIC" }
+                if (edit.artwork.isNotEmpty()) frames.add(0, Frame("APIC", 0, encodeApic(edit.artwork)))
+            }
+            if (edit.year != null) {
+                frames.removeAll { it.id == "TDRC" || it.id == "TYER" }
+                if (edit.year.isNotBlank()) {
+                    frames.add(0, Frame(if (major == 4) "TDRC" else "TYER", 0, encodeText(edit.year, major)))
+                }
+            }
+            edit.trackNumber?.let { replaceText("TRCK", it.takeIf { number -> number > 0 }?.toString()) }
+            edit.discNumber?.let { replaceText("TPOS", it.takeIf { number -> number > 0 }?.toString()) }
+            replaceText("TCOM", edit.composer)
 
             val framesBytes = ByteArrayOutputStream()
             for (f in frames) {
@@ -223,6 +239,19 @@ object Id3Engine : TagEngine {
         if (p.isEmpty()) return null
         val s = decodeString(p, 1, p.size, p[0].toInt() and 0xff) ?: return null
         return s.split('\u0000').firstOrNull { it.isNotBlank() }?.trim()?.takeIf { it.isNotEmpty() }
+    }
+
+    internal fun encodeApic(image: ByteArray): ByteArray {
+        val mime = if (image.size > 8 && (image[0].toInt() and 0xff) == 0x89 &&
+            image[1].toInt() == 'P'.code
+        ) "image/png" else "image/jpeg"
+        val out = ByteArrayOutputStream()
+        out.write(0) // ISO-8859-1 description
+        out.write(mime.toByteArray(Charsets.ISO_8859_1)); out.write(0)
+        out.write(3) // front cover
+        out.write(0) // empty description
+        out.write(image)
+        return out.toByteArray()
     }
 
     internal fun decodeUslt(p: ByteArray): String? {

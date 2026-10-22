@@ -67,6 +67,7 @@ sealed class NavDestination(
         const val ROUTE_EQUALIZER = "equalizer"
         const val ROUTE_LIBRARY_TOOLS = "library_tools"
         const val ROUTE_THEME = "theme_studio"
+        const val ROUTE_DOWNLOAD = "download"
 
         fun createAlbumDetailRoute(albumName: String): String =
             "album_detail/${Uri.encode(albumName)}"

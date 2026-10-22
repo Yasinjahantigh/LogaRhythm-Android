@@ -107,12 +107,13 @@ class LibrarySync @Inject constructor(
             val generation = MediaStore.getGeneration(context, MediaStore.VOLUME_EXTERNAL)
             val minSec = preferencesManager.minTrackLengthSec.first()
             val excluded = preferencesManager.excludedFolders.first().sorted().hashCode()
-            "$SCHEMA_TAG|$version|$generation|$minSec|$excluded"
+            val showSystemAudio = preferencesManager.showSystemAudio.first()
+            "$SCHEMA_TAG|$version|$generation|$minSec|$excluded|$showSystemAudio"
         }.getOrNull()
     }
 
     private companion object {
         /** Bump when a scan must repopulate new columns even if the media index is unchanged. */
-        const val SCHEMA_TAG = "v8"
+        const val SCHEMA_TAG = "v9"
     }
 }
