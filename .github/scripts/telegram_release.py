@@ -10,12 +10,31 @@ TAG = os.environ["TAG_NAME"].strip()
 GEMINI_KEY = os.environ.get("GEMINI_API_KEY", "").strip()
 BOT_TOKEN = os.environ["TELEGRAM_BOT_TOKEN"].strip()
 CHANNEL_ID = os.environ["TELEGRAM_CHANNEL_ID"].strip()
-APK_PATH = f"LogaRhythm-{TAG}.apk"
+
+# The two ARM builds cover every phone; x86 APKs are only for emulators.
+APK_ABIS = [
+    ("arm64-v8a", "نسخهٔ ۶۴ بیتی — مناسب بیشتر گوشی‌های جدید"),
+    ("armeabi-v7a", "نسخهٔ ۳۲ بیتی — مناسب گوشی‌های قدیمی‌تر"),
+]
+# Telegram bots may upload documents up to 50 MB; leave room for multipart overhead.
+MAX_APK_BYTES = 49 * 1024 * 1024
+
+FALLBACK_CHANGELOG = (
+    "• بخش دانلود موسیقی با جست‌وجو در یوتیوب و ساندکلود\n"
+    "• ذخیرهٔ صدا با کیفیت اصلی، کاور و تگ کامل\n"
+    "• تاریخچهٔ دانلود با پخش، باز کردن و اشتراک‌گذاری\n"
+    "• پنهان‌شدن پیش‌فرض فایل‌های سیستمی و ضبط‌ها\n"
+    "• نمایش فرمت و کیفیت صدا در پخش‌کننده"
+)
 
 if not CHANNEL_ID:
     raise SystemExit("TELEGRAM_CHANNEL_ID secret is empty or missing.")
 if not BOT_TOKEN:
     raise SystemExit("TELEGRAM_BOT_TOKEN secret is empty or missing.")
+
+
+def apk_path(abi):
+    return f"LogaRhythm-{TAG}-{abi}.apk"
 
 
 def get_commits():
@@ -28,12 +47,12 @@ def get_commits():
             return ""
         prev = tags[-2]
         log = subprocess.check_output(
-            ["git", "log", f"{prev}..HEAD", "--pretty=format:- %s", "--", "app/src"],
+            ["git", "log", f"{prev}..HEAD", "--pretty=format:--- %s%n%b", "--", "app/src"],
             text=True,
         )
         skip = ("docs:", "ci:", "chore:", "build:", "style:", "test:")
-        lines = [l for l in log.splitlines() if not any(l.startswith(f"- {p}") for p in skip)]
-        return "\n".join(lines[:15])
+        lines = [l for l in log.splitlines() if not any(l.startswith(f"--- {p}") for p in skip)]
+        return "\n".join(lines[:80])
     except Exception:
         return ""
 
@@ -86,7 +105,7 @@ def normalize_bullets(text):
 
 
 def build_message(changelog):
-    body = normalize_bullets(changelog) if changelog else "• بهبودهای کلی و رفع مشکلات"
+    body = normalize_bullets(changelog) if changelog else FALLBACK_CHANGELOG
     return (
         f"<b>🎵 LogaRhythm {html.escape(TAG)}</b>\n\n"
         f"<b>تغییرات این نسخه:</b>\n{html.escape(body)}\n\n"
@@ -98,10 +117,44 @@ def build_message(changelog):
     )
 
 
-def send_apk(caption):
+def send_request(url, data, content_type, timeout):
+    req = urllib.request.Request(
+        url, data=data, headers={"Content-Type": content_type}
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            result = json.load(r)
+    except urllib.error.HTTPError as e:
+        raise SystemExit(f"Telegram HTTP {e.code}: {e.read().decode(errors='replace')}")
+    if not result.get("ok"):
+        raise SystemExit(f"Telegram error: {result}")
+    return result
+
+
+def send_message(text):
+    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+    body = json.dumps(
+        {"chat_id": CHANNEL_ID, "text": text, "parse_mode": "HTML"}
+    ).encode()
+    send_request(url, body, "application/json", timeout=60)
+    print("Telegram changelog sent.")
+
+
+def send_apk(path, caption):
+    if not os.path.isfile(path):
+        raise SystemExit(f"Missing APK: {path}")
+
+    size = os.path.getsize(path)
+    if size > MAX_APK_BYTES:
+        print(
+            f"{path} is {size / (1024 * 1024):.1f} MB, over Telegram's 50 MB "
+            "upload limit; the changelog already links to GitHub."
+        )
+        return
+
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendDocument"
     boundary = "----FormBoundary"
-    with open(APK_PATH, "rb") as apk:
+    with open(path, "rb") as apk:
         apk_data = apk.read()
 
     def field(name, value):
@@ -117,29 +170,25 @@ def send_apk(caption):
         + field("parse_mode", "HTML")
         + (
             f"--{boundary}\r\n"
-            f'Content-Disposition: form-data; name="document"; filename="{os.path.basename(APK_PATH)}"\r\n'
+            f'Content-Disposition: form-data; name="document"; filename="{os.path.basename(path)}"\r\n'
             "Content-Type: application/octet-stream\r\n\r\n"
         ).encode()
         + apk_data
         + f"\r\n--{boundary}--\r\n".encode()
     )
 
-    req = urllib.request.Request(
-        url,
-        data=body,
-        headers={"Content-Type": f"multipart/form-data; boundary={boundary}"},
-    )
-    try:
-        with urllib.request.urlopen(req, timeout=120) as r:
-            result = json.load(r)
-    except urllib.error.HTTPError as e:
-        raise SystemExit(f"Telegram HTTP {e.code}: {e.read().decode(errors='replace')}")
-    if not result.get("ok"):
-        raise SystemExit(f"Telegram error: {result}")
-    print("Telegram message sent.")
+    send_request(url, body, f"multipart/form-data; boundary={boundary}", timeout=180)
+    print(f"Telegram APK sent: {os.path.basename(path)}")
 
 
 commits = get_commits()
 changelog = ask_gemma(commits)
 message = build_message(changelog)
-send_apk(message)
+send_message(message)
+
+for abi, note in APK_ABIS:
+    caption = (
+        f"<b>🎵 LogaRhythm {html.escape(TAG)} · {abi}</b>\n"
+        f"{html.escape(note)}"
+    )
+    send_apk(apk_path(abi), caption)

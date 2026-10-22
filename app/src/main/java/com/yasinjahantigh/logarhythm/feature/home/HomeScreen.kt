@@ -89,6 +89,7 @@ fun HomeScreen(
     onNavigateToLibrary: () -> Unit,
     modifier: Modifier = Modifier,
     onNavigateToSearch: () -> Unit = {},
+    onNavigateToDownload: () -> Unit = {},
     viewModel: HomeViewModel = hiltViewModel()
 ) {
     val dailyMixes by viewModel.dailyMixes.collectAsStateWithLifecycle()
@@ -214,6 +215,13 @@ fun HomeScreen(
                         Text(text = stringResource(id = R.string.home_browse_library))
                     }
                 }
+                Spacer(modifier = Modifier.height(4.dp))
+                TextButton(
+                    onClick = onNavigateToDownload,
+                    modifier = Modifier.testTag("home_download_button")
+                ) {
+                    Text(text = stringResource(id = R.string.home_download_card_title))
+                }
             }
         } else {
             val bottomPadding = com.yasinjahantigh.logarhythm.ui.designsystem.LocalPlaybackBottomPadding.current
@@ -260,6 +268,10 @@ fun HomeScreen(
                             )
                         }
                     }
+                    }
+
+                    item(key = "download_banner") {
+                        HomeDownloadBanner(onClick = onNavigateToDownload)
                     }
 
                     // One shelf instead of three: recently played / new / on repeat share a row.

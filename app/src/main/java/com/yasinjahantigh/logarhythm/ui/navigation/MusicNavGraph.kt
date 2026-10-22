@@ -9,6 +9,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
 import com.yasinjahantigh.logarhythm.feature.album.AlbumDetailScreen
 import com.yasinjahantigh.logarhythm.feature.artist.ArtistDetailScreen
+import com.yasinjahantigh.logarhythm.feature.download.DownloadScreen
 import com.yasinjahantigh.logarhythm.feature.equalizer.EqualizerScreen
 import com.yasinjahantigh.logarhythm.feature.folder.FolderDetailScreen
 import com.yasinjahantigh.logarhythm.feature.genre.GenreDetailScreen
@@ -41,6 +42,9 @@ fun MusicNavGraph(
                 },
                 onNavigateToSearch = {
                     navController.navigate(NavDestination.Search.route)
+                },
+                onNavigateToDownload = {
+                    navController.navigate(NavDestination.ROUTE_DOWNLOAD)
                 }
             )
         }
@@ -90,11 +94,17 @@ fun MusicNavGraph(
                 },
                 onNavigateToTheme = {
                     navController.navigate(NavDestination.ROUTE_THEME)
+                },
+                onNavigateToDownload = {
+                    navController.navigate(NavDestination.ROUTE_DOWNLOAD)
                 }
             )
         }
         composable(NavDestination.ROUTE_THEME) {
             ThemeScreen(onNavigateBack = { navController.popBackStack() })
+        }
+        composable(NavDestination.ROUTE_DOWNLOAD) {
+            DownloadScreen(onNavigateBack = { navController.popBackStack() })
         }
         composable(NavDestination.ROUTE_LIBRARY_TOOLS) {
             LibraryToolsScreen(onNavigateBack = { navController.popBackStack() })

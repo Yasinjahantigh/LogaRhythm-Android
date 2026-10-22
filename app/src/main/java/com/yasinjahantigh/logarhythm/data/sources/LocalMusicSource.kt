@@ -4,6 +4,7 @@ import android.content.ContentUris
 import android.content.Context
 import android.os.Build
 import android.provider.MediaStore
+import com.yasinjahantigh.logarhythm.core.library.AudioLibraryFilter
 import com.yasinjahantigh.logarhythm.domain.model.SourceType
 import com.yasinjahantigh.logarhythm.domain.model.Track
 import com.yasinjahantigh.logarhythm.domain.source.MusicSource
@@ -25,9 +26,15 @@ class LocalMusicSource @Inject constructor(
         val DEFAULT_EXCLUDED_FOLDERS = setOf(
             "WhatsApp Voice Notes",
             "Call Recordings",
+            "Call Recording",
+            "Voice Recorder",
+            "Voice Notes",
+            "Recordings",
+            "Sound Recorder",
             "Ringtones",
             "Notifications",
-            "Alarms"
+            "Alarms",
+            "Sounds"
         )
     }
 
@@ -41,7 +48,8 @@ class LocalMusicSource @Inject constructor(
 
     suspend fun scanTracks(
         minDurationMs: Long = this.minDurationMs,
-        excludedFolders: Set<String> = emptySet()
+        excludedFolders: Set<String> = emptySet(),
+        showSystemAudio: Boolean = false
     ): List<Track> = withContext(Dispatchers.IO) {
         val effectiveExcludedFolders = excludedFolders
         val tracks = mutableListOf<Track>()
@@ -73,8 +81,23 @@ class LocalMusicSource @Inject constructor(
             )
         }
 
-        // Include audio tracks reliably even if the device scanner set IS_MUSIC to 0 or null
-        val selection = "(${MediaStore.Audio.Media.IS_MUSIC} != 0 OR ${MediaStore.Audio.Media.IS_MUSIC} IS NULL OR ${MediaStore.Audio.Media.DURATION} > 30000) AND ${MediaStore.Audio.Media.DURATION} >= ?"
+        // Include audio tracks reliably even if the device scanner set IS_MUSIC to 0 or null,
+        // but keep ringtones/notifications/alarms out unless the user opts in.
+        val baseSelection = "(${MediaStore.Audio.Media.IS_MUSIC} != 0 OR ${MediaStore.Audio.Media.IS_MUSIC} IS NULL OR ${MediaStore.Audio.Media.DURATION} > 30000) AND ${MediaStore.Audio.Media.DURATION} >= ?"
+        val selection = if (showSystemAudio) {
+            baseSelection
+        } else {
+            buildString {
+                append(baseSelection)
+                append(" AND ${MediaStore.Audio.Media.IS_RINGTONE} = 0")
+                append(" AND ${MediaStore.Audio.Media.IS_NOTIFICATION} = 0")
+                append(" AND ${MediaStore.Audio.Media.IS_ALARM} = 0")
+                // Android 12+ flags files in the standard Recordings/ directory itself.
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    append(" AND ${MediaStore.Audio.AudioColumns.IS_RECORDING} = 0")
+                }
+            }
+        }
         val selectionArgs = arrayOf(minDurationMs.toString())
         val sortOrder = "${MediaStore.Audio.Media.TITLE} COLLATE NOCASE ASC"
 
@@ -132,6 +155,15 @@ class LocalMusicSource @Inject constructor(
                 }
 
                 if (effectiveExcludedFolders.any { excluded -> folderName.equals(excluded, ignoreCase = true) }) {
+                    continue
+                }
+                if (!showSystemAudio &&
+                    AudioLibraryFilter.isHidden(
+                        filePath = filePath,
+                        folderName = folderName,
+                        fileName = filePath?.let { File(it).name }
+                    )
+                ) {
                     continue
                 }
 

@@ -16,10 +16,17 @@ data class TagEdit(
     val artist: String? = null,
     val album: String? = null,
     val genre: String? = null,
-    val lyrics: String? = null
+    val lyrics: String? = null,
+    val artwork: ByteArray? = null,
+    val year: String? = null,
+    val trackNumber: Int? = null,
+    val discNumber: Int? = null,
+    val composer: String? = null
 ) {
     val isEmpty: Boolean
-        get() = title == null && artist == null && album == null && genre == null && lyrics == null
+        get() = title == null && artist == null && album == null && genre == null &&
+            lyrics == null && artwork == null && year == null && trackNumber == null &&
+            discNumber == null && composer == null
 }
 
 /** Values read back from a file. A field is null when the file has no such tag. */
@@ -28,7 +35,11 @@ data class AudioTags(
     val artist: String? = null,
     val album: String? = null,
     val genre: String? = null,
-    val lyrics: String? = null
+    val lyrics: String? = null,
+    val year: String? = null,
+    val trackNumber: Int? = null,
+    val discNumber: Int? = null,
+    val composer: String? = null
 )
 
 class UnsupportedTagException(message: String) : Exception(message)
@@ -135,11 +146,23 @@ internal class VorbisComments(var vendor: ByteArray, val entries: MutableList<Pa
         set(arrayOf("ALBUM"), edit.album)
         set(arrayOf("GENRE"), edit.genre)
         set(arrayOf("LYRICS", "UNSYNCEDLYRICS"), edit.lyrics)
+        set(arrayOf("YEAR", "DATE"), edit.year)
+        set(arrayOf("COMPOSER"), edit.composer)
+        edit.trackNumber?.let { number ->
+            set(arrayOf("TRACKNUMBER"), if (number > 0) number.toString() else "")
+        }
+        edit.discNumber?.let { number ->
+            set(arrayOf("DISCNUMBER"), if (number > 0) number.toString() else "")
+        }
     }
 
     fun toTags() = AudioTags(
         title = first("TITLE"), artist = first("ARTIST"), album = first("ALBUM"),
-        genre = first("GENRE"), lyrics = first("LYRICS", "UNSYNCEDLYRICS")
+        genre = first("GENRE"), lyrics = first("LYRICS", "UNSYNCEDLYRICS"),
+        year = first("YEAR", "DATE"),
+        trackNumber = first("TRACKNUMBER")?.trim()?.toIntOrNull(),
+        discNumber = first("DISCNUMBER")?.trim()?.toIntOrNull(),
+        composer = first("COMPOSER")
     )
 
     companion object {

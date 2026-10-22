@@ -761,6 +761,8 @@ fun TrackIdentityAndActions(
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
         Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
+            TrackFormatLabel(track)
+            Spacer(modifier = Modifier.height(2.dp))
             Text(
                 text = displayTitle,
                 style = MaterialTheme.typography.headlineMedium,

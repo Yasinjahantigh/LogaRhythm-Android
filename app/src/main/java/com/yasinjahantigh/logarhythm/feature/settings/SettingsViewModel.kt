@@ -164,6 +164,13 @@ class SettingsViewModel @Inject constructor(
             initialValue = emptySet()
         )
 
+    val showSystemAudio: StateFlow<Boolean> = preferencesManager.showSystemAudio
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = false
+        )
+
     val allFolders: StateFlow<List<String>> = trackRepository.getAllDeviceFolderNames()
         .stateIn(
             scope = viewModelScope,
@@ -237,6 +244,13 @@ class SettingsViewModel @Inject constructor(
     fun toggleExcludedFolder(folder: String) {
         viewModelScope.launch {
             preferencesManager.toggleExcludedFolder(folder)
+            trackRepository.refreshTracks()
+        }
+    }
+
+    fun setShowSystemAudio(show: Boolean) {
+        viewModelScope.launch {
+            preferencesManager.setShowSystemAudio(show)
             trackRepository.refreshTracks()
         }
     }

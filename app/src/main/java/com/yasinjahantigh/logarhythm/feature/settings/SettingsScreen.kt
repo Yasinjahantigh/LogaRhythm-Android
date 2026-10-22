@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BarChart
+import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.ColorLens
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.FolderOff
@@ -76,6 +77,7 @@ fun SettingsScreen(
     onNavigateToEqualizer: () -> Unit = {},
     onNavigateToLibraryTools: () -> Unit = {},
     onNavigateToTheme: () -> Unit = {},
+    onNavigateToDownload: () -> Unit = {},
     viewModel: SettingsViewModel = hiltViewModel()
 ) {
     val themeMode by viewModel.themeMode.collectAsStateWithLifecycle()
@@ -85,6 +87,7 @@ fun SettingsScreen(
     val isCompactMiniPlayer by viewModel.isCompactMiniPlayer.collectAsStateWithLifecycle()
     val minTrackLengthSec by viewModel.minTrackLengthSec.collectAsStateWithLifecycle()
     val excludedFolders by viewModel.excludedFolders.collectAsStateWithLifecycle()
+    val showSystemAudio by viewModel.showSystemAudio.collectAsStateWithLifecycle()
     val allFolders by viewModel.allFolders.collectAsStateWithLifecycle()
     val isLrclibEnabled by viewModel.isLrclibEnabled.collectAsStateWithLifecycle()
     val isGeniusEnabled by viewModel.isGeniusEnabled.collectAsStateWithLifecycle()
@@ -333,6 +336,13 @@ fun SettingsScreen(
                             modifier = Modifier.weight(1f),
                             testTag = "settings_stats_item"
                         )
+                        SettingsShortcutTile(
+                            title = stringResource(R.string.settings_download_title),
+                            icon = Icons.Filled.CloudDownload,
+                            onClick = onNavigateToDownload,
+                            modifier = Modifier.weight(1f),
+                            testTag = "settings_download_item"
+                        )
                     }
                 }
 
@@ -452,6 +462,15 @@ fun SettingsScreen(
 
                 item {
                     SettingsGroup(title = stringResource(R.string.settings_category_library)) {
+                        SettingsSwitchItem(
+                            title = stringResource(R.string.settings_show_system_audio_title),
+                            subtitle = stringResource(R.string.settings_show_system_audio_desc),
+                            icon = Icons.Filled.Headset,
+                            checked = showSystemAudio,
+                            onCheckedChange = viewModel::setShowSystemAudio,
+                            rowTag = "settings_show_system_audio_item",
+                            switchTag = "settings_show_system_audio_switch"
+                        )
                         val lengthText = if (minTrackLengthSec == 0) {
                             stringResource(R.string.settings_min_length_0s)
                         } else {

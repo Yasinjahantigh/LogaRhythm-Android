@@ -103,8 +103,17 @@ jobs:
           BUILD_TOOLS_DIR=$(ls -d ${ANDROID_HOME}/build-tools/* | sort -V | tail -n 1)
           $BUILD_TOOLS_DIR/apksigner verify --verbose app/build/outputs/apk/release/*.apk
 
-      - name: Rename APK
-        run: cp app/build/outputs/apk/release/*.apk "LogaRhythm-${{ steps.versioning.outputs.TAG_NAME }}.apk"
+      - name: Rename APKs
+        run: |
+          TAG="${{ steps.versioning.outputs.TAG_NAME }}"
+          shopt -s nullglob
+          for apk in app/build/outputs/apk/release/*.apk; do
+            base=$(basename "$apk" .apk)   # e.g. app-arm64-v8a-release
+            abi=${base#app-}
+            abi=${abi%-release}
+            cp "$apk" "LogaRhythm-$TAG-$abi.apk"
+          done
+          ls -1 LogaRhythm-*.apk
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
