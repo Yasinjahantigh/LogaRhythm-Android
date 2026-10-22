@@ -1,15 +1,21 @@
 #!/usr/bin/env python3
+import html
 import json
 import os
 import subprocess
+import urllib.error
 import urllib.request
-import urllib.parse
 
-TAG = os.environ["TAG_NAME"]
-GEMINI_KEY = os.environ.get("GEMINI_API_KEY", "")
-BOT_TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
-CHANNEL_ID = os.environ["TELEGRAM_CHANNEL_ID"]
+TAG = os.environ["TAG_NAME"].strip()
+GEMINI_KEY = os.environ.get("GEMINI_API_KEY", "").strip()
+BOT_TOKEN = os.environ["TELEGRAM_BOT_TOKEN"].strip()
+CHANNEL_ID = os.environ["TELEGRAM_CHANNEL_ID"].strip()
 APK_PATH = f"LogaRhythm-{TAG}.apk"
+
+if not CHANNEL_ID:
+    raise SystemExit("TELEGRAM_CHANNEL_ID secret is empty or missing.")
+if not BOT_TOKEN:
+    raise SystemExit("TELEGRAM_BOT_TOKEN secret is empty or missing.")
 
 
 def get_commits():
@@ -22,7 +28,8 @@ def get_commits():
             return ""
         prev = tags[-2]
         log = subprocess.check_output(
-            ["git", "log", f"{prev}..HEAD", "--pretty=format:- %s"], text=True
+            ["git", "log", f"{prev}..HEAD", "--pretty=format:- %s", "--", "app/src"],
+            text=True,
         )
         skip = ("docs:", "ci:", "chore:", "build:", "style:", "test:")
         lines = [l for l in log.splitlines() if not any(l.startswith(f"- {p}") for p in skip)]
@@ -35,34 +42,59 @@ def ask_gemma(commits):
     if not GEMINI_KEY or not commits:
         return None
     prompt = (
-        "کامیت‌های زیر تغییرات نسخه جدید نرم‌افزار LogaRhythm هستند "
-        "(یک پخش‌کننده موسیقی اندرویدی). آن‌ها را به فارسی روان و کاربرپسند "
-        "تبدیل کن. هر تغییر یک خط با بولت • باشد. حداکثر ۵ مورد. "
-        "فقط تغییرات را بنویس بدون هیچ توضیح اضافه:\n\n" + commits
+        "کامیت‌های زیر تغییرات نسخه جدید اپ اندروید LogaRhythm (پخش‌کننده موسیقی) هستند. "
+        "آن‌ها را به فارسی روان و کاربرپسند برای کاربر نهایی بازنویسی کن. "
+        "هر تغییر یک خط با بولت • باشد، حداکثر ۵ خط. "
+        "تغییرات مربوط به زیرساخت، CI، تلگرام، مستندات و کارهای فنی داخلی را نادیده بگیر. "
+        "فقط فهرست تغییرات را بنویس، بدون مقدمه و توضیح اضافه:\n\n" + commits
     )
     body = json.dumps({"contents": [{"parts": [{"text": prompt}]}]}).encode()
     url = (
         "https://generativelanguage.googleapis.com/v1beta/models/"
-        f"gemma-3-27b-it:generateContent?key={GEMINI_KEY}"
+        "gemma-4-26b-a4b-it:generateContent"
     )
-    req = urllib.request.Request(url, data=body, headers={"Content-Type": "application/json"})
-    try:
-        with urllib.request.urlopen(req, timeout=30) as r:
-            data = json.load(r)
-        return data["candidates"][0]["content"]["parts"][0]["text"].strip()
-    except Exception as e:
-        print(f"Gemma error: {e}")
-        return None
+    req = urllib.request.Request(
+        url,
+        data=body,
+        headers={"Content-Type": "application/json", "x-goog-api-key": GEMINI_KEY},
+    )
+    for attempt in range(2):
+        try:
+            with urllib.request.urlopen(req, timeout=240) as r:
+                data = json.load(r)
+            parts = data["candidates"][0]["content"]["parts"]
+            text = "\n".join(
+                p["text"] for p in parts if p.get("text") and not p.get("thought")
+            ).strip()
+            if text:
+                return text
+            print(f"Gemma returned empty text: {json.dumps(data)[:500]}")
+        except urllib.error.HTTPError as e:
+            print(f"Gemma attempt {attempt + 1} failed: {e.code} {e.read().decode(errors='replace')[:500]}")
+        except Exception as e:
+            print(f"Gemma attempt {attempt + 1} failed: {e}")
+    return None
+
+
+def normalize_bullets(text):
+    lines = []
+    for line in text.splitlines():
+        line = line.strip().lstrip("-*•").strip()
+        if line:
+            lines.append("• " + line)
+    return "\n".join(lines[:5])
 
 
 def build_message(changelog):
-    body = changelog if changelog else "بهبودهای کلی و رفع مشکلات"
+    body = normalize_bullets(changelog) if changelog else "• بهبودهای کلی و رفع مشکلات"
     return (
-        f"LogaRhythm {TAG}\n\n"
-        f"تغییرات این نسخه:\n{body}\n\n"
-        f"دانلود:\n"
-        f"https://github.com/Yasinjahantigh/LogaRhythm-Android/releases/tag/{TAG}\n\n"
-        "باگ یا پیشنهاد؟ همین پایین کامنت بذارید."
+        f"<b>🎵 LogaRhythm {html.escape(TAG)}</b>\n\n"
+        f"<b>تغییرات این نسخه:</b>\n{html.escape(body)}\n\n"
+        "📥 <b>دانلود از گیت‌هاب:</b>\n"
+        "https://github.com/Yasinjahantigh/LogaRhythm-Android/releases/latest\n\n"
+        "💬 اگر باگ، ایراد یا پیشنهادی داشتید دایرکت بفرستین:\n"
+        "https://t.me/LogaRhythmApp?direct\n\n"
+        "📢 @LogaRhythmApp"
     )
 
 
@@ -82,6 +114,7 @@ def send_apk(caption):
     body = (
         field("chat_id", CHANNEL_ID)
         + field("caption", caption)
+        + field("parse_mode", "HTML")
         + (
             f"--{boundary}\r\n"
             f'Content-Disposition: form-data; name="document"; filename="{os.path.basename(APK_PATH)}"\r\n'
@@ -96,10 +129,13 @@ def send_apk(caption):
         data=body,
         headers={"Content-Type": f"multipart/form-data; boundary={boundary}"},
     )
-    with urllib.request.urlopen(req, timeout=120) as r:
-        result = json.load(r)
+    try:
+        with urllib.request.urlopen(req, timeout=120) as r:
+            result = json.load(r)
+    except urllib.error.HTTPError as e:
+        raise SystemExit(f"Telegram HTTP {e.code}: {e.read().decode(errors='replace')}")
     if not result.get("ok"):
-        raise RuntimeError(f"Telegram error: {result}")
+        raise SystemExit(f"Telegram error: {result}")
     print("Telegram message sent.")
 
 

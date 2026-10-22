@@ -129,11 +129,11 @@ class SettingsViewModel @Inject constructor(
             initialValue = "system"
         )
 
-    val colorSource: StateFlow<String> = preferencesManager.colorSource
+    val themeStyle: StateFlow<String> = preferencesManager.themeStyle
         .stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5000),
-            initialValue = "album_art"
+            initialValue = "default"
         )
 
     val cornerRoundness: StateFlow<String> = preferencesManager.cornerRoundness
@@ -185,6 +185,13 @@ class SettingsViewModel @Inject constructor(
             initialValue = false
         )
 
+    val isGeniusEnabled: StateFlow<Boolean> = preferencesManager.isGeniusEnabled
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = true
+        )
+
     fun setAppLanguage(
         language: String,
         onSaved: () -> Unit = {},
@@ -205,12 +212,6 @@ class SettingsViewModel @Inject constructor(
     fun setThemeMode(mode: String) {
         viewModelScope.launch {
             preferencesManager.setThemeMode(mode)
-        }
-    }
-
-    fun setColorSource(source: String) {
-        viewModelScope.launch {
-            preferencesManager.setColorSource(source)
         }
     }
 
@@ -269,6 +270,12 @@ class SettingsViewModel @Inject constructor(
     fun setLrclibEnabled(enabled: Boolean) {
         viewModelScope.launch {
             preferencesManager.setLrclibEnabled(enabled)
+        }
+    }
+
+    fun setGeniusEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            preferencesManager.setGeniusEnabled(enabled)
         }
     }
 }

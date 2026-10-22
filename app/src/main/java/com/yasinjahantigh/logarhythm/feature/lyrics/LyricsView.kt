@@ -172,6 +172,7 @@ fun LyricsView(
     }
     val isLoading by viewModel.isLoading.collectAsStateWithLifecycle()
     val isOnlineEnabled by viewModel.isOnlineEnabled.collectAsStateWithLifecycle()
+    val isGeniusEnabled by viewModel.isGeniusEnabled.collectAsStateWithLifecycle()
     val isManualEditOpen by viewModel.isManualEditOpen.collectAsStateWithLifecycle()
     val showCandidatePicker by viewModel.showCandidatePicker.collectAsStateWithLifecycle()
     val lyricsCandidates by viewModel.lyricsCandidates.collectAsStateWithLifecycle()
@@ -410,9 +411,9 @@ fun LyricsView(
 
                 lyrics == null || lyrics?.isEmpty == true -> {
                     LyricsEmptyContent(
-                        isOnlineEnabled = isOnlineEnabled,
+                        isOnlineEnabled = isOnlineEnabled || isGeniusEnabled,
                         onImportClick = { filePicker.launch(arrayOf("*/*", "text/*")) },
-                        onFetchOnlineClick = { viewModel.searchCandidatesOnline() },
+                        onFetchOnlineClick = { viewModel.retryOnlineLyrics() },
                         onSearchGoogleClick = onSearchGoogleLyrics,
                         onPasteClipboardClick = onPasteFromClipboard,
                         onManualEnterClick = { viewModel.setManualEditOpen(true) }
@@ -482,6 +483,7 @@ fun LyricsView(
                             "netease" -> stringResource(R.string.lyrics_source_online, stringResource(R.string.lyrics_provider_netease))
                             "kugou" -> stringResource(R.string.lyrics_source_online, stringResource(R.string.lyrics_provider_kugou))
                             "lyrics_ovh" -> stringResource(R.string.lyrics_source_online, stringResource(R.string.lyrics_provider_lyrics_ovh))
+                            "genius" -> stringResource(R.string.lyrics_source_online, stringResource(R.string.lyrics_provider_genius))
                             else -> stringResource(R.string.lyrics_source_cached)
                         }
 

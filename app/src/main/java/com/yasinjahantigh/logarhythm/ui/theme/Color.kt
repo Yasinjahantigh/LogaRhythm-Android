@@ -59,6 +59,22 @@ val DarkColorScheme = darkColorScheme(
     onErrorContainer = Color(0xFFFFDAD6)
 )
 
+/** Pure-black surfaces for OLED panels; the amber ink stays the same, only the canvas changes. */
+val OledColorScheme = DarkColorScheme.copy(
+    background = Color.Black,
+    surface = Color.Black,
+    surfaceDim = Color.Black,
+    surfaceBright = Color(0xFF242424),
+    surfaceContainerLowest = Color.Black,
+    surfaceContainerLow = Color(0xFF060606),
+    surfaceContainer = Color(0xFF0B0B0B),
+    surfaceContainerHigh = Color(0xFF121212),
+    surfaceContainerHighest = Color(0xFF181818),
+    surfaceVariant = Color(0xFF1F1F1F),
+    outlineVariant = Color(0xFF2A2A2A),
+    inverseSurface = Color(0xFFE8E4DC)
+)
+
 val LightColorScheme = lightColorScheme(
     primary = Color(0xFF8A4F00),
     onPrimary = Color(0xFFFFFFFF),
