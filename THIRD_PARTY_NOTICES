@@ -1,0 +1,27 @@
+Third-party components bundled in LogaRhythm release builds
+===========================================================
+
+LogaRhythm itself is licensed under the Apache License 2.0 (see LICENSE).
+The release APK also bundles the following components. When you distribute
+such a build, the combined work must comply with their licenses; LogaRhythm's
+source is published at https://github.com/Yasinjahantigh/LogaRhythm-Android.
+
+1. youtubedl-android (library module)
+   Project: https://github.com/junkfood02/youtubedl-android
+   Upstream: https://github.com/yausername/youtubedl-android
+   License: GNU General Public License v3.0
+   Source: see the project links above
+
+2. yt-dlp
+   Project: https://github.com/yt-dlp/yt-dlp
+   License: Unlicense (public domain) for yt-dlp itself; its Python runtime
+   ships with its own license as bundled by youtubedl-android.
+
+3. Python runtime bundled by youtubedl-android
+   Project: https://www.python.org
+   License: PSF License.
+
+The GPL-3.0 text is available at https://www.gnu.org/licenses/gpl-3.0.txt.
+
+Music downloads are intended for content you are allowed to download. Respect
+the terms of service of the source sites and local copyright law.

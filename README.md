@@ -50,6 +50,8 @@ Your library, your play history, your playlists, your edited tags, your lyrics: 
 
 **Full backup and restore** — playlists, favorites, history, lyrics, all in one file.
 
+**Music download** — search YouTube and SoundCloud, save the original-quality audio (M4A or MP3) with artwork and tags into Music/LogaRhythm, then play, open or share from the download history. Metadata and covers come from Deezer, MusicBrainz and iTunes; an optional cookies.txt can unlock age-restricted videos. The player shows the file's container, codec, bitrate and sample rate, while ringtones and voice recordings stay out of the library by default (Settings → Library).
+
 **Home screen widget** — artwork, play/pause, previous, next.
 
 **Persian and English** — complete localization in both directions, RTL layouts, switchable in-app.
@@ -80,6 +82,8 @@ Requires JDK 21 and Android SDK 36. Gradle wrapper included. On Windows: `gradle
 Apache 2.0 — see [LICENSE](LICENSE).
 
 Bundled [Vazirmatn](https://github.com/rastikerdar/vazirmatn) font © 2015 The Vazirmatn Project Authors, licensed under SIL OFL 1.1 — see [OFL.txt](app/src/main/assets/OFL.txt).
+
+The Music Download section uses [youtubedl-android](https://github.com/junkfood02/youtubedl-android) (the maintained fork of yausername's project) and [yt-dlp](https://github.com/yt-dlp/yt-dlp), which are GPL-3.0. LogaRhythm's own code stays Apache-2.0; released APKs bundle those components and [THIRD_PARTY_NOTICES](THIRD_PARTY_NOTICES) lists them in full.
 
 ---
 
@@ -113,6 +117,8 @@ Bundled [Vazirmatn](https://github.com/rastikerdar/vazirmatn) font © 2015 The V
 
 **پشتیبان‌گیری و بازیابی کامل** — پلی‌لیست‌ها، علاقه‌مندی‌ها، تاریخچه، متن ترانه‌ها، همه در یک فایل.
 
+**دانلود موسیقی** — جست‌وجو در یوتیوب و ساندکلود، ذخیرهٔ صدای اصلی (M4A یا MP3) با کاور و تگ در پوشهٔ Music/LogaRhythm و تاریخچهٔ دانلود با پخش، باز کردن و اشتراک‌گذاری. متادیتا و کاور از Deezer، MusicBrainz و iTunes می‌آید؛ یک فایل cookies.txt اختیاری هم می‌تواند ویدیوهای محدودشده را باز کند. پخش‌کننده فرمت، کدک، بیت‌ریت و نرخ نمونه‌برداری فایل را نشان می‌دهد و زنگ‌ها و ضبط‌های صوتی به‌صورت پیش‌فرض از کتابخانه کنار گذاشته می‌شوند (تنظیمات ← کتابخانه).
+
 **ویجت صفحهٔ اصلی** — کاور، پخش/مکث، قبلی، بعدی.
 
 **فارسی و انگلیسی** — هر دو زبان کامل، چیدمان راست‌به‌چپ، قابل‌تغییر از داخل اپ.
@@ -143,6 +149,12 @@ cd LogaRhythm-Android
 نیاز به JDK 21 و Android SDK 36. در ویندوز از `gradlew.bat` استفاده کنید.
 
 > اگر Google Maven در شبکه‌تان قابل‌دسترس نیست، `logarhythm.mirrors=true` را به `local.properties` اضافه کنید.
+
+---
+
+### اجزای شخص ثالث
+
+بخش «دانلود موسیقی» از کتابخانهٔ [youtubedl-android](https://github.com/junkfood02/youtubedl-android) (نسخهٔ fork شدهٔ yausername) و [yt-dlp](https://github.com/yt-dlp/yt-dlp) استفاده می‌کند که تحت GPL-3.0 منتشر شده‌اند. کد خود LogaRhythm همچنان Apache-2.0 است؛ APKهای منتشرشده این اجزا را همراه دارند و فهرست کامل در [THIRD_PARTY_NOTICES](THIRD_PARTY_NOTICES) آمده است.
 
 ---
 

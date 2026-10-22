@@ -20,3 +20,12 @@
 }
 
 -dontwarn org.slf4j.**
+
+# youtubedl-android launches its Python/yt-dlp payload and deserializes GitHub JSON with Jackson.
+-keep class com.yausername.** { *; }
+-keep class com.fasterxml.jackson.** { *; }
+-keep class org.apache.commons.io.** { *; }
+-keep class org.apache.commons.compress.** { *; }
+-dontwarn com.fasterxml.jackson.**
+-dontwarn org.apache.commons.**
+-dontwarn java.beans.**

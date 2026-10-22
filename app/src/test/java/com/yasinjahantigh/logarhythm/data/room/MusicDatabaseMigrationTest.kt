@@ -16,12 +16,12 @@ import org.robolectric.annotation.Config
 class MusicDatabaseMigrationTest {
 
     @Test
-    fun testAllMigrationsArray_hasSevenMigrations() {
-        assertEquals(7, MusicDatabase.ALL_MIGRATIONS.size)
+    fun testAllMigrationsArray_hasEightMigrations() {
+        assertEquals(8, MusicDatabase.ALL_MIGRATIONS.size)
         assertEquals(1, MusicDatabase.ALL_MIGRATIONS[0].startVersion)
         assertEquals(2, MusicDatabase.ALL_MIGRATIONS[0].endVersion)
-        assertEquals(7, MusicDatabase.ALL_MIGRATIONS[6].startVersion)
-        assertEquals(8, MusicDatabase.ALL_MIGRATIONS[6].endVersion)
+        assertEquals(8, MusicDatabase.ALL_MIGRATIONS[7].startVersion)
+        assertEquals(9, MusicDatabase.ALL_MIGRATIONS[7].endVersion)
     }
 
     @Test

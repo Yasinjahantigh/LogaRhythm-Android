@@ -244,10 +244,18 @@ class TrackRepositoryImpl @Inject constructor(
 
     override suspend fun refreshTracks() = withContext(Dispatchers.IO) {
         val minSec = preferencesManager.minTrackLengthSec.first()
-        val excludedFolders = preferencesManager.excludedFolders.first()
+        val showSystemAudio = preferencesManager.showSystemAudio.first()
+        // Turning system audio on drops the built-in folder defaults, but keeps exclusions
+        // the user selected explicitly.
+        val excludedFolders = if (showSystemAudio) {
+            preferencesManager.customExcludedFolders.first()
+        } else {
+            preferencesManager.excludedFolders.first()
+        }
         val scanned = localMusicSource.scanTracks(
             minDurationMs = minSec * 1000L,
-            excludedFolders = excludedFolders
+            excludedFolders = excludedFolders,
+            showSystemAudio = showSystemAudio
         )
         val existing = musicDao.getTracksBySourceType(SourceType.LOCAL.prefix)
         val existingMap = existing.associateBy { it.id }
