@@ -16,4 +16,5 @@ interface PlaylistRepository {
     suspend fun reorderPlaylistTracks(playlistId: Long, fromIndex: Int, toIndex: Int)
     fun isTrackFavorite(trackId: String): Flow<Boolean>
     suspend fun toggleFavorite(trackId: String)
+    suspend fun addFavorites(trackIds: List<String>)
 }

@@ -75,17 +75,19 @@ fun SettingsScreen(
     onNavigateToStats: () -> Unit = {},
     onNavigateToEqualizer: () -> Unit = {},
     onNavigateToLibraryTools: () -> Unit = {},
+    onNavigateToTheme: () -> Unit = {},
     viewModel: SettingsViewModel = hiltViewModel()
 ) {
     val themeMode by viewModel.themeMode.collectAsStateWithLifecycle()
     val appLanguage by viewModel.appLanguage.collectAsStateWithLifecycle()
-    val colorSource by viewModel.colorSource.collectAsStateWithLifecycle()
+    val themeStyle by viewModel.themeStyle.collectAsStateWithLifecycle()
     val cornerRoundness by viewModel.cornerRoundness.collectAsStateWithLifecycle()
     val isCompactMiniPlayer by viewModel.isCompactMiniPlayer.collectAsStateWithLifecycle()
     val minTrackLengthSec by viewModel.minTrackLengthSec.collectAsStateWithLifecycle()
     val excludedFolders by viewModel.excludedFolders.collectAsStateWithLifecycle()
     val allFolders by viewModel.allFolders.collectAsStateWithLifecycle()
     val isLrclibEnabled by viewModel.isLrclibEnabled.collectAsStateWithLifecycle()
+    val isGeniusEnabled by viewModel.isGeniusEnabled.collectAsStateWithLifecycle()
     val fadeSec by viewModel.fadeSec.collectAsStateWithLifecycle()
     val skipSilence by viewModel.skipSilence.collectAsStateWithLifecycle()
     val replayGainMode by viewModel.replayGainMode.collectAsStateWithLifecycle()
@@ -126,7 +128,6 @@ fun SettingsScreen(
     var showHiddenTracksDialog by remember { mutableStateOf(false) }
     var showLanguageDialog by remember { mutableStateOf(false) }
     var showThemeDialog by remember { mutableStateOf(false) }
-    var showColorSourceDialog by remember { mutableStateOf(false) }
     var showCornerDialog by remember { mutableStateOf(false) }
     var showMinLengthDialog by remember { mutableStateOf(false) }
     var showFoldersDialog by remember { mutableStateOf(false) }
@@ -167,20 +168,6 @@ fun SettingsScreen(
             selectedKey = themeMode,
             onSelectKey = viewModel::setThemeMode,
             onDismiss = { showThemeDialog = false }
-        )
-    }
-
-    if (showColorSourceDialog) {
-        SingleChoiceDialog(
-            title = stringResource(R.string.settings_color_source_title),
-            options = listOf(
-                "fixed_color" to stringResource(R.string.settings_color_fixed),
-                "wallpaper" to stringResource(R.string.settings_color_wallpaper),
-                "album_art" to stringResource(R.string.settings_color_album_art)
-            ),
-            selectedKey = colorSource,
-            onSelectKey = viewModel::setColorSource,
-            onDismiss = { showColorSourceDialog = false }
         )
     }
 
@@ -375,17 +362,19 @@ fun SettingsScreen(
                             onClick = { showThemeDialog = true },
                             testTag = "settings_theme_item"
                         )
-                        val colorLabel = when (colorSource) {
-                            "album_art" -> stringResource(R.string.settings_color_album_art)
-                            "wallpaper" -> stringResource(R.string.settings_color_wallpaper)
-                            else -> stringResource(R.string.settings_color_fixed)
+                        val themeStyleLabel = when (themeStyle) {
+                            "oled" -> stringResource(R.string.theme_preset_oled)
+                            "album_art" -> stringResource(R.string.theme_preset_album_art)
+                            "wallpaper" -> stringResource(R.string.theme_preset_wallpaper)
+                            "custom" -> stringResource(R.string.theme_preset_custom)
+                            else -> stringResource(R.string.theme_preset_default)
                         }
                         SettingsActionItem(
-                            title = stringResource(R.string.settings_color_source_title),
-                            subtitle = colorLabel,
+                            title = stringResource(R.string.settings_theme_studio_title),
+                            subtitle = themeStyleLabel,
                             icon = Icons.Filled.ColorLens,
-                            onClick = { showColorSourceDialog = true },
-                            testTag = "settings_color_source_item"
+                            onClick = onNavigateToTheme,
+                            testTag = "settings_theme_studio_item"
                         )
                         val cornerLabel = when (cornerRoundness) {
                             "soft" -> stringResource(R.string.settings_corner_soft)
@@ -527,6 +516,15 @@ fun SettingsScreen(
                             onCheckedChange = viewModel::setLrclibEnabled,
                             rowTag = "settings_lrclib_item",
                             switchTag = "settings_lrclib_switch"
+                        )
+                        SettingsSwitchItem(
+                            title = stringResource(id = R.string.settings_genius_title),
+                            subtitle = stringResource(id = R.string.settings_genius_desc),
+                            icon = Icons.Filled.Lyrics,
+                            checked = isGeniusEnabled,
+                            onCheckedChange = viewModel::setGeniusEnabled,
+                            rowTag = "settings_genius_item",
+                            switchTag = "settings_genius_switch"
                         )
                         SettingsActionItem(
                             title = stringResource(R.string.settings_hidden_lyrics_title),

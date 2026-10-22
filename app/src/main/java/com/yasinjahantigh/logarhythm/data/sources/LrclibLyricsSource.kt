@@ -47,7 +47,9 @@ class LrclibLyricsSource @Inject constructor() : LyricsSource {
         }
 
         if (cleanArtist.isNotBlank()) {
-            val titleOnlyLyrics = fetchFromSearchEndpoint(cleanTitle, "")
+            // Keep the original artist for validation; a title-only query for "Benzin" must not
+            // return Rammstein when the file is Lenna's song.
+            val titleOnlyLyrics = fetchFromSearchEndpoint(cleanTitle, "", expectedArtist = cleanArtist)
             if (titleOnlyLyrics != null && !titleOnlyLyrics.isEmpty) {
                 return@withContext titleOnlyLyrics
             }
@@ -141,7 +143,11 @@ class LrclibLyricsSource @Inject constructor() : LyricsSource {
         return null
     }
 
-    private fun fetchFromSearchEndpoint(cleanTitle: String, cleanArtist: String): Lyrics? {
+    private fun fetchFromSearchEndpoint(
+        cleanTitle: String,
+        cleanArtist: String,
+        expectedArtist: String = cleanArtist
+    ): Lyrics? {
         var connection: HttpURLConnection? = null
         try {
             val query = if (cleanArtist.isNotBlank()) "$cleanTitle $cleanArtist" else cleanTitle
@@ -162,12 +168,13 @@ class LrclibLyricsSource @Inject constructor() : LyricsSource {
                 for (i in 0 until array.length().coerceAtMost(6)) {
                     val item = array.getJSONObject(i)
                     val lyrics = parseLyricsFromJson(item)
-                    if (lyrics != null && !lyrics.isEmpty) {
-                        if (lyrics.isSynced) {
-                            return lyrics
-                        } else if (fallbackPlain == null) {
-                            fallbackPlain = lyrics
-                        }
+                    if (lyrics == null || lyrics.isEmpty) continue
+                    val resultArtist = sanitizeArtist(LyricsResponseFields.text(item, "artistName"))
+                    if (expectedArtist.isNotBlank() && !artistsMatch(expectedArtist, resultArtist)) continue
+                    if (lyrics.isSynced) {
+                        return lyrics
+                    } else if (fallbackPlain == null) {
+                        fallbackPlain = lyrics
                     }
                 }
                 return fallbackPlain
@@ -178,6 +185,22 @@ class LrclibLyricsSource @Inject constructor() : LyricsSource {
         }
         return null
     }
+
+    private fun artistsMatch(expected: String, actual: String): Boolean {
+        val wanted = normalizeArtist(expected)
+        val found = normalizeArtist(actual)
+        if (wanted.isBlank() || found.isBlank()) return false
+        if (wanted == found) return true
+        val wantedTokens = wanted.split(' ')
+        val foundTokens = found.split(' ')
+        return wantedTokens.any { it.length >= 3 && it in foundTokens } ||
+            foundTokens.any { it.length >= 3 && it in wantedTokens } ||
+            wanted.contains(found) || found.contains(wanted)
+    }
+
+    private fun normalizeArtist(value: String): String = value.lowercase()
+        .replace(Regex("""[^\p{L}\p{N}]+"""), " ")
+        .trim()
 
     private fun parseLyricsFromJson(json: JSONObject): Lyrics? {
         val synced = LyricsResponseFields.text(json, "syncedLyrics")

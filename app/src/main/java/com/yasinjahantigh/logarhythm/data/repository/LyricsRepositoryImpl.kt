@@ -3,6 +3,7 @@ package com.yasinjahantigh.logarhythm.data.repository
 import com.yasinjahantigh.logarhythm.data.datastore.PreferencesManager
 import com.yasinjahantigh.logarhythm.data.room.LyricsDao
 import com.yasinjahantigh.logarhythm.data.room.LyricsEntity
+import com.yasinjahantigh.logarhythm.data.sources.GeniusLyricsSource
 import com.yasinjahantigh.logarhythm.data.sources.LocalFileLyricsSource
 import com.yasinjahantigh.logarhythm.data.sources.LrclibLyricsSource
 import com.yasinjahantigh.logarhythm.data.sources.LyricsOvhLyricsSource
@@ -33,6 +34,7 @@ class LyricsRepositoryImpl @Inject constructor(
     private val neteaseLyricsSource: NeteaseLyricsSource,
     private val kugouLyricsSource: KugouLyricsSource,
     private val lyricsOvhLyricsSource: LyricsOvhLyricsSource,
+    private val geniusLyricsSource: GeniusLyricsSource,
     private val preferencesManager: PreferencesManager
 ) : LyricsRepository {
 
@@ -65,17 +67,17 @@ class LyricsRepositoryImpl @Inject constructor(
             return@withContext localLyrics
         }
 
-        // Online banks, synced results first
-        val isOnlineEnabled = preferencesManager.isLrclibEnabled.first()
-        if (isOnlineEnabled) {
-            val foundLyrics = searchAllOnlineSources(track)
-            if (foundLyrics != null && !foundLyrics.lyrics.isEmpty) {
-                val sourcedLyrics = foundLyrics.lyrics.copy(source = foundLyrics.sourceName)
-                cacheLyrics(track.id, sourcedLyrics, foundLyrics.sourceName)
-                // Loading/searching must never mutate shared audio files in the background.
-                // Embedded writes are reserved for explicit user save actions after consent.
-                return@withContext sourcedLyrics
-            }
+        // Online banks, synced results first. Genius has its own switch.
+        val foundLyrics = searchAllOnlineSources(
+            track,
+            includeGeneralSources = preferencesManager.isLrclibEnabled.first()
+        )
+        if (foundLyrics != null && !foundLyrics.lyrics.isEmpty) {
+            val sourcedLyrics = foundLyrics.lyrics.copy(source = foundLyrics.sourceName)
+            cacheLyrics(track.id, sourcedLyrics, foundLyrics.sourceName)
+            // Loading/searching must never mutate shared audio files in the background.
+            // Embedded writes are reserved for explicit user save actions after consent.
+            return@withContext sourcedLyrics
         }
 
         null
@@ -107,63 +109,81 @@ class LyricsRepositoryImpl @Inject constructor(
     private data class LyricsSearchResult(val lyrics: Lyrics, val sourceName: String)
 
     /** Online providers, synced results first, with the first plain result kept as a fallback. */
-    private suspend fun searchAllOnlineSources(track: Track): LyricsSearchResult? {
+    private suspend fun searchAllOnlineSources(
+        track: Track,
+        includeGeneralSources: Boolean = true
+    ): LyricsSearchResult? {
         var fallbackPlainLyrics: LyricsSearchResult? = null
 
-        try {
-            val lrclibRes = lrclibLyricsSource.getLyrics(track)
-            if (lrclibRes != null && !lrclibRes.isEmpty) {
-                if (lrclibRes.isSynced) {
-                    return LyricsSearchResult(lrclibRes, "lrclib")
-                } else if (fallbackPlainLyrics == null) {
-                    fallbackPlainLyrics = LyricsSearchResult(lrclibRes, "lrclib")
+        if (includeGeneralSources) {
+            try {
+                val lrclibRes = lrclibLyricsSource.getLyrics(track)
+                if (lrclibRes != null && !lrclibRes.isEmpty) {
+                    if (lrclibRes.isSynced) {
+                        return LyricsSearchResult(lrclibRes, "lrclib")
+                    } else if (fallbackPlainLyrics == null) {
+                        fallbackPlainLyrics = LyricsSearchResult(lrclibRes, "lrclib")
+                    }
                 }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
             }
-        } catch (cancelled: CancellationException) {
-            throw cancelled
-        } catch (_: Exception) {
-        }
 
-        try {
-            val neteaseRes = neteaseLyricsSource.getLyrics(track)
-            if (neteaseRes != null && !neteaseRes.isEmpty) {
-                if (neteaseRes.isSynced) {
-                    return LyricsSearchResult(neteaseRes, "netease")
-                } else if (fallbackPlainLyrics == null) {
-                    fallbackPlainLyrics = LyricsSearchResult(neteaseRes, "netease")
+            try {
+                val neteaseRes = neteaseLyricsSource.getLyrics(track)
+                if (neteaseRes != null && !neteaseRes.isEmpty) {
+                    if (neteaseRes.isSynced) {
+                        return LyricsSearchResult(neteaseRes, "netease")
+                    } else if (fallbackPlainLyrics == null) {
+                        fallbackPlainLyrics = LyricsSearchResult(neteaseRes, "netease")
+                    }
                 }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
             }
-        } catch (cancelled: CancellationException) {
-            throw cancelled
-        } catch (_: Exception) {
-        }
 
-        try {
-            val kugouRes = kugouLyricsSource.getLyrics(track)
-            if (kugouRes != null && !kugouRes.isEmpty) {
-                if (kugouRes.isSynced) {
-                    return LyricsSearchResult(kugouRes, "kugou")
-                } else if (fallbackPlainLyrics == null) {
-                    fallbackPlainLyrics = LyricsSearchResult(kugouRes, "kugou")
+            try {
+                val kugouRes = kugouLyricsSource.getLyrics(track)
+                if (kugouRes != null && !kugouRes.isEmpty) {
+                    if (kugouRes.isSynced) {
+                        return LyricsSearchResult(kugouRes, "kugou")
+                    } else if (fallbackPlainLyrics == null) {
+                        fallbackPlainLyrics = LyricsSearchResult(kugouRes, "kugou")
+                    }
                 }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
             }
-        } catch (cancelled: CancellationException) {
-            throw cancelled
-        } catch (_: Exception) {
+
+            if (fallbackPlainLyrics != null) {
+                return fallbackPlainLyrics
+            }
+
+            try {
+                val ovhRes = lyricsOvhLyricsSource.getLyrics(track)
+                if (ovhRes != null && !ovhRes.isEmpty) {
+                    return LyricsSearchResult(ovhRes, "lyrics_ovh")
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+            }
         }
 
-        if (fallbackPlainLyrics != null) {
-            return fallbackPlainLyrics
-        }
-
-        try {
-            val ovhRes = lyricsOvhLyricsSource.getLyrics(track)
-            if (ovhRes != null && !ovhRes.isEmpty) {
-                return LyricsSearchResult(ovhRes, "lyrics_ovh")
+        // Genius has no timed lyrics, so it is only asked when every other enabled provider came back empty.
+        if (preferencesManager.isGeniusEnabled.first()) {
+            try {
+                val geniusRes = geniusLyricsSource.getLyrics(track)
+                if (geniusRes != null && !geniusRes.isEmpty) {
+                    return LyricsSearchResult(geniusRes, "genius")
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
             }
-        } catch (cancelled: CancellationException) {
-            throw cancelled
-        } catch (_: Exception) {
         }
 
         return null

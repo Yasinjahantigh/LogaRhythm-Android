@@ -19,6 +19,7 @@ import com.yasinjahantigh.logarhythm.feature.search.SearchScreen
 import com.yasinjahantigh.logarhythm.feature.settings.SettingsScreen
 import com.yasinjahantigh.logarhythm.feature.tools.LibraryToolsScreen
 import com.yasinjahantigh.logarhythm.feature.stats.StatsScreen
+import com.yasinjahantigh.logarhythm.feature.theme.ThemeScreen
 
 @Composable
 fun MusicNavGraph(
@@ -86,8 +87,14 @@ fun MusicNavGraph(
                 },
                 onNavigateToLibraryTools = {
                     navController.navigate(NavDestination.ROUTE_LIBRARY_TOOLS)
+                },
+                onNavigateToTheme = {
+                    navController.navigate(NavDestination.ROUTE_THEME)
                 }
             )
+        }
+        composable(NavDestination.ROUTE_THEME) {
+            ThemeScreen(onNavigateBack = { navController.popBackStack() })
         }
         composable(NavDestination.ROUTE_LIBRARY_TOOLS) {
             LibraryToolsScreen(onNavigateBack = { navController.popBackStack() })

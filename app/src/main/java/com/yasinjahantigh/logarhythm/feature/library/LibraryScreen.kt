@@ -1,8 +1,10 @@
 package com.yasinjahantigh.logarhythm.feature.library
 
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -16,9 +18,15 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
+import androidx.compose.material.icons.automirrored.filled.PlaylistAddCheck
+import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.automirrored.filled.Sort
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -107,7 +115,12 @@ fun LibraryScreen(
     }
 
     var selectedTrackForMenu by remember { mutableStateOf<Track?>(null) }
-    var selectedTrackForAddToPlaylist by remember { mutableStateOf<Track?>(null) }
+    var tracksForAddToPlaylist by remember { mutableStateOf<List<Track>?>(null) }
+    var selectionMode by remember { mutableStateOf(false) }
+    var selectedTrackIds by remember { mutableStateOf<Set<String>>(emptySet()) }
+    val selectedTracks = remember(uiState.tracks, selectedTrackIds) {
+        uiState.tracks.filter { it.id in selectedTrackIds }
+    }
     var selectedTrackForEdit by remember { mutableStateOf<Track?>(null) }
     var editTrackError by remember { mutableStateOf(false) }
     var editTrackSaving by remember { mutableStateOf(false) }
@@ -136,15 +149,40 @@ fun LibraryScreen(
         )
     }
 
-    selectedTrackForAddToPlaylist?.let { track ->
+    fun exitSelection() {
+        selectionMode = false
+        selectedTrackIds = emptySet()
+    }
+
+    fun toggleSelection(track: Track) {
+        val next = if (track.id in selectedTrackIds) selectedTrackIds - track.id else selectedTrackIds + track.id
+        selectedTrackIds = next
+        if (next.isEmpty()) selectionMode = false
+    }
+
+    fun startSelection(track: Track) {
+        selectionMode = true
+        selectedTrackIds = setOf(track.id)
+    }
+
+    BackHandler(enabled = selectionMode) { exitSelection() }
+
+    tracksForAddToPlaylist?.let { tracks ->
         AddToPlaylistDialog(
             playlists = allPlaylists,
-            onDismiss = { selectedTrackForAddToPlaylist = null },
+            onDismiss = { tracksForAddToPlaylist = null },
             onSelectPlaylist = { target ->
-                viewModel.addTrackToPlaylist(target.id, track.id)
-                selectedTrackForAddToPlaylist = null
+                viewModel.addTracksToPlaylist(target.id, tracks.map { it.id })
+                tracksForAddToPlaylist = null
+                exitSelection()
                 scope.launch {
-                    snackbarHostState.showSnackbar(context.getString(R.string.added_to_playlist, target.name))
+                    if (tracks.size == 1) {
+                        snackbarHostState.showSnackbar(context.getString(R.string.added_to_playlist, target.name))
+                    } else {
+                        snackbarHostState.showSnackbar(
+                            context.getString(R.string.selection_added_to_playlist, tracks.size, target.name)
+                        )
+                    }
                 }
             },
             onCreatePlaylist = { name -> viewModel.createPlaylist(name) }
@@ -167,7 +205,7 @@ fun LibraryScreen(
                     snackbarHostState.showSnackbar(context.getString(R.string.added_to_queue))
                 }
             },
-            onAddToPlaylist = { selectedTrackForAddToPlaylist = track },
+            onAddToPlaylist = { tracksForAddToPlaylist = listOf(track) },
             onDeleteTrack = {
                 mediaStoreConsent.delete(track, onApproved = { approvedTrack ->
                     viewModel.deleteTrack(approvedTrack) { deleted ->
@@ -234,81 +272,182 @@ fun LibraryScreen(
             )
         }
     ) { innerPadding ->
-        Column(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
-            // Header: one big search pill (search is not a tab any more) with sort + rescan beside it.
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .statusBarsPadding()
-                    .padding(start = 16.dp, end = 6.dp, top = 10.dp, bottom = 4.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                SearchPill(
-                    onClick = onNavigateToSearch,
-                    modifier = Modifier.weight(1f),
-                    tag = "library_search_pill"
-                )
-                if (uiState.hasPermission) {
-                    IconButton(onClick = { showSortSheet = true }, modifier = Modifier.testTag("sort_action_button")) {
-                        Icon(Icons.AutoMirrored.Filled.Sort, contentDescription = stringResource(R.string.sort_by_title))
-                    }
-                    IconButton(
-                        onClick = { viewModel.refresh(true) },
-                        enabled = !uiState.isRefreshing,
-                        modifier = Modifier.testTag("refresh_action_button")
+        Box(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
+            Column(modifier = Modifier.fillMaxSize()) {
+                if (selectionMode) {
+                    SelectionTopBar(
+                        selectedCount = selectedTracks.size,
+                        allSelected = uiState.tracks.isNotEmpty() && selectedTracks.size == uiState.tracks.size,
+                        onClose = ::exitSelection,
+                        onToggleSelectAll = {
+                            if (selectedTracks.size == uiState.tracks.size) {
+                                exitSelection()
+                            } else {
+                                selectedTrackIds = uiState.tracks.map { it.id }.toSet()
+                            }
+                        }
+                    )
+                } else {
+                    // Header: one big search pill (search is not a tab any more) with sort + rescan beside it.
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .statusBarsPadding()
+                            .padding(start = 16.dp, end = 6.dp, top = 10.dp, bottom = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        if (uiState.isRefreshing) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(20.dp),
-                                strokeWidth = 2.dp,
-                                color = MaterialTheme.colorScheme.primary
-                            )
-                        } else {
-                            Icon(Icons.Default.Refresh, contentDescription = stringResource(R.string.cd_rescan))
+                        SearchPill(
+                            onClick = onNavigateToSearch,
+                            modifier = Modifier.weight(1f),
+                            tag = "library_search_pill"
+                        )
+                        if (uiState.hasPermission) {
+                            IconButton(onClick = { showSortSheet = true }, modifier = Modifier.testTag("sort_action_button")) {
+                                Icon(Icons.AutoMirrored.Filled.Sort, contentDescription = stringResource(R.string.sort_by_title))
+                            }
+                            IconButton(
+                                onClick = { viewModel.refresh(true) },
+                                enabled = !uiState.isRefreshing,
+                                modifier = Modifier.testTag("refresh_action_button")
+                            ) {
+                                if (uiState.isRefreshing) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(20.dp),
+                                        strokeWidth = 2.dp,
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                } else {
+                                    Icon(Icons.Default.Refresh, contentDescription = stringResource(R.string.cd_rescan))
+                                }
+                            }
+                        }
+                    }
+                }
+
+                when {
+                    !uiState.hasPermission -> LibraryPermissionState(onRequestPermission = { permissionLauncher.launch(PermissionUtils.getRequiredAudioPermission()) })
+                    uiState.isLoading && uiState.tracks.isEmpty() -> {
+                        Column(modifier = Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+                            CircularProgressIndicator()
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Text(text = stringResource(R.string.library_scanning), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                    uiState.tracks.isEmpty() -> LibraryEmptyState(onRescan = { viewModel.refresh(false) })
+                    else -> {
+                        LibraryCategoryRail(
+                            selected = uiState.selectedTab,
+                            counts = categoryCounts,
+                            onSelect = { tab ->
+                                exitSelection()
+                                viewModel.selectTab(tab)
+                            }
+                        )
+                        PullToRefreshBox(
+                            isRefreshing = uiState.isRefreshing,
+                            onRefresh = { viewModel.refresh(true) },
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            when (uiState.selectedTab) {
+                                LibraryTab.SONGS -> SongsTabContent(
+                                    tracks = uiState.tracks,
+                                    currentTrackId = currentTrack?.id,
+                                    isPlaying = isPlaying,
+                                    onTrackClick = viewModel::playTrack,
+                                    onTrackMenuClick = { selectedTrackForMenu = it },
+                                    onPlayAll = viewModel::playAll,
+                                    onShuffleAll = viewModel::shuffleAll,
+                                    selectionMode = selectionMode,
+                                    selectedTrackIds = selectedTrackIds,
+                                    onTrackLongClick = { track ->
+                                        if (selectionMode) toggleSelection(track) else startSelection(track)
+                                    },
+                                    onToggleSelect = ::toggleSelection
+                                )
+                                LibraryTab.ALBUMS -> AlbumsTabContent(albums = uiState.albums, onAlbumClick = onNavigateToAlbum)
+                                LibraryTab.ARTISTS -> ArtistsTabContent(artists = uiState.artists, onArtistClick = onNavigateToArtist)
+                                LibraryTab.PLAYLISTS -> PlaylistsTabContent(onPlaylistClick = onNavigateToPlaylist)
+                                LibraryTab.GENRES -> GenresTabContent(genres = uiState.genres, onGenreClick = onNavigateToGenre)
+                                LibraryTab.FOLDERS -> FoldersTabContent(folders = uiState.folders, onFolderClick = onNavigateToFolder)
+                            }
                         }
                     }
                 }
             }
 
-            when {
-                !uiState.hasPermission -> LibraryPermissionState(onRequestPermission = { permissionLauncher.launch(PermissionUtils.getRequiredAudioPermission()) })
-                uiState.isLoading && uiState.tracks.isEmpty() -> {
-                    Column(modifier = Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-                        CircularProgressIndicator()
-                        Spacer(modifier = Modifier.height(16.dp))
-                        Text(text = stringResource(R.string.library_scanning), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                }
-                uiState.tracks.isEmpty() -> LibraryEmptyState(onRescan = { viewModel.refresh(false) })
-                else -> {
-                    LibraryCategoryRail(
-                        selected = uiState.selectedTab,
-                        counts = categoryCounts,
-                        onSelect = viewModel::selectTab
-                    )
-                    PullToRefreshBox(
-                        isRefreshing = uiState.isRefreshing,
-                        onRefresh = { viewModel.refresh(true) },
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        when (uiState.selectedTab) {
-                            LibraryTab.SONGS -> SongsTabContent(
-                                tracks = uiState.tracks,
-                                currentTrackId = currentTrack?.id,
-                                isPlaying = isPlaying,
-                                onTrackClick = viewModel::playTrack,
-                                onTrackMenuClick = { selectedTrackForMenu = it },
-                                onPlayAll = viewModel::playAll,
-                                onShuffleAll = viewModel::shuffleAll
-                            )
-                            LibraryTab.ALBUMS -> AlbumsTabContent(albums = uiState.albums, onAlbumClick = onNavigateToAlbum)
-                            LibraryTab.ARTISTS -> ArtistsTabContent(artists = uiState.artists, onArtistClick = onNavigateToArtist)
-                            LibraryTab.PLAYLISTS -> PlaylistsTabContent(onPlaylistClick = onNavigateToPlaylist)
-                            LibraryTab.GENRES -> GenresTabContent(genres = uiState.genres, onGenreClick = onNavigateToGenre)
-                            LibraryTab.FOLDERS -> FoldersTabContent(folders = uiState.folders, onFolderClick = onNavigateToFolder)
-                        }
-                    }
-                }
+            if (selectionMode && selectedTracks.isNotEmpty()) {
+                SelectionActionBar(
+                    actions = listOf(
+                        SelectionAction(
+                            icon = Icons.Filled.PlayArrow,
+                            label = stringResource(R.string.selection_play),
+                            onClick = {
+                                viewModel.playTracks(selectedTracks)
+                                exitSelection()
+                            }
+                        ),
+                        SelectionAction(
+                            icon = Icons.AutoMirrored.Filled.QueueMusic,
+                            label = stringResource(R.string.action_play_next),
+                            onClick = {
+                                viewModel.playNext(selectedTracks)
+                                scope.launch {
+                                    snackbarHostState.showSnackbar(
+                                        context.getString(R.string.selection_playing_next, selectedTracks.size)
+                                    )
+                                }
+                                exitSelection()
+                            }
+                        ),
+                        SelectionAction(
+                            icon = Icons.AutoMirrored.Filled.PlaylistAdd,
+                            label = stringResource(R.string.action_add_to_queue),
+                            onClick = {
+                                viewModel.addToQueue(selectedTracks)
+                                scope.launch {
+                                    snackbarHostState.showSnackbar(
+                                        context.getString(R.string.selection_added_to_queue, selectedTracks.size)
+                                    )
+                                }
+                                exitSelection()
+                            }
+                        ),
+                        SelectionAction(
+                            icon = Icons.AutoMirrored.Filled.PlaylistAddCheck,
+                            label = stringResource(R.string.action_add_to_playlist),
+                            onClick = { tracksForAddToPlaylist = selectedTracks }
+                        ),
+                        SelectionAction(
+                            icon = Icons.Filled.Favorite,
+                            label = stringResource(R.string.selection_favorite),
+                            onClick = {
+                                viewModel.addTracksToFavorites(selectedTracks)
+                                scope.launch {
+                                    snackbarHostState.showSnackbar(
+                                        context.getString(R.string.selection_added_to_favorites, selectedTracks.size)
+                                    )
+                                }
+                                exitSelection()
+                            }
+                        ),
+                        SelectionAction(
+                            icon = Icons.Filled.VisibilityOff,
+                            label = stringResource(R.string.action_hide_track),
+                            onClick = {
+                                viewModel.hideTracks(selectedTracks)
+                                scope.launch {
+                                    snackbarHostState.showSnackbar(
+                                        context.getString(R.string.selection_hidden, selectedTracks.size)
+                                    )
+                                }
+                                exitSelection()
+                            }
+                        )
+                    ),
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(bottom = LocalPlaybackBottomPadding.current + 10.dp)
+                )
             }
         }
     }

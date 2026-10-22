@@ -164,8 +164,43 @@ class LibraryViewModel @Inject constructor(
     fun playNext(track: Track) = playerController.playNext(track)
     fun addToQueue(track: Track) = playerController.addToQueue(track)
 
+    fun playTracks(tracks: List<Track>) {
+        if (tracks.isEmpty()) return
+        playerController.setShuffleEnabled(false)
+        playerController.play(tracks, 0)
+    }
+
+    /** Reversed insertion keeps the visible selection order when each item lands right after the current song. */
+    fun playNext(tracks: List<Track>) {
+        tracks.asReversed().forEach(playerController::playNext)
+    }
+
+    fun addToQueue(tracks: List<Track>) {
+        tracks.forEach(playerController::addToQueue)
+    }
+
     fun addTrackToPlaylist(playlistId: Long, trackId: String) {
         viewModelScope.launch { playlistRepository.addTrackToPlaylist(playlistId, trackId) }
+    }
+
+    fun addTracksToPlaylist(playlistId: Long, trackIds: List<String>) {
+        viewModelScope.launch {
+            trackIds.forEach { playlistRepository.addTrackToPlaylist(playlistId, it) }
+        }
+    }
+
+    fun addTracksToFavorites(tracks: List<Track>) {
+        viewModelScope.launch {
+            playlistRepository.addFavorites(tracks.map { it.id })
+        }
+    }
+
+    fun hideTracks(tracks: List<Track>) {
+        viewModelScope.launch {
+            val currentId = currentTrack.value?.id
+            if (tracks.any { it.id == currentId }) playerController.next()
+            tracks.forEach { trackRepository.hideTrack(it.id) }
+        }
     }
 
     fun updateTrackMetadata(
