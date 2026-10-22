@@ -1,15 +1,18 @@
 package com.yasinjahantigh.logarhythm.data.download
 
+import android.Manifest
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
+import androidx.core.content.ContextCompat
 import androidx.work.ForegroundInfo
 import com.yasinjahantigh.logarhythm.MainActivity
 import com.yasinjahantigh.logarhythm.R
@@ -40,6 +43,7 @@ class DownloadNotifications @Inject constructor(
     }
 
     fun notifyFinished(downloadId: String, title: String, success: Boolean, message: String?) {
+        if (!canPostNotifications()) return
         val builder = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_music_placeholder)
             .setContentTitle(
@@ -52,8 +56,10 @@ class DownloadNotifications @Inject constructor(
             .setAutoCancel(true)
             .setContentIntent(openAppIntent())
         if (!message.isNullOrBlank()) builder.setContentText(message)
-        runCatching {
+        try {
             NotificationManagerCompat.from(context).notify(notificationId(downloadId), builder.build())
+        } catch (_: SecurityException) {
+            // Permission can be revoked between the check and the actual post.
         }
     }
 
@@ -112,6 +118,13 @@ class DownloadNotifications @Inject constructor(
         },
         PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
     )
+
+    private fun canPostNotifications(): Boolean =
+        Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
+            ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.POST_NOTIFICATIONS
+            ) == PackageManager.PERMISSION_GRANTED
 
     private fun notificationId(downloadId: String): Int = downloadId.hashCode() and 0x7fffffff
 
