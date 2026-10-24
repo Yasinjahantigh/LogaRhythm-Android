@@ -87,7 +87,7 @@ fun AlbumDetailScreen(
             onAddToQueue = { viewModel.addToQueue(menuTrack) },
             onAddToPlaylist = { showAddToPlaylistDialog = true },
             onGoToArtist = if (onNavigateToArtist != null && menuTrack.artist.isNotBlank() && menuTrack.artist != "Unknown Artist") {
-                { onNavigateToArtist(menuTrack.artist) }
+                { artistName -> onNavigateToArtist(artistName) }
             } else null,
             onHideTrack = {
                 viewModel.hideTrack(menuTrack)
@@ -144,7 +144,11 @@ fun AlbumDetailScreen(
                     title = displayAlbumName,
                     subtitle = displayArtistName,
                     onSubtitleClick = onNavigateToArtist?.let { nav -> { nav(displayArtistName) } },
-                    meta = stringResource(R.string.album_track_count, tracks.size),
+                    meta = if ((album?.year ?: 0) > 0) {
+                        "${album!!.year} • ${stringResource(R.string.album_track_count, tracks.size)}"
+                    } else {
+                        stringResource(R.string.album_track_count, tracks.size)
+                    },
                     artworkUri = album?.artworkUri ?: tracks.firstOrNull()?.artworkUri,
                     onBack = onNavigateBack,
                     onPlay = viewModel::playAll,

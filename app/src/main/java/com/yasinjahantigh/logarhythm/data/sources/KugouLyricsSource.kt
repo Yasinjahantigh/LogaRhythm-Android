@@ -1,125 +1,96 @@
 package com.yasinjahantigh.logarhythm.data.sources
 
 import android.util.Base64
+import com.yasinjahantigh.logarhythm.data.lyrics.LyricsHttpClient
+import com.yasinjahantigh.logarhythm.data.lyrics.LyricsSearchResult
+import com.yasinjahantigh.logarhythm.data.lyrics.OnlineLyricsSource
+import com.yasinjahantigh.logarhythm.data.lyrics.encode
 import com.yasinjahantigh.logarhythm.domain.lyrics.LrcParser
-import com.yasinjahantigh.logarhythm.domain.model.Lyrics
-import com.yasinjahantigh.logarhythm.domain.model.Track
-import com.yasinjahantigh.logarhythm.domain.source.LyricsSource
+import com.yasinjahantigh.logarhythm.domain.lyrics.LyricsQuery
+import com.yasinjahantigh.logarhythm.domain.lyrics.LyricsSourceStatus
+import com.yasinjahantigh.logarhythm.domain.lyrics.LyricsTextNormalizer
+import com.yasinjahantigh.logarhythm.domain.model.LyricsCandidate
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
-import java.io.BufferedReader
-import java.net.HttpURLConnection
-import java.net.URL
-import java.net.URLEncoder
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/**
- * Online lyrics provider querying Kugou Music API.
- * Provides a massive global catalog of synced .lrc lyrics.
- */
+/** Kugou's public lyric search; useful in networks where it is reachable, opt-in elsewhere. */
 @Singleton
-class KugouLyricsSource @Inject constructor() : LyricsSource {
+class KugouLyricsSource @Inject constructor(
+    private val http: LyricsHttpClient
+) : OnlineLyricsSource {
 
-    override val name: String = "kugou"
+    override val id: String = "kugou"
+    override val displayName: String = "Kugou"
 
-    companion object {
-        private const val SEARCH_URL = "https://krcs.kugou.com/search"
-        private const val DOWNLOAD_URL = "https://krcs.kugou.com/download"
-        private const val USER_AGENT = "LogaRhythm (Android)"
-        private const val TIMEOUT_MS = 6000
-    }
+    override suspend fun search(query: LyricsQuery): LyricsSearchResult = withContext(Dispatchers.IO) {
+        val title = LyricsTextNormalizer.queryTitle(query.title)
+        if (title.isBlank()) return@withContext LyricsSearchResult(status = LyricsSourceStatus.EMPTY)
+        val artist = LyricsTextNormalizer.queryArtist(query.artist)
+        val keyword = listOf(title, artist).filter { it.isNotBlank() }.joinToString(" ")
 
-    override suspend fun getLyrics(track: Track): Lyrics? = withContext(Dispatchers.IO) {
-        val cleanTitle = track.title
-            .replace(Regex("""^\d+[\s.\-_]+"""), "")
-            .replace(Regex("""\.(mp3|m4a|flac|wav|ogg|aac)$""", RegexOption.IGNORE_CASE), "")
-            .replace(Regex("""\s*[\(\[](feat|ft)\.?\s+[^\)\]]+[\)\]]""", RegexOption.IGNORE_CASE), "")
-            .trim()
-        if (cleanTitle.isBlank()) return@withContext null
-
-        val cleanArtist = track.artist
-            .split(Regex("[,;&]|\\s+(feat|ft)\\.?\\s+", RegexOption.IGNORE_CASE))
-            .firstOrNull()
-            ?.trim()
-            ?.takeIf { !it.equals("Unknown Artist", ignoreCase = true) && !it.equals("<unknown>", ignoreCase = true) }
-            .orEmpty()
-
-        try {
-            val query = if (cleanArtist.isNotBlank()) "$cleanTitle $cleanArtist" else cleanTitle
-            val (candidateId, accessKey) = searchCandidate(query, track.durationMs) ?: return@withContext null
-            val rawLrc = downloadLrc(candidateId, accessKey) ?: return@withContext null
-            val parsed = LrcParser.parse(rawLrc)
-            if (!parsed.isEmpty) {
-                return@withContext parsed
-            }
-        } catch (_: Exception) {
+        val search = http.get(
+            "https://krcs.kugou.com/search?ver=1&man=yes&client=mobi&keyword=${encode(keyword)}" +
+                if (query.durationMs > 0) "&duration=${query.durationMs}" else "",
+            mapOf("Accept" to "application/json")
+        )
+        when {
+            search.blocked -> return@withContext LyricsSearchResult(status = LyricsSourceStatus.BLOCKED, detail = search.error)
+            search.timedOut -> return@withContext LyricsSearchResult(status = LyricsSourceStatus.TIMEOUT, detail = search.error)
+            !search.ok -> return@withContext LyricsSearchResult(
+                status = if (search.code == 404) LyricsSourceStatus.EMPTY else LyricsSourceStatus.ERROR,
+                detail = search.error
+            )
         }
 
-        null
-    }
-
-    private fun searchCandidate(keyword: String, durationMs: Long): Pair<String, String>? {
-        var connection: HttpURLConnection? = null
         try {
-            val encodedKeyword = URLEncoder.encode(keyword, "UTF-8")
-            val durationParam = if (durationMs > 0) durationMs.toString() else ""
-            val url = URL("$SEARCH_URL?ver=1&man=yes&client=mobi&keyword=$encodedKeyword&duration=$durationParam")
-
-            connection = (url.openConnection() as HttpURLConnection).apply {
-                requestMethod = "GET"
-                connectTimeout = TIMEOUT_MS
-                readTimeout = TIMEOUT_MS
-                setRequestProperty("User-Agent", USER_AGENT)
-                setRequestProperty("Accept", "application/json")
-            }
-
-            if (connection.responseCode == HttpURLConnection.HTTP_OK) {
-                val responseText = connection.inputStream.bufferedReader().use(BufferedReader::readText)
-                val json = JSONObject(responseText)
-                val candidates = json.optJSONArray("candidates") ?: return null
-                if (candidates.length() > 0) {
-                    val first = candidates.getJSONObject(0)
-                    val id = LyricsResponseFields.text(first, "id")
-                    val accessKey = LyricsResponseFields.text(first, "accesskey")
-                    if (id.isNotBlank() && accessKey.isNotBlank()) {
-                        return Pair(id, accessKey)
-                    }
+            val candidatesJson = JSONObject(search.body).optJSONArray("candidates")
+                ?: return@withContext LyricsSearchResult(status = LyricsSourceStatus.EMPTY)
+            val candidates = buildList {
+                for (i in 0 until candidatesJson.length().coerceAtMost(3)) {
+                    val item = candidatesJson.optJSONObject(i) ?: continue
+                    val songId = LyricsResponseFields.text(item, "id")
+                    val accessKey = LyricsResponseFields.text(item, "accesskey")
+                    if (songId.isBlank() || accessKey.isBlank()) continue
+                    val rawLrc = downloadLrc(songId, accessKey) ?: continue
+                    val parsed = LrcParser.parse(rawLrc)
+                    if (parsed.isEmpty) continue
+                    add(
+                        LyricsCandidate(
+                            id = "kugou_$songId",
+                            trackName = LyricsResponseFields.text(item, "songname").ifBlank { title },
+                            artistName = LyricsResponseFields.text(item, "singername").ifBlank { artist },
+                            albumName = LyricsResponseFields.text(item, "albumname"),
+                            durationMs = LyricsResponseFields.text(item, "duration").toLongOrNull() ?: 0L,
+                            isSynced = parsed.isSynced,
+                            sourceName = displayName,
+                            providerId = id,
+                            lyrics = parsed
+                        )
+                    )
                 }
             }
-        } catch (_: Exception) {
-        } finally {
-            connection?.disconnect()
+            LyricsSearchResult(
+                candidates = candidates,
+                status = if (candidates.isEmpty()) LyricsSourceStatus.EMPTY else LyricsSourceStatus.OK
+            )
+        } catch (error: Exception) {
+            LyricsSearchResult(status = LyricsSourceStatus.ERROR, detail = error.message)
         }
-        return null
     }
 
-    private fun downloadLrc(id: String, accessKey: String): String? {
-        var connection: HttpURLConnection? = null
-        try {
-            val url = URL("$DOWNLOAD_URL?ver=1&client=mobi&id=$id&accesskey=$accessKey&fmt=lrc&charset=utf8")
-            connection = (url.openConnection() as HttpURLConnection).apply {
-                requestMethod = "GET"
-                connectTimeout = TIMEOUT_MS
-                readTimeout = TIMEOUT_MS
-                setRequestProperty("User-Agent", USER_AGENT)
-                setRequestProperty("Accept", "application/json")
-            }
-
-            if (connection.responseCode == HttpURLConnection.HTTP_OK) {
-                val responseText = connection.inputStream.bufferedReader().use(BufferedReader::readText)
-                val json = JSONObject(responseText)
-                val base64Content = LyricsResponseFields.text(json, "content")
-                if (base64Content.isNotBlank()) {
-                    val decodedBytes = Base64.decode(base64Content, Base64.DEFAULT)
-                    return String(decodedBytes, Charsets.UTF_8)
-                }
-            }
-        } catch (_: Exception) {
-        } finally {
-            connection?.disconnect()
-        }
-        return null
+    private suspend fun downloadLrc(id: String, accessKey: String): String? {
+        val response = http.get(
+            "https://krcs.kugou.com/download?ver=1&client=mobi&id=$id&accesskey=$accessKey&fmt=lrc&charset=utf8",
+            mapOf("Accept" to "application/json")
+        )
+        if (!response.ok) return null
+        val content = runCatching {
+            LyricsResponseFields.text(JSONObject(response.body), "content")
+        }.getOrNull()
+        if (content.isNullOrBlank()) return null
+        return runCatching { String(Base64.decode(content, Base64.DEFAULT), Charsets.UTF_8) }.getOrNull()
     }
 }

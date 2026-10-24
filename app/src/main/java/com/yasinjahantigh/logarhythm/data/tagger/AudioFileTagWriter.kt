@@ -7,6 +7,7 @@ import android.provider.MediaStore
 import android.util.Log
 import com.yasinjahantigh.logarhythm.data.tagger.engine.AudioTags
 import com.yasinjahantigh.logarhythm.data.tagger.engine.TagEdit
+import com.yasinjahantigh.logarhythm.data.tagger.engine.TagEditVerifier
 import com.yasinjahantigh.logarhythm.data.tagger.engine.TagEngines
 import com.yasinjahantigh.logarhythm.data.tagger.engine.UnsupportedTagException
 import com.yasinjahantigh.logarhythm.domain.model.Track
@@ -28,6 +29,8 @@ sealed interface TagWriteOutcome {
     data class Unsupported(val reason: String) : TagWriteOutcome
     /** Android refused write access. */
     data object Denied : TagWriteOutcome
+    /** The cache partition cannot hold the backup + rewritten copy. */
+    data object NoSpace : TagWriteOutcome
     data object Failed : TagWriteOutcome
 
     val isSuccess: Boolean get() = this is Success
@@ -64,19 +67,22 @@ class AudioFileTagWriter @Inject constructor(
         applyEdit(track, TagEdit(lyrics = ""))
 
     /** Reads embedded tags (including lyrics) without copying the song. Null when unreadable/unsupported. */
-    suspend fun readEmbeddedTags(track: Track): AudioTags? = withContext(Dispatchers.IO) {
-        val uri = mediaStoreUri(track) ?: return@withContext null
-        try {
-            context.contentResolver.openFileDescriptor(uri, "r")?.use { pfd ->
-                val file = File("/proc/self/fd/${pfd.fd}")
-                TagEngines.detect(file)?.read(file)
+    suspend fun readEmbeddedTags(track: Track, includeArtwork: Boolean = false): AudioTags? =
+        withContext(Dispatchers.IO) {
+            val uri = mediaStoreUri(track) ?: return@withContext null
+            try {
+                context.contentResolver.openFileDescriptor(uri, "r")?.use { pfd ->
+                    val file = File("/proc/self/fd/${pfd.fd}")
+                    val tags = TagEngines.detect(file)?.read(file)
+                    if (includeArtwork || tags == null) tags
+                    else tags.copy(artwork = null, artworkMime = null)
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                null
             }
-        } catch (cancelled: CancellationException) {
-            throw cancelled
-        } catch (_: Exception) {
-            null
         }
-    }
 
     private fun editFor(track: Track, title: String, artist: String, album: String, genre: String): TagEdit {
         fun field(new: String, old: String, placeholder: String): String? {
@@ -109,11 +115,18 @@ class AudioFileTagWriter @Inject constructor(
             input.use { original.outputStream().use { out -> it.copyTo(out) } }
             if (original.length() < 16L) return@withContext TagWriteOutcome.Failed
 
+            // A backup, the rewritten copy and the read-back all need room in the cache.
+            val available = staged.parentFile?.usableSpace ?: Long.MAX_VALUE
+            if (available < original.length() + MIN_FREE_SPACE_BYTES) {
+                return@withContext TagWriteOutcome.NoSpace
+            }
+
             val engine = TagEngines.detect(original)
                 ?: return@withContext TagWriteOutcome.Unsupported("Unrecognised audio container")
             engine.rewrite(original, staged, edit)
             if (!staged.isFile || staged.length() < 16L) return@withContext TagWriteOutcome.Failed
-            if (TagEngines.detect(staged) !== engine || !matches(edit, engine.read(staged))) {
+            val writtenTags = engine.read(staged)
+            if (TagEngines.detect(staged) !== engine || !TagEditVerifier.matches(edit, writtenTags)) {
                 return@withContext TagWriteOutcome.Failed
             }
 
@@ -124,6 +137,7 @@ class AudioFileTagWriter @Inject constructor(
 
             if (!contentMatches(uri, staged)) return@withContext TagWriteOutcome.Failed
             verified = true
+            MediaStoreTags.update(context, uri, edit, writtenTags)
             runCatching { context.contentResolver.notifyChange(uri, null) }
             requestRescan(uri)
             TagWriteOutcome.Success
@@ -153,18 +167,6 @@ class AudioFileTagWriter @Inject constructor(
     }
 
     // ---- verification ---------------------------------------------------------------------
-
-    private fun matches(edit: TagEdit, actual: AudioTags): Boolean {
-        fun ok(wanted: String?, got: String?, lyrics: Boolean = false): Boolean {
-            if (wanted == null) return true
-            if (wanted.isBlank()) return got.isNullOrBlank()
-            fun norm(s: String) = if (lyrics) s.replace("\r\n", "\n").trim() else s.trim()
-            return got != null && norm(got) == norm(wanted)
-        }
-        return ok(edit.title, actual.title) && ok(edit.artist, actual.artist) &&
-            ok(edit.album, actual.album) && ok(edit.genre, actual.genre) &&
-            ok(edit.lyrics, actual.lyrics, lyrics = true)
-    }
 
     private fun contentMatches(uri: Uri, expected: File): Boolean = try {
         context.contentResolver.openInputStream(uri)?.use { actual -> streamsEqual(actual, expected.inputStream()) } ?: false
@@ -245,5 +247,6 @@ class AudioFileTagWriter @Inject constructor(
 
     private companion object {
         const val TAG = "AudioFileTagWriter"
+        const val MIN_FREE_SPACE_BYTES = 2L * 1024 * 1024
     }
 }

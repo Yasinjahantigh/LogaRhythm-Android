@@ -5,6 +5,7 @@ import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.OutputStream
 import java.io.RandomAccessFile
+import java.util.Base64
 
 /**
  * Ogg Vorbis and Ogg Opus. The comment packet lives in the header pages, so those pages are
@@ -86,13 +87,31 @@ object OggEngine : TagEngine {
         }
     }
 
-    override fun read(file: File): AudioTags = RandomAccessFile(file, "r").use { commentsOf(readHeaders(it)).toTags() }
+    private const val PICTURE_KEY = "METADATA_BLOCK_PICTURE"
+
+    private fun coverOf(comments: VorbisComments): FlacPicture.Picture? =
+        comments.first(PICTURE_KEY)?.let { encoded ->
+            runCatching { FlacPicture.decode(Base64.getMimeDecoder().decode(encoded.trim())) }.getOrNull()
+        }
+
+    override fun read(file: File): AudioTags = RandomAccessFile(file, "r").use { raf ->
+        val comments = commentsOf(readHeaders(raf))
+        val cover = coverOf(comments)
+        comments.toTags().copy(artwork = cover?.data, artworkMime = cover?.mime)
+    }
 
     override fun rewrite(source: File, target: File, edit: TagEdit) {
         RandomAccessFile(source, "r").use { raf ->
             val h = readHeaders(raf)
             val comments = commentsOf(h)
             comments.apply(edit)
+            if (edit.artwork != null) {
+                comments.removeKeys(PICTURE_KEY)
+                if (edit.artwork.isNotEmpty()) {
+                    val encoded = FlacPicture.encode(edit.artwork, edit.artworkMime)
+                    comments.entries.add(PICTURE_KEY to Base64.getEncoder().encodeToString(encoded))
+                }
+            }
             val body = comments.toBytes()
             val commentPacket = when (h.kind) {
                 Kind.VORBIS -> byteArrayOf(3) + "vorbis".toByteArray() + body + byteArrayOf(1)

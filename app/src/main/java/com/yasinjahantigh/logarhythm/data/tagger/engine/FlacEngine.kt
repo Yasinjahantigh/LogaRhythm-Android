@@ -39,9 +39,17 @@ object FlacEngine : TagEngine {
         return Layout(prefixEnd, blocks, pos)
     }
 
+    private fun frontCover(blocks: List<Block>): FlacPicture.Picture? {
+        val pictures = blocks.filter { it.type == 6 }.mapNotNull { FlacPicture.decode(it.data) }
+        return pictures.firstOrNull { it.type == FlacPicture.TYPE_FRONT_COVER } ?: pictures.firstOrNull()
+    }
+
     override fun read(file: File): AudioTags = RandomAccessFile(file, "r").use { raf ->
-        val vc = layout(raf).blocks.firstOrNull { it.type == 4 }
-        if (vc == null) AudioTags() else VorbisComments.parse(vc.data).toTags()
+        val l = layout(raf)
+        val vc = l.blocks.firstOrNull { it.type == 4 }
+        val tags = if (vc == null) AudioTags() else VorbisComments.parse(vc.data).toTags()
+        val cover = frontCover(l.blocks)
+        tags.copy(artwork = cover?.data, artworkMime = cover?.mime)
     }
 
     override fun rewrite(source: File, target: File, edit: TagEdit) {
@@ -53,10 +61,30 @@ object FlacEngine : TagEngine {
             val commentBytes = comments.toBytes()
             if (commentBytes.size >= (1 shl 24)) throw UnsupportedTagException("Tag too large for FLAC")
 
+            val existingPictures = l.blocks.filter { it.type == 6 }
+                .mapNotNull { FlacPicture.decode(it.data) }
+            val newPictures: List<FlacPicture.Picture> = when {
+                edit.artwork == null -> existingPictures
+                edit.artwork.isEmpty() -> emptyList()
+                else -> listOf(
+                    FlacPicture.Picture(
+                        FlacPicture.TYPE_FRONT_COVER,
+                        edit.artworkMime ?: FlacPicture.detectMime(edit.artwork),
+                        "",
+                        edit.artwork
+                    )
+                ) + existingPictures.filter { it.type != FlacPicture.TYPE_FRONT_COVER }
+            }
+
             val ordered = ArrayList<Block>()
             ordered.add(l.blocks[0])
             ordered.add(Block(4, commentBytes))
-            l.blocks.drop(1).filter { it.type != 4 && it.type != 1 }.forEach { ordered.add(it) }
+            l.blocks.drop(1).filter { it.type != 4 && it.type != 1 && it.type != 6 }.forEach { ordered.add(it) }
+            for (picture in newPictures) {
+                val encoded = FlacPicture.encode(picture.data, picture.mime, picture.type)
+                if (encoded.size >= (1 shl 24)) throw UnsupportedTagException("Cover too large for FLAC")
+                ordered.add(Block(6, encoded))
+            }
             ordered.add(Block(1, ByteArray(1024))) // padding keeps future edits cheap for other tools
 
             BufferedOutputStream(target.outputStream(), COPY_BUFFER).use { out ->

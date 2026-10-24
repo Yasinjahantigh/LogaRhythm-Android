@@ -31,12 +31,17 @@ object Id3Engine : TagEngine {
                 ids.firstNotNullOfOrNull { id -> parsed.frames.firstOrNull { it.id == id } }
                     ?.let { decodeText(it.payload) }
             val lyrics = parsed.frames.firstOrNull { it.id == "USLT" }?.let { decodeUslt(it.payload) }
+            val covers = parsed.frames.filter { it.id == "APIC" }.mapNotNull { decodeApic(it.payload) }
+            val cover = covers.firstOrNull { it.type == FlacPicture.TYPE_FRONT_COVER } ?: covers.firstOrNull()
             return AudioTags(
                 title = text("TIT2"), artist = text("TPE1"), album = text("TALB"),
+                albumArtist = text("TPE2"),
                 genre = text("TCON"), lyrics = lyrics, year = text("TDRC", "TYER"),
                 trackNumber = text("TRCK")?.substringBefore('/')?.trim()?.toIntOrNull(),
                 discNumber = text("TPOS")?.substringBefore('/')?.trim()?.toIntOrNull(),
-                composer = text("TCOM")
+                composer = text("TCOM"),
+                artwork = cover?.data,
+                artworkMime = cover?.mime
             )
         }
     }
@@ -166,6 +171,7 @@ object Id3Engine : TagEngine {
             replaceText("TIT2", edit.title)
             replaceText("TPE1", edit.artist)
             replaceText("TALB", edit.album)
+            replaceText("TPE2", edit.albumArtist)
             replaceText("TCON", edit.genre)
             if (edit.lyrics != null) {
                 frames.removeAll { it.id == "USLT" }
@@ -173,7 +179,9 @@ object Id3Engine : TagEngine {
             }
             if (edit.artwork != null) {
                 frames.removeAll { it.id == "APIC" }
-                if (edit.artwork.isNotEmpty()) frames.add(0, Frame("APIC", 0, encodeApic(edit.artwork)))
+                if (edit.artwork.isNotEmpty()) {
+                    frames.add(0, Frame("APIC", 0, encodeApic(edit.artwork, edit.artworkMime)))
+                }
             }
             if (edit.year != null) {
                 frames.removeAll { it.id == "TDRC" || it.id == "TYER" }
@@ -241,10 +249,8 @@ object Id3Engine : TagEngine {
         return s.split('\u0000').firstOrNull { it.isNotBlank() }?.trim()?.takeIf { it.isNotEmpty() }
     }
 
-    internal fun encodeApic(image: ByteArray): ByteArray {
-        val mime = if (image.size > 8 && (image[0].toInt() and 0xff) == 0x89 &&
-            image[1].toInt() == 'P'.code
-        ) "image/png" else "image/jpeg"
+    internal fun encodeApic(image: ByteArray, mimeHint: String? = null): ByteArray {
+        val mime = mimeHint?.takeIf { it.isNotBlank() } ?: FlacPicture.detectMime(image)
         val out = ByteArrayOutputStream()
         out.write(0) // ISO-8859-1 description
         out.write(mime.toByteArray(Charsets.ISO_8859_1)); out.write(0)
@@ -252,6 +258,31 @@ object Id3Engine : TagEngine {
         out.write(0) // empty description
         out.write(image)
         return out.toByteArray()
+    }
+
+    internal class Apic(val type: Int, val mime: String, val data: ByteArray)
+
+    internal fun decodeApic(p: ByteArray): Apic? {
+        if (p.size < 4) return null
+        val encoding = p[0].toInt() and 0xff
+        var pos = 1
+        val mimeEnd = (pos until p.size).firstOrNull { p[it].toInt() == 0 } ?: return null
+        val mime = ascii(p, pos, mimeEnd - pos)
+        pos = mimeEnd + 1
+        if (pos >= p.size) return null
+        val type = p[pos].toInt() and 0xff
+        pos++
+        if (encoding == 1 || encoding == 2) {
+            while (pos + 1 < p.size && !(p[pos].toInt() == 0 && p[pos + 1].toInt() == 0)) pos += 2
+            pos += 2
+        } else {
+            while (pos < p.size && p[pos].toInt() != 0) pos++
+            pos += 1
+        }
+        if (pos > p.size) return null
+        val data = p.copyOfRange(pos, p.size)
+        if (data.isEmpty()) return null
+        return Apic(type, mime.ifBlank { FlacPicture.detectMime(data) }, data)
     }
 
     internal fun decodeUslt(p: ByteArray): String? {

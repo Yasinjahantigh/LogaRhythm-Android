@@ -1,7 +1,10 @@
 package com.yasinjahantigh.logarhythm.data.repository
 
+import com.yasinjahantigh.logarhythm.data.datastore.PreferencesManager
 import com.yasinjahantigh.logarhythm.data.room.MusicDao
 import com.yasinjahantigh.logarhythm.data.room.PlayEventEntity
+import com.yasinjahantigh.logarhythm.domain.library.ArtistSplitConfig
+import com.yasinjahantigh.logarhythm.domain.library.ArtistSplitter
 import com.yasinjahantigh.logarhythm.domain.model.AlbumStat
 import com.yasinjahantigh.logarhythm.domain.model.ArtistStat
 import com.yasinjahantigh.logarhythm.domain.model.PlayEvent
@@ -10,13 +13,15 @@ import com.yasinjahantigh.logarhythm.domain.model.Track
 import com.yasinjahantigh.logarhythm.domain.model.TrackStat
 import com.yasinjahantigh.logarhythm.domain.repository.StatsRepository
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
 class StatsRepositoryImpl @Inject constructor(
-    private val musicDao: MusicDao
+    private val musicDao: MusicDao,
+    private val preferencesManager: PreferencesManager
 ) : StatsRepository {
 
     override suspend fun recordPlayEvent(event: PlayEvent) {
@@ -100,15 +105,62 @@ class StatsRepositoryImpl @Inject constructor(
     }
 
     override fun getTopArtists(sinceTimestamp: Long, limit: Int): Flow<List<ArtistStat>> {
-        return musicDao.getTopArtists(sinceTimestamp, limit).map { list ->
-            list.map { query ->
-                ArtistStat(
-                    artist = query.artist,
-                    playCount = query.playCount,
-                    totalListenTimeMs = query.totalListenedMs,
-                    trackCount = query.trackCount
+        val configFlow = combine(
+            preferencesManager.splitArtists,
+            preferencesManager.artistSeparators,
+            preferencesManager.artistNeverSplit
+        ) { enabled, raw, neverSplit ->
+            if (enabled) {
+                ArtistSplitConfig(
+                    enabled = true,
+                    separators = ArtistSplitter.parseSeparators(raw),
+                    neverSplit = neverSplit
                 )
+            } else {
+                ArtistSplitConfig.OFF
             }
+        }
+        // Read extra raw rows so collaborations can merge into both artists after splitting.
+        return combine(musicDao.getTopArtists(sinceTimestamp, limit * 3), configFlow) { list, config ->
+            if (!config.enabled) {
+                return@combine list.take(limit).map { query ->
+                    ArtistStat(
+                        artist = query.artist,
+                        playCount = query.playCount,
+                        totalListenTimeMs = query.totalListenedMs,
+                        trackCount = query.trackCount
+                    )
+                }
+            }
+            data class Acc(
+                val name: String,
+                var playCount: Int = 0,
+                var listenedMs: Long = 0,
+                var trackCount: Int = 0
+            )
+            val byName = LinkedHashMap<String, Acc>()
+            for (query in list) {
+                for (name in config.namesOf(query.artist)) {
+                    val acc = byName.getOrPut(name.lowercase()) { Acc(name) }
+                    acc.playCount += query.playCount
+                    acc.listenedMs += query.totalListenedMs
+                    acc.trackCount += query.trackCount
+                }
+            }
+            byName.values
+                .sortedWith(
+                    compareByDescending<Acc> { it.playCount }
+                        .thenByDescending { it.listenedMs }
+                )
+                .take(limit)
+                .map {
+                    ArtistStat(
+                        artist = it.name,
+                        playCount = it.playCount,
+                        totalListenTimeMs = it.listenedMs,
+                        trackCount = it.trackCount
+                    )
+                }
         }
     }
 

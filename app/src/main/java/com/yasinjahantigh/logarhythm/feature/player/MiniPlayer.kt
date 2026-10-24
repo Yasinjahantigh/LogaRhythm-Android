@@ -45,7 +45,9 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
@@ -82,11 +84,14 @@ fun MiniPlayerContent(
     modifier: Modifier = Modifier,
     isCompact: Boolean = false,
     onDismiss: (() -> Unit)? = null,
+    /** RTL-friendly default: swipe right skips forward. */
+    swipeRightForNext: Boolean = true,
     /** Artwork-derived tint; when null the player falls back to the theme's primary. */
     tint: Color? = null
 ) {
     val scope = rememberCoroutineScope()
     val dragOffsetX = remember { Animatable(0f) }
+    val haptic = LocalHapticFeedback.current
     val scheme = MaterialTheme.colorScheme
     val accent = tint ?: scheme.primary
 
@@ -104,7 +109,11 @@ fun MiniPlayerContent(
                     onDragEnd = {
                         scope.launch {
                             val current = dragOffsetX.value
-                            if (current < -100f) onNext() else if (current > 100f) onPrevious()
+                            if (kotlin.math.abs(current) > 100f) {
+                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                val forward = if (swipeRightForNext) current > 0 else current < 0
+                                if (forward) onNext() else onPrevious()
+                            }
                             dragOffsetX.animateTo(0f, spring())
                         }
                     },
@@ -247,6 +256,7 @@ fun MiniPlayer(
     modifier: Modifier = Modifier,
     isCompact: Boolean = false,
     onDismiss: (() -> Unit)? = null,
+    swipeRightForNext: Boolean = true,
     /** Artwork-derived tint; tints the card border/glow and the play button. */
     tint: Color? = null
 ) {
@@ -283,6 +293,7 @@ fun MiniPlayer(
             onExpand = onExpand,
             isCompact = isCompact,
             onDismiss = onDismiss,
+            swipeRightForNext = swipeRightForNext,
             tint = tint
         )
     }

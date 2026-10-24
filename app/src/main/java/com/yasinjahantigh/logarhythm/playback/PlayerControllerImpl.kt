@@ -416,6 +416,21 @@ class PlayerControllerImpl @Inject constructor(
         if (_currentTrack.value?.id == updatedTrack.id) {
             _currentTrack.value = updatedTrack
             MusicWidgetUpdater.update(context, updatedTrack.title, updatedTrack.artist, updatedTrack.artworkUri, _isPlaying.value)
+            // Rebuild the MediaItem so the notification, lock screen and Bluetooth metadata stop
+            // showing the previous title/artist/cover. The position is restored manually because
+            // replacing the current item otherwise restarts it.
+            execute { controller ->
+                val index = controller.currentMediaItemIndex
+                if (index < 0 || index >= controller.mediaItemCount) return@execute
+                if (controller.currentMediaItem?.mediaId != updatedTrack.id) return@execute
+                val position = controller.currentPosition
+                val playing = controller.isPlaying
+                runCatching {
+                    controller.replaceMediaItem(index, MediaItemMapper.toMediaItem(updatedTrack))
+                    controller.seekTo(index, position)
+                    if (playing) controller.play()
+                }
+            }
         }
         _queue.value = _queue.value.map { if (it.id == updatedTrack.id) updatedTrack else it }
     }

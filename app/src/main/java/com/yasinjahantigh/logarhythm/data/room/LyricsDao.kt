@@ -23,6 +23,10 @@ interface LyricsDao {
     @Query("SELECT trackId FROM track_lyrics WHERE source = 'deleted'")
     fun getHiddenTrackIds(): Flow<List<String>>
 
+    /** Songs that already have lyrics; 'deleted' rows are hide markers, not lyrics. */
+    @Query("SELECT trackId FROM track_lyrics WHERE source != 'deleted'")
+    fun getTrackIdsWithLyrics(): Flow<List<String>>
+
     @Query("SELECT * FROM track_lyrics")
     suspend fun getAllLyricsOnce(): List<LyricsEntity>
 

@@ -7,6 +7,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -23,6 +25,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
+import com.yasinjahantigh.logarhythm.core.artwork.ArtworkVersionStore
 
 /** Deterministic warm gradients for artists, genres and songs without embedded artwork. */
 private val ArtPalette: List<Pair<Color, Color>> = listOf(
@@ -66,6 +69,8 @@ fun ArtworkImage(
     val brush = remember(fallbackKey) { artBrushFor(fallbackKey) }
     val monogram = remember(fallbackKey) { monogramOf(fallbackKey) }
     val context = LocalContext.current
+    val versions by ArtworkVersionStore.versions.collectAsState()
+    val version = uri?.let { versions[it] } ?: 0L
 
     Box(
         modifier = modifier
@@ -89,9 +94,11 @@ fun ArtworkImage(
             )
         }
         if (!uri.isNullOrBlank()) {
-            val request = remember(uri) {
+            val request = remember(uri, version) {
                 ImageRequest.Builder(context)
                     .data(uri)
+                    .memoryCacheKey("$uri#v$version")
+                    .diskCacheKey("$uri#v$version")
                     .crossfade(true)
                     .build()
             }

@@ -3,6 +3,8 @@ package com.yasinjahantigh.logarhythm.data.download
 import android.content.ContentUris
 import android.content.ContentValues
 import android.content.Context
+import android.media.MediaExtractor
+import android.media.MediaFormat
 import android.media.MediaScannerConnection
 import android.os.Build
 import android.os.Environment
@@ -42,8 +44,13 @@ class MediaStoreSaver @Inject constructor(
         artist: String,
         album: String
     ): SavedFile = withContext(Dispatchers.IO) {
-        val extension = source.extension.lowercase().takeIf { it in MIME_TYPES } ?: "m4a"
-        val mimeType = MIME_TYPES.getValue(extension)
+        val type = resolveType(source)
+            ?: throw DownloadPipelineException(
+                DownloadErrorKind.STORAGE,
+                "The downloaded audio format could not be identified."
+            )
+        val extension = type.first
+        val mimeType = type.second
         val displayName = buildDisplayName(title, artist, extension)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             saveScoped(source, displayName, mimeType, title, artist, album)
@@ -184,6 +191,39 @@ class MediaStoreSaver @Inject constructor(
             if (cursor.moveToFirst()) cursor.getLong(0) else null
         }
     }.getOrNull()
+
+    /** Uses the real extension; only when it is missing falls back to the extractor's MIME type. */
+    private fun resolveType(source: File): Pair<String, String>? {
+        val extension = source.extension.lowercase()
+        if (extension in MIME_TYPES) return extension to MIME_TYPES.getValue(extension)
+
+        val mime = detectMime(source) ?: return null
+        val fromMime = when (mime) {
+            "audio/mp4", "audio/x-m4a" -> "m4a"
+            "audio/mpeg" -> "mp3"
+            "audio/aac", "audio/aacp" -> "aac"
+            "audio/ogg" -> "ogg"
+            "audio/opus" -> "opus"
+            "audio/webm" -> "webm"
+            "audio/flac", "audio/x-flac" -> "flac"
+            else -> null
+        } ?: return null
+        return fromMime to MIME_TYPES.getValue(fromMime)
+    }
+
+    private fun detectMime(file: File): String? {
+        val extractor = MediaExtractor()
+        return try {
+            extractor.setDataSource(file.absolutePath)
+            (0 until extractor.trackCount)
+                .map { extractor.getTrackFormat(it).getString(MediaFormat.KEY_MIME).orEmpty() }
+                .firstOrNull { it.startsWith("audio/") }
+        } catch (_: Exception) {
+            null
+        } finally {
+            runCatching { extractor.release() }
+        }
+    }
 
     private fun uniqueTarget(dir: File, displayName: String, extension: String): File {
         val base = displayName.substringBeforeLast(".$extension", displayName)

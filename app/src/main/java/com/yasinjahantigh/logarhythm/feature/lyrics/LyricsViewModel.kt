@@ -67,10 +67,7 @@ class LyricsViewModel @Inject constructor(
         if (track == null) flowOf(null) else lyricsRepository.getLyrics(track)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
-    val isOnlineEnabled: StateFlow<Boolean> = preferencesManager.isLrclibEnabled
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
-
-    val isGeniusEnabled: StateFlow<Boolean> = preferencesManager.isGeniusEnabled
+    val isAnyOnlineEnabled: StateFlow<Boolean> = preferencesManager.anyLyricsSourceEnabled
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
 
     /** Live playback position; only the active karaoke line collects it. */
@@ -305,7 +302,12 @@ class LyricsViewModel @Inject constructor(
             _isSearchingCandidates.value = true
             _showCandidatePicker.value = true
             try {
-                val results = lyricsRepository.searchLyricsCandidates(title, artist)
+                val results = lyricsRepository.searchLyricsCandidates(
+                    title = title,
+                    artist = artist,
+                    album = track.album,
+                    durationMs = track.durationMs
+                )
                 _lyricsCandidates.value = results
             } catch (cancelled: CancellationException) {
                 throw cancelled
@@ -322,24 +324,10 @@ class LyricsViewModel @Inject constructor(
         targetTrack: Track? = currentTrack.value
     ) {
         val track = targetTrack ?: return
-        val content = if (candidate.lyrics.isSynced) {
-            candidate.lyrics.lines.joinToString("\n") { line ->
-                val min = line.timestampMs / 60_000L
-                val sec = (line.timestampMs % 60_000L) / 1_000L
-                val frac = (line.timestampMs % 1_000L) / 10L
-                String.format(Locale.US, "[%02d:%02d.%02d]%s", min, sec, frac, line.text)
-            }
-        } else {
-            candidate.lyrics.plainText.orEmpty()
-        }.trim()
-        if (content.isBlank()) {
-            _saveMessage.value = "failed"
-            return
-        }
         viewModelScope.launch(Dispatchers.IO) {
             _isLoading.value = true
             val embedded: Boolean? = try {
-                lyricsRepository.saveLyrics(track, content, candidate.sourceName)
+                lyricsRepository.saveCandidate(track, candidate)
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (_: Exception) {

@@ -117,7 +117,6 @@ import com.yasinjahantigh.logarhythm.R
 import com.yasinjahantigh.logarhythm.core.utils.ArtworkColorExtractor
 import com.yasinjahantigh.logarhythm.core.utils.FileUtils
 import com.yasinjahantigh.logarhythm.core.utils.TimeUtils
-import com.yasinjahantigh.logarhythm.core.utils.rememberMediaStoreConsent
 import com.yasinjahantigh.logarhythm.domain.model.Track
 import com.yasinjahantigh.logarhythm.feature.equalizer.EqualizerScreen
 import com.yasinjahantigh.logarhythm.feature.lyrics.LyricsView
@@ -136,6 +135,7 @@ fun FullPlayerScreen(
     viewModel: PlayerViewModel,
     onCollapse: () -> Unit,
     modifier: Modifier = Modifier,
+    onNavigateToTagEditor: (String) -> Unit = {},
     lyricsViewModel: LyricsViewModel = hiltViewModel(),
     playlistViewModel: PlaylistViewModel = hiltViewModel()
 ) {
@@ -149,7 +149,8 @@ fun FullPlayerScreen(
         QueueScreen(
             viewModel = viewModel,
             onNavigateBack = viewModel::closeQueue,
-            modifier = modifier
+            modifier = modifier,
+            playlistViewModel = playlistViewModel
         )
         return
     }
@@ -162,6 +163,7 @@ fun FullPlayerScreen(
     val shuffle by viewModel.shuffle.collectAsStateWithLifecycle()
     val repeatMode by viewModel.repeatMode.collectAsStateWithLifecycle()
     val isFavorite by viewModel.isFavorite.collectAsStateWithLifecycle()
+    val swipeRightForNext by viewModel.swipeRightForNext.collectAsStateWithLifecycle()
     val playbackSpeed by viewModel.playbackSpeed.collectAsStateWithLifecycle()
     val sleepTimerRemainingMs by viewModel.sleepTimerRemainingMs.collectAsStateWithLifecycle()
     val sleepTimerRemainingTracks by viewModel.sleepTimerRemainingTracks.collectAsStateWithLifecycle()
@@ -174,16 +176,12 @@ fun FullPlayerScreen(
     var showEqualizerSheet by remember { mutableStateOf(false) }
     var showAddToPlaylistDialog by remember { mutableStateOf(false) }
     var showDetailsDialog by remember { mutableStateOf(false) }
-    var showEditTrackDialog by remember { mutableStateOf(false) }
-    var editTrackError by remember { mutableStateOf(false) }
-    var editTrackSaving by remember { mutableStateOf(false) }
     var isVinylMode by remember { mutableStateOf(false) }
     var showRemainingTime by remember { mutableStateOf(false) }
     var showFullArtworkDialog by remember { mutableStateOf(false) }
 
     val track = currentTrack
     val context = LocalContext.current
-    val mediaStoreConsent = rememberMediaStoreConsent()
 
     val coroutineScope = rememberCoroutineScope()
     val artworkDragOffsetX = remember { Animatable(0f) }
@@ -238,39 +236,6 @@ fun FullPlayerScreen(
         FullPlayerSongDetailsDialog(
             track = track,
             onDismiss = { showDetailsDialog = false }
-        )
-    }
-
-    if (showEditTrackDialog && track != null) {
-        EditTrackDialog(
-            track = track,
-            onDismiss = {
-                showEditTrackDialog = false
-                editTrackError = false
-                editTrackSaving = false
-            },
-            errorMessage = if (editTrackError) context.getString(R.string.track_metadata_write_failed) else null,
-            isSaving = editTrackSaving,
-            onSave = { newTitle, newArtist, newAlbum, newGenre ->
-                if (!editTrackSaving) {
-                    editTrackSaving = true
-                    editTrackError = false
-                    mediaStoreConsent.write(track, onApproved = {
-                        viewModel.updateTrackMetadata(track.id, newTitle, newArtist, newAlbum, newGenre) { updated ->
-                            editTrackSaving = false
-                            if (updated != null) {
-                                showEditTrackDialog = false
-                                Toast.makeText(context, context.getString(R.string.track_updated_toast), Toast.LENGTH_SHORT).show()
-                            } else {
-                                editTrackError = true
-                            }
-                        }
-                    }, onCancelled = {
-                        editTrackSaving = false
-                        editTrackError = true
-                    })
-                }
-            }
         )
     }
 
@@ -363,6 +328,7 @@ fun FullPlayerScreen(
                             isPlaying = isPlaying,
                             isVinylMode = isVinylMode,
                             glowColor = animatedBgColor,
+                            swipeRightForNext = swipeRightForNext,
                             onSwipeNext = viewModel::next,
                             onSwipePrevious = viewModel::previous,
                             onArtworkClick = { showFullArtworkDialog = true },
@@ -429,7 +395,7 @@ fun FullPlayerScreen(
                                 shareTrack(context, track)
                             }
                         },
-                        onEditSongDetails = { showEditTrackDialog = true },
+                        onEditSongDetails = { track?.let { onNavigateToTagEditor(it.id) } },
                         onHideSong = {
                             viewModel.hideCurrentTrack { hidden ->
                                 Toast.makeText(context, context.getString(R.string.track_hidden_toast, hidden.title), Toast.LENGTH_SHORT).show()
@@ -607,12 +573,14 @@ private fun PlayerArtwork(
     isPlaying: Boolean,
     isVinylMode: Boolean,
     glowColor: Color,
+    swipeRightForNext: Boolean,
     onSwipeNext: () -> Unit,
     onSwipePrevious: () -> Unit,
     onArtworkClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val scope = rememberCoroutineScope()
+    val haptic = LocalHapticFeedback.current
     val dragX = remember { Animatable(0f) }
     val scale by animateFloatAsState(
         targetValue = if (isPlaying) 1f else 0.9f,
@@ -635,8 +603,12 @@ private fun PlayerArtwork(
                     detectHorizontalDragGestures(
                         onDragEnd = {
                             scope.launch {
-                                if (dragX.value < -120f) onSwipeNext()
-                                else if (dragX.value > 120f) onSwipePrevious()
+                                val dx = dragX.value
+                                if (abs(dx) > 120f) {
+                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                    val forward = if (swipeRightForNext) dx > 0 else dx < 0
+                                    if (forward) onSwipeNext() else onSwipePrevious()
+                                }
                                 dragX.animateTo(0f, spring())
                             }
                         },

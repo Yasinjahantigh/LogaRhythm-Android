@@ -61,6 +61,7 @@ import kotlinx.coroutines.launch
 fun DownloadScreen(
     onNavigateBack: () -> Unit,
     modifier: Modifier = Modifier,
+    onNavigateToTagEditor: (String) -> Unit = {},
     viewModel: DownloadViewModel = hiltViewModel()
 ) {
     val query by viewModel.query.collectAsStateWithLifecycle()
@@ -240,7 +241,10 @@ fun DownloadScreen(
                             onCancel = viewModel::cancel,
                             onRetry = viewModel::retry,
                             onRemove = viewModel::remove,
-                            onClearFinished = viewModel::clearFinished
+                            onClearFinished = viewModel::clearFinished,
+                            onEditTags = { item ->
+                                item.mediaStoreId?.let { id -> onNavigateToTagEditor("local:$id") }
+                            }
                         )
                     }
                 }

@@ -37,8 +37,28 @@ enum class SortField(@param:StringRes val titleRes: Int) {
     TITLE(R.string.sort_title),
     ARTIST(R.string.sort_artist),
     ALBUM(R.string.sort_album),
+    YEAR(R.string.sort_year),
     DATE_ADDED(R.string.sort_date_added),
-    DURATION(R.string.sort_duration)
+    DATE_MODIFIED(R.string.sort_date_modified),
+    DURATION(R.string.sort_duration),
+    PLAY_COUNT(R.string.sort_play_count),
+    LAST_PLAYED(R.string.sort_last_played),
+    TRACK_COUNT(R.string.sort_track_count),
+    RANDOM(R.string.sort_random);
+
+    fun appliesTo(tab: LibraryTab): Boolean = this in fieldsFor(tab)
+
+    companion object {
+        fun fieldsFor(tab: LibraryTab): List<SortField> = when (tab) {
+            LibraryTab.SONGS -> listOf(
+                TITLE, ARTIST, ALBUM, YEAR, DATE_ADDED, DATE_MODIFIED,
+                DURATION, PLAY_COUNT, LAST_PLAYED, RANDOM
+            )
+            LibraryTab.ALBUMS -> listOf(TITLE, ARTIST, YEAR, TRACK_COUNT, RANDOM)
+            LibraryTab.ARTISTS -> listOf(TITLE, TRACK_COUNT, RANDOM)
+            LibraryTab.PLAYLISTS, LibraryTab.GENRES, LibraryTab.FOLDERS -> listOf(TITLE)
+        }
+    }
 }
 
 enum class SortDirection(@param:StringRes val titleRes: Int) {
@@ -51,12 +71,21 @@ data class SortOption(
     val direction: SortDirection = SortDirection.ASCENDING
 )
 
+/** Filter chips on the Songs tab; every other tab shows the whole category. */
+enum class TrackFilter(@param:StringRes val titleRes: Int) {
+    ALL(R.string.filter_all),
+    FAVORITES(R.string.filter_favorites),
+    DOWNLOADED(R.string.filter_downloaded),
+    RECENTLY_ADDED(R.string.filter_recently_added)
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SortBottomSheet(
     currentSort: SortOption,
     onSortSelected: (SortOption) -> Unit,
-    onDismissRequest: () -> Unit
+    onDismissRequest: () -> Unit,
+    availableFields: List<SortField> = SortField.entries
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
@@ -121,7 +150,7 @@ fun SortBottomSheet(
             Spacer(modifier = Modifier.height(8.dp))
 
             // Field selection
-            SortField.entries.forEach { field ->
+            availableFields.forEach { field ->
                 val isSelected = currentSort.field == field
                 Row(
                     modifier = Modifier

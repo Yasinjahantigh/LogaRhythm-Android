@@ -20,6 +20,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.QueueMusic
+import androidx.compose.material.icons.filled.BookmarkAdd
 import androidx.compose.material.icons.filled.ClearAll
 import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material3.Icon
@@ -52,9 +53,12 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.hilt.navigation.compose.hiltViewModel
 import com.yasinjahantigh.logarhythm.R
 import com.yasinjahantigh.logarhythm.feature.library.LibraryEmptyHint
 import com.yasinjahantigh.logarhythm.feature.player.PlayerViewModel
+import com.yasinjahantigh.logarhythm.feature.playlist.CreatePlaylistDialog
+import com.yasinjahantigh.logarhythm.feature.playlist.PlaylistViewModel
 import com.yasinjahantigh.logarhythm.ui.components.formatCount
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
@@ -80,7 +84,8 @@ private data class QueueDrag(
 fun QueueScreen(
     viewModel: PlayerViewModel,
     onNavigateBack: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    playlistViewModel: PlaylistViewModel = hiltViewModel()
 ) {
     BackHandler(onBack = onNavigateBack)
 
@@ -90,9 +95,28 @@ fun QueueScreen(
     val shuffle by viewModel.shuffle.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
+    val context = androidx.compose.ui.platform.LocalContext.current
     val listState = rememberLazyListState()
     val removedMsg = stringResource(R.string.queue_item_removed)
     val undoMsg = stringResource(R.string.queue_undo)
+    var showSavePlaylistDialog by remember { mutableStateOf(false) }
+
+    if (showSavePlaylistDialog) {
+        CreatePlaylistDialog(
+            onDismiss = { showSavePlaylistDialog = false },
+            onConfirm = { name ->
+                showSavePlaylistDialog = false
+                val trackIds = queue.map { it.id }
+                playlistViewModel.createPlaylistWithTracks(name, trackIds) {
+                    scope.launch {
+                        snackbarHostState.showSnackbar(
+                            context.getString(R.string.queue_saved_as_playlist, name)
+                        )
+                    }
+                }
+            }
+        )
+    }
 
     val currentIndex = queue.indexOfFirst { it.id == currentTrack?.id }
 
@@ -156,6 +180,15 @@ fun QueueScreen(
                     )
                 }
                 if (queue.isNotEmpty()) {
+                    IconButton(
+                        onClick = { showSavePlaylistDialog = true },
+                        modifier = Modifier.testTag("queue_save_playlist_button")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.BookmarkAdd,
+                            contentDescription = stringResource(R.string.queue_save_as_playlist)
+                        )
+                    }
                     IconButton(
                         onClick = {
                             if (shuffle) viewModel.reshuffleQueue() else viewModel.toggleShuffle()
