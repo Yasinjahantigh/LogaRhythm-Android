@@ -66,7 +66,10 @@ class LocalMusicSource @Inject constructor(
                 MediaStore.Audio.Media.DATE_ADDED,
                 MediaStore.Audio.Media.DATA,
                 MediaStore.Audio.Media.GENRE,
-                MediaStore.Audio.Media.ALBUM_ARTIST
+                MediaStore.Audio.Media.ALBUM_ARTIST,
+                MediaStore.Audio.Media.YEAR,
+                MediaStore.Audio.Media.TRACK,
+                MediaStore.Audio.Media.COMPOSER
             )
         } else {
             arrayOf(
@@ -77,7 +80,10 @@ class LocalMusicSource @Inject constructor(
                 MediaStore.Audio.Media.DURATION,
                 MediaStore.Audio.Media.DATE_MODIFIED,
                 MediaStore.Audio.Media.DATE_ADDED,
-                MediaStore.Audio.Media.DATA
+                MediaStore.Audio.Media.DATA,
+                MediaStore.Audio.Media.YEAR,
+                MediaStore.Audio.Media.TRACK,
+                MediaStore.Audio.Media.COMPOSER
             )
         }
 
@@ -131,6 +137,11 @@ class LocalMusicSource @Inject constructor(
             val albumArtistCol = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                 cursor.getColumnIndex(MediaStore.Audio.Media.ALBUM_ARTIST)
             } else -1
+            // Older providers may not expose every optional column even when it is in the
+            // projection; a missing index must degrade to the fallback, not crash the scan.
+            val yearCol = cursor.getColumnIndex(MediaStore.Audio.Media.YEAR)
+            val trackCol = cursor.getColumnIndex(MediaStore.Audio.Media.TRACK)
+            val composerCol = cursor.getColumnIndex(MediaStore.Audio.Media.COMPOSER)
 
             while (cursor.moveToNext()) {
                 val mediaStoreId = cursor.getLong(idCol)
@@ -145,6 +156,14 @@ class LocalMusicSource @Inject constructor(
                 val genre = genreRaw?.trim()?.ifBlank { "Unknown Genre" } ?: "Unknown Genre"
                 val albumArtist = if (albumArtistCol != -1) {
                     cleanMetadataField(cursor.getString(albumArtistCol) ?: "", "")
+                } else ""
+                val year = if (yearCol != -1) cursor.getInt(yearCol).coerceAtLeast(0) else 0
+                // MediaStore packs disc and track into one number: disc * 1000 + track.
+                val packedTrack = if (trackCol != -1) cursor.getInt(trackCol).coerceAtLeast(0) else 0
+                val discNumber = packedTrack / 1000
+                val trackNumber = packedTrack % 1000
+                val composer = if (composerCol != -1) {
+                    cleanMetadataField(cursor.getString(composerCol) ?: "", "")
                 } else ""
 
                 val folderName = when {
@@ -191,7 +210,11 @@ class LocalMusicSource @Inject constructor(
                         folder = folderName,
                         genre = genre,
                         albumArtist = albumArtist,
-                        filePath = filePath.orEmpty()
+                        filePath = filePath.orEmpty(),
+                        year = year,
+                        trackNumber = trackNumber,
+                        discNumber = discNumber,
+                        composer = composer
                     )
                 )
             }

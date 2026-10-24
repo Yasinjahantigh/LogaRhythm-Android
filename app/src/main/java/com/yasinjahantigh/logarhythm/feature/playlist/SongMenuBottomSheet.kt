@@ -68,6 +68,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.yasinjahantigh.logarhythm.R
@@ -88,7 +89,8 @@ fun SongMenuBottomSheet(
     onToggleFavorite: (() -> Unit)? = null,
     onViewLyrics: (() -> Unit)? = null,
     onGoToAlbum: (() -> Unit)? = null,
-    onGoToArtist: (() -> Unit)? = null,
+    /** Receives the exact artist name chosen by the user, already split from collaborations. */
+    onGoToArtist: ((String) -> Unit)? = null,
     onRemoveFromPlaylist: (() -> Unit)? = null,
     onDeleteTrack: (() -> Unit)? = null,
     onEditTrack: (() -> Unit)? = null,
@@ -96,10 +98,52 @@ fun SongMenuBottomSheet(
 ) {
     val sheetState = rememberModalBottomSheetState()
     val context = LocalContext.current
+    val artistSplitViewModel: com.yasinjahantigh.logarhythm.feature.artist.ArtistSplitViewModel =
+        androidx.hilt.navigation.compose.hiltViewModel()
+    val artistSplitConfig by artistSplitViewModel.config.collectAsStateWithLifecycle()
 
     var showDetailsDialog by remember { mutableStateOf(false) }
     var showDeleteConfirmDialog by remember { mutableStateOf(false) }
     var showHideConfirmDialog by remember { mutableStateOf(false) }
+    var artistChoices by remember { mutableStateOf<List<String>?>(null) }
+
+    artistChoices?.let { names ->
+        AlertDialog(
+            onDismissRequest = { artistChoices = null },
+            title = { Text(text = stringResource(R.string.artist_choose_title)) },
+            text = {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    names.forEach { name ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    artistChoices = null
+                                    onGoToArtist?.invoke(name)
+                                    onDismissRequest()
+                                }
+                                .padding(vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Person,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(22.dp)
+                            )
+                            Spacer(modifier = Modifier.width(14.dp))
+                            Text(text = name, style = MaterialTheme.typography.bodyLarge)
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { artistChoices = null }) {
+                    Text(text = stringResource(R.string.btn_cancel))
+                }
+            }
+        )
+    }
 
     if (showHideConfirmDialog) {
         AlertDialog(
@@ -295,13 +339,21 @@ fun SongMenuBottomSheet(
                 )
             }
 
-            // Go to artist
+            // Go to artist (a collaboration offers each credited name instead of one combined page)
             if (onGoToArtist != null && track.artist.isNotBlank() && track.artist != "Unknown Artist") {
                 SongMenuOption(
                     icon = Icons.Default.Person,
                     title = stringResource(R.string.action_go_to_artist),
                     tag = "menu_go_to_artist",
-                    onClick = { onGoToArtist(); onDismissRequest() }
+                    onClick = {
+                        val names = artistSplitConfig.namesOf(track.artist)
+                        if (names.size > 1) {
+                            artistChoices = names
+                        } else {
+                            onGoToArtist(names.firstOrNull() ?: track.artist)
+                            onDismissRequest()
+                        }
+                    }
                 )
             }
 

@@ -15,6 +15,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -206,6 +207,57 @@ fun SeparatorsDialog(
 }
 
 @androidx.compose.runtime.Composable
+fun NeverSplitDialog(
+    current: Set<String>,
+    onSave: (Set<String>) -> Unit,
+    onReset: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    var text by androidx.compose.runtime.remember {
+        androidx.compose.runtime.mutableStateOf(current.sorted().joinToString("\n"))
+    }
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { androidx.compose.material3.Text(androidx.compose.ui.res.stringResource(com.yasinjahantigh.logarhythm.R.string.settings_never_split_title)) },
+        text = {
+            androidx.compose.foundation.layout.Column {
+                androidx.compose.material3.Text(
+                    androidx.compose.ui.res.stringResource(com.yasinjahantigh.logarhythm.R.string.settings_never_split_hint),
+                    style = androidx.compose.material3.MaterialTheme.typography.bodyMedium,
+                    color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                androidx.compose.foundation.layout.Spacer(androidx.compose.ui.Modifier.height(8.dp))
+                androidx.compose.material3.OutlinedTextField(
+                    value = text,
+                    onValueChange = { text = it },
+                    minLines = 3,
+                    maxLines = 8,
+                    modifier = androidx.compose.ui.Modifier.fillMaxWidth()
+                )
+            }
+        },
+        confirmButton = {
+            androidx.compose.material3.TextButton(onClick = {
+                onSave(
+                    text.split('\n')
+                        .map { it.trim() }
+                        .filter { it.isNotBlank() }
+                        .toSet()
+                )
+                onDismiss()
+            }) {
+                androidx.compose.material3.Text(androidx.compose.ui.res.stringResource(com.yasinjahantigh.logarhythm.R.string.btn_save))
+            }
+        },
+        dismissButton = {
+            androidx.compose.material3.TextButton(onClick = { onReset(); onDismiss() }) {
+                androidx.compose.material3.Text(androidx.compose.ui.res.stringResource(com.yasinjahantigh.logarhythm.R.string.settings_reset_default))
+            }
+        }
+    )
+}
+
+@androidx.compose.runtime.Composable
 fun HiddenLyricsDialog(
     tracks: List<com.yasinjahantigh.logarhythm.domain.model.Track>,
     onRestore: (String) -> Unit,
@@ -325,6 +377,107 @@ fun HiddenTracksDialog(
         confirmButton = {
             TextButton(onClick = onDismiss) {
                 Text(stringResource(R.string.btn_close))
+            }
+        }
+    )
+}
+
+@Composable
+fun TextInputDialog(
+    title: String,
+    initialValue: String,
+    label: String,
+    placeholder: String,
+    isValid: (String) -> Boolean,
+    invalidMessage: String,
+    onConfirm: (String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var value by remember(initialValue) { mutableStateOf(initialValue) }
+    val valid = value.isBlank() || isValid(value)
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title, style = MaterialTheme.typography.titleLarge) },
+        text = {
+            OutlinedTextField(
+                value = value,
+                onValueChange = { value = it },
+                singleLine = true,
+                isError = !valid,
+                label = { Text(label) },
+                placeholder = { Text(placeholder) },
+                supportingText = if (!valid) {
+                    { Text(invalidMessage) }
+                } else null,
+                modifier = Modifier.fillMaxWidth()
+            )
+        },
+        confirmButton = {
+            TextButton(enabled = valid, onClick = { onConfirm(value.trim()) }) {
+                Text(stringResource(R.string.btn_save))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.btn_cancel)) }
+        }
+    )
+}
+
+@Composable
+fun LyricsTestDialog(
+    results: List<com.yasinjahantigh.logarhythm.domain.lyrics.LyricsSourceTestResult>,
+    isTesting: Boolean,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.lyrics_test_results_title), style = MaterialTheme.typography.titleLarge) },
+        text = {
+            when {
+                isTesting -> Text(
+                    text = stringResource(R.string.lyrics_test_running),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                results.isEmpty() -> Text(
+                    text = stringResource(R.string.lyrics_test_no_sources),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                else -> Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    results.forEach { result ->
+                        val status = when (result.status) {
+                            com.yasinjahantigh.logarhythm.domain.lyrics.LyricsSourceStatus.OK -> stringResource(R.string.lyrics_test_ok)
+                            com.yasinjahantigh.logarhythm.domain.lyrics.LyricsSourceStatus.EMPTY -> stringResource(R.string.lyrics_test_empty)
+                            com.yasinjahantigh.logarhythm.domain.lyrics.LyricsSourceStatus.BLOCKED -> stringResource(R.string.lyrics_test_blocked)
+                            com.yasinjahantigh.logarhythm.domain.lyrics.LyricsSourceStatus.TIMEOUT -> stringResource(R.string.lyrics_test_timeout)
+                            com.yasinjahantigh.logarhythm.domain.lyrics.LyricsSourceStatus.ERROR -> stringResource(R.string.lyrics_test_error)
+                        }
+                        val color = when (result.status) {
+                            com.yasinjahantigh.logarhythm.domain.lyrics.LyricsSourceStatus.OK -> MaterialTheme.colorScheme.primary
+                            com.yasinjahantigh.logarhythm.domain.lyrics.LyricsSourceStatus.EMPTY -> MaterialTheme.colorScheme.onSurfaceVariant
+                            else -> MaterialTheme.colorScheme.error
+                        }
+                        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(result.displayName, style = MaterialTheme.typography.bodyLarge)
+                                Text(
+                                    text = stringResource(
+                                        R.string.lyrics_test_latency,
+                                        result.latencyMs.toInt(),
+                                        result.candidateCount
+                                    ),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            Text(status, color = color, style = MaterialTheme.typography.labelLarge)
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.lyrics_test_close))
             }
         }
     )

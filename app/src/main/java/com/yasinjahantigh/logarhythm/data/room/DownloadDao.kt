@@ -12,6 +12,10 @@ interface DownloadDao {
     @Query("SELECT * FROM download_history ORDER BY createdAt DESC")
     fun observeAll(): Flow<List<DownloadEntity>>
 
+    /** MediaStore/content URIs of finished downloads, used by the "Downloaded" library filter. */
+    @Query("SELECT contentUri FROM download_history WHERE status = 'saved' AND contentUri IS NOT NULL")
+    fun observeSavedContentUris(): Flow<List<String>>
+
     @Query("SELECT * FROM download_history WHERE id = :id LIMIT 1")
     suspend fun getById(id: String): DownloadEntity?
 
@@ -75,6 +79,19 @@ interface DownloadDao {
 
     @Query("UPDATE download_history SET status = 'cancelled', updatedAt = :now WHERE id = :id")
     suspend fun markCancelled(id: String, now: Long)
+
+    @Query(
+        "UPDATE download_history SET status = 'cancelled', updatedAt = :now WHERE id = :id " +
+            "AND status IN ('queued','downloading','converting','saving')"
+    )
+    suspend fun markCancelledIfActive(id: String, now: Long)
+
+    /** Clears rows left active by a process kill or crash; live workers refresh updatedAt often. */
+    @Query(
+        "UPDATE download_history SET status = 'cancelled', updatedAt = :now " +
+            "WHERE status IN ('queued','downloading','converting','saving') AND updatedAt < :cutoff"
+    )
+    suspend fun markStaleActive(now: Long, cutoff: Long)
 
     @Query(
         "UPDATE download_history SET status = 'queued', progress = 0, etaSeconds = 0, " +

@@ -21,6 +21,11 @@ source is published at https://github.com/Yasinjahantigh/LogaRhythm-Android.
    Project: https://www.python.org
    License: PSF License.
 
+4. AndroidX ExifInterface
+   Project: https://developer.android.com/jetpack/androidx/releases/exifinterface
+   License: Apache License 2.0 (same license as LogaRhythm).
+   Used for cover-photo rotation when a new album artwork is picked.
+
 The GPL-3.0 text is available at https://www.gnu.org/licenses/gpl-3.0.txt.
 
 Music downloads are intended for content you are allowed to download. Respect

@@ -35,18 +35,35 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.yasinjahantigh.logarhythm.R
 import com.yasinjahantigh.logarhythm.domain.model.Playlist
+import com.yasinjahantigh.logarhythm.domain.smart.SmartMixType
+import com.yasinjahantigh.logarhythm.feature.ai.MagicPlaylistSheet
+import com.yasinjahantigh.logarhythm.feature.smart.SmartMixesSection
 
 @Composable
 fun PlaylistsTabContent(
     onPlaylistClick: (Long) -> Unit,
+    onSmartMixClick: (SmartMixType) -> Unit,
+    onOpenAiSettings: () -> Unit,
     modifier: Modifier = Modifier,
     viewModel: PlaylistViewModel = hiltViewModel()
 ) {
     val playlists by viewModel.playlists.collectAsStateWithLifecycle()
+    val smartMixes by viewModel.smartMixes.collectAsStateWithLifecycle()
 
     var showCreateDialog by remember { mutableStateOf(false) }
+    var showMagicPlaylist by remember { mutableStateOf(false) }
     var playlistToRename by remember { mutableStateOf<Playlist?>(null) }
     var playlistToDelete by remember { mutableStateOf<Playlist?>(null) }
+
+    if (showMagicPlaylist) {
+        MagicPlaylistSheet(
+            onDismiss = { showMagicPlaylist = false },
+            onOpenSettings = {
+                showMagicPlaylist = false
+                onOpenAiSettings()
+            }
+        )
+    }
 
     if (showCreateDialog) {
         CreatePlaylistDialog(
@@ -87,6 +104,15 @@ fun PlaylistsTabContent(
             .fillMaxSize()
             .testTag("playlists_tab_content")
     ) {
+        item {
+            SmartMixesSection(
+                mixes = smartMixes,
+                onMixClick = { onSmartMixClick(it.type) },
+                onMagicPlaylist = { showMagicPlaylist = true },
+                modifier = Modifier.padding(bottom = 8.dp)
+            )
+        }
+
         item {
             Surface(
                 onClick = { showCreateDialog = true },

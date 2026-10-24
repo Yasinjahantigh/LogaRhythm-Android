@@ -2,9 +2,13 @@ package com.yasinjahantigh.logarhythm.domain.repository
 
 import com.yasinjahantigh.logarhythm.domain.model.Album
 import com.yasinjahantigh.logarhythm.domain.model.Artist
+import com.yasinjahantigh.logarhythm.domain.model.ArtistProfile
 import com.yasinjahantigh.logarhythm.domain.model.Folder
 import com.yasinjahantigh.logarhythm.domain.model.Genre
 import com.yasinjahantigh.logarhythm.domain.model.Track
+import com.yasinjahantigh.logarhythm.domain.model.TrackEdit
+import com.yasinjahantigh.logarhythm.domain.model.TrackEditResult
+import com.yasinjahantigh.logarhythm.domain.model.TrackPlayStat
 import kotlinx.coroutines.flow.Flow
 
 interface TrackRepository {
@@ -24,9 +28,16 @@ interface TrackRepository {
     fun getTracksByGenre(genre: String): Flow<List<Track>>
     fun getAlbumByName(album: String): Flow<Album?>
     fun getArtistByName(artist: String): Flow<Artist?>
+    fun getArtistProfile(artist: String): Flow<ArtistProfile?>
     fun getGenreByName(genre: String): Flow<Genre?>
+    /** Finished plays keyed by track id; drives play-count sorting, top tracks and smart mixes. */
+    fun getPlayStats(): Flow<Map<String, TrackPlayStat>>
+    fun getFavoriteTrackIds(): Flow<Set<String>>
+    fun getDownloadedTrackUris(): Flow<Set<String>>
     suspend fun refreshTracks()
     suspend fun updateTrackMetadata(id: String, title: String, artist: String, album: String, genre: String): Track?
+    /** Full tag/cover edit; writes the file, verifies it, mirrors MediaStore and updates Room. */
+    suspend fun updateTrackDetails(id: String, edit: TrackEdit): TrackEditResult
     suspend fun deleteTrack(track: Track): Boolean
     fun getHiddenTracks(): Flow<List<Track>>
     fun getAllDeviceFolderNames(): Flow<List<String>>

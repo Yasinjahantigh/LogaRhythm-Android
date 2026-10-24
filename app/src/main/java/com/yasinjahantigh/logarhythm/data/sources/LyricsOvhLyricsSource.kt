@@ -1,71 +1,66 @@
 package com.yasinjahantigh.logarhythm.data.sources
 
+import com.yasinjahantigh.logarhythm.data.lyrics.LyricsHttpClient
+import com.yasinjahantigh.logarhythm.data.lyrics.LyricsSearchResult
+import com.yasinjahantigh.logarhythm.data.lyrics.OnlineLyricsSource
+import com.yasinjahantigh.logarhythm.data.lyrics.encode
 import com.yasinjahantigh.logarhythm.domain.lyrics.LrcParser
-import com.yasinjahantigh.logarhythm.domain.model.Lyrics
-import com.yasinjahantigh.logarhythm.domain.model.Track
-import com.yasinjahantigh.logarhythm.domain.source.LyricsSource
+import com.yasinjahantigh.logarhythm.domain.lyrics.LyricsQuery
+import com.yasinjahantigh.logarhythm.domain.lyrics.LyricsSourceStatus
+import com.yasinjahantigh.logarhythm.domain.lyrics.LyricsTextNormalizer
+import com.yasinjahantigh.logarhythm.domain.model.LyricsCandidate
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
-import java.io.BufferedReader
-import java.net.HttpURLConnection
-import java.net.URL
-import java.net.URLEncoder
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/**
- * Online lyrics provider querying Lyrics.ovh API (https://lyrics.ovh).
- * Provides a vast database of international plain/unsynced lyrics.
- */
+/** lyrics.ovh: plain international lyrics, no API key. */
 @Singleton
-class LyricsOvhLyricsSource @Inject constructor() : LyricsSource {
+class LyricsOvhLyricsSource @Inject constructor(
+    private val http: LyricsHttpClient
+) : OnlineLyricsSource {
 
-    override val name: String = "lyrics_ovh"
+    override val id: String = "lyrics_ovh"
+    override val displayName: String = "lyrics.ovh"
 
-    companion object {
-        private const val BASE_URL = "https://api.lyrics.ovh/v1"
-        private const val USER_AGENT = "LogaRhythm/1.0 (Android)"
-        private const val TIMEOUT_MS = 6000
-    }
-
-    override suspend fun getLyrics(track: Track): Lyrics? = withContext(Dispatchers.IO) {
-        if (track.title.isBlank() || track.artist.isBlank() || track.artist == "Unknown Artist") {
-            return@withContext null
+    override suspend fun search(query: LyricsQuery): LyricsSearchResult = withContext(Dispatchers.IO) {
+        val title = LyricsTextNormalizer.queryTitle(query.title)
+        val artist = LyricsTextNormalizer.queryArtist(query.artist)
+        if (title.isBlank() || artist.isBlank()) {
+            return@withContext LyricsSearchResult(status = LyricsSourceStatus.EMPTY)
+        }
+        val response = http.get(
+            "https://api.lyrics.ovh/v1/${encode(artist)}/${encode(title)}",
+            mapOf("Accept" to "application/json")
+        )
+        when {
+            response.blocked -> return@withContext LyricsSearchResult(status = LyricsSourceStatus.BLOCKED, detail = response.error)
+            response.timedOut -> return@withContext LyricsSearchResult(status = LyricsSourceStatus.TIMEOUT, detail = response.error)
+            !response.ok -> return@withContext LyricsSearchResult(
+                status = if (response.code == 404) LyricsSourceStatus.EMPTY else LyricsSourceStatus.ERROR,
+                detail = response.error
+            )
         }
 
-        var connection: HttpURLConnection? = null
-        try {
-            val encodedArtist = URLEncoder.encode(track.artist.trim(), "UTF-8").replace("+", "%20")
-            val encodedTitle = URLEncoder.encode(track.title.trim(), "UTF-8").replace("+", "%20")
-            val urlString = "$BASE_URL/$encodedArtist/$encodedTitle"
-
-            val url = URL(urlString)
-            connection = (url.openConnection() as HttpURLConnection).apply {
-                requestMethod = "GET"
-                connectTimeout = TIMEOUT_MS
-                readTimeout = TIMEOUT_MS
-                setRequestProperty("User-Agent", USER_AGENT)
-                setRequestProperty("Accept", "application/json")
-            }
-
-            if (connection.responseCode == HttpURLConnection.HTTP_OK) {
-                val responseText = connection.inputStream.bufferedReader().use(BufferedReader::readText)
-                val json = JSONObject(responseText)
-                val lyricsText = LyricsResponseFields.text(json, "lyrics")
-                if (lyricsText.isNotBlank()) {
-                    val parsed = LrcParser.parse(lyricsText)
-                    if (!parsed.isEmpty) {
-                        return@withContext parsed
-                    }
-                }
-            }
-        } catch (_: Exception) {
-            // Not found or network error
-        } finally {
-            connection?.disconnect()
-        }
-
-        null
+        val text = runCatching {
+            LyricsResponseFields.text(JSONObject(response.body), "lyrics")
+        }.getOrNull()
+        if (text.isNullOrBlank()) return@withContext LyricsSearchResult(status = LyricsSourceStatus.EMPTY)
+        val parsed = LrcParser.parse(text)
+        if (parsed.isEmpty) return@withContext LyricsSearchResult(status = LyricsSourceStatus.EMPTY)
+        LyricsSearchResult(
+            candidates = listOf(
+                LyricsCandidate(
+                    id = "ovh_${title}_$artist",
+                    trackName = title,
+                    artistName = artist,
+                    isSynced = parsed.isSynced,
+                    sourceName = displayName,
+                    providerId = id,
+                    lyrics = parsed
+                )
+            )
+        )
     }
 }

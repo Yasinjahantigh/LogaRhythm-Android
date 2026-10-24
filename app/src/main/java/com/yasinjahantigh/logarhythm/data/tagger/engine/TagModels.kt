@@ -15,18 +15,20 @@ data class TagEdit(
     val title: String? = null,
     val artist: String? = null,
     val album: String? = null,
+    val albumArtist: String? = null,
     val genre: String? = null,
     val lyrics: String? = null,
     val artwork: ByteArray? = null,
+    val artworkMime: String? = null,
     val year: String? = null,
     val trackNumber: Int? = null,
     val discNumber: Int? = null,
     val composer: String? = null
 ) {
     val isEmpty: Boolean
-        get() = title == null && artist == null && album == null && genre == null &&
-            lyrics == null && artwork == null && year == null && trackNumber == null &&
-            discNumber == null && composer == null
+        get() = title == null && artist == null && album == null && albumArtist == null &&
+            genre == null && lyrics == null && artwork == null && year == null &&
+            trackNumber == null && discNumber == null && composer == null
 }
 
 /** Values read back from a file. A field is null when the file has no such tag. */
@@ -34,12 +36,15 @@ data class AudioTags(
     val title: String? = null,
     val artist: String? = null,
     val album: String? = null,
+    val albumArtist: String? = null,
     val genre: String? = null,
     val lyrics: String? = null,
     val year: String? = null,
     val trackNumber: Int? = null,
     val discNumber: Int? = null,
-    val composer: String? = null
+    val composer: String? = null,
+    val artwork: ByteArray? = null,
+    val artworkMime: String? = null
 )
 
 class UnsupportedTagException(message: String) : Exception(message)
@@ -144,6 +149,7 @@ internal class VorbisComments(var vendor: ByteArray, val entries: MutableList<Pa
         set(arrayOf("TITLE"), edit.title)
         set(arrayOf("ARTIST"), edit.artist)
         set(arrayOf("ALBUM"), edit.album)
+        set(arrayOf("ALBUMARTIST", "ALBUM ARTIST"), edit.albumArtist)
         set(arrayOf("GENRE"), edit.genre)
         set(arrayOf("LYRICS", "UNSYNCEDLYRICS"), edit.lyrics)
         set(arrayOf("YEAR", "DATE"), edit.year)
@@ -158,6 +164,7 @@ internal class VorbisComments(var vendor: ByteArray, val entries: MutableList<Pa
 
     fun toTags() = AudioTags(
         title = first("TITLE"), artist = first("ARTIST"), album = first("ALBUM"),
+        albumArtist = first("ALBUMARTIST", "ALBUM ARTIST"),
         genre = first("GENRE"), lyrics = first("LYRICS", "UNSYNCEDLYRICS"),
         year = first("YEAR", "DATE"),
         trackNumber = first("TRACKNUMBER")?.trim()?.toIntOrNull(),

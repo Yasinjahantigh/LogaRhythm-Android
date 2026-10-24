@@ -63,6 +63,8 @@ sealed class NavDestination(
         const val ROUTE_FOLDER_DETAIL = "folder_detail/{folderName}"
         const val ROUTE_GENRE_DETAIL = "genre_detail/{genreName}"
         const val ROUTE_PLAYLIST_DETAIL = "playlist_detail/{playlistId}"
+        const val ROUTE_SMART_MIX = "smart_mix/{mixType}"
+        const val ROUTE_TAG_EDITOR = "tag_editor/{trackId}"
         const val ROUTE_STATS = "stats"
         const val ROUTE_EQUALIZER = "equalizer"
         const val ROUTE_LIBRARY_TOOLS = "library_tools"
@@ -83,5 +85,11 @@ sealed class NavDestination(
 
         fun createPlaylistDetailRoute(playlistId: Long): String =
             "playlist_detail/$playlistId"
+
+        fun createSmartMixRoute(type: com.yasinjahantigh.logarhythm.domain.smart.SmartMixType): String =
+            "smart_mix/${type.raw}"
+
+        fun createTagEditorRoute(trackId: String): String =
+            "tag_editor/${Uri.encode(trackId)}"
     }
 }

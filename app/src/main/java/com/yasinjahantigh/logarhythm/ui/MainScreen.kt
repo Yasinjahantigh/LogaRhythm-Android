@@ -78,6 +78,7 @@ fun MainScreen(
     }
     val isExpanded by playerViewModel.isExpanded.collectAsStateWithLifecycle()
     val isCompact by playerViewModel.isCompactMiniPlayer.collectAsStateWithLifecycle()
+    val swipeRightForNext by playerViewModel.swipeRightForNext.collectAsStateWithLifecycle()
     val isDismissed by playerViewModel.isDismissed.collectAsStateWithLifecycle()
 
     val configuration = LocalConfiguration.current
@@ -126,6 +127,7 @@ fun MainScreen(
                                         onNext = onMiniNext, onPrevious = onMiniPrevious,
                                         onExpand = playerViewModel::expand,
                                         isCompact = isCompact, onDismiss = playerViewModel::dismissMiniPlayer,
+                                        swipeRightForNext = swipeRightForNext,
                                         modifier = Modifier.navigationBarsPadding(),
                                         tint = seedTint
                                     )
@@ -152,6 +154,7 @@ fun MainScreen(
                                             onNext = onMiniNext, onPrevious = onMiniPrevious,
                                             onExpand = playerViewModel::expand,
                                             isCompact = isCompact, onDismiss = playerViewModel::dismissMiniPlayer,
+                                            swipeRightForNext = swipeRightForNext,
                                             tint = seedTint
                                         )
                                     }
@@ -171,6 +174,7 @@ fun MainScreen(
                                     onNext = onMiniNext, onPrevious = onMiniPrevious,
                                     onExpand = playerViewModel::expand,
                                     isCompact = isCompact, onDismiss = playerViewModel::dismissMiniPlayer,
+                                    swipeRightForNext = swipeRightForNext,
                                     modifier = Modifier.navigationBarsPadding(),
                                     tint = seedTint
                                 )
@@ -194,7 +198,11 @@ fun MainScreen(
             ) {
                 FullPlayerScreen(
                     viewModel = playerViewModel,
-                    onCollapse = playerViewModel::collapse
+                    onCollapse = playerViewModel::collapse,
+                    onNavigateToTagEditor = { trackId ->
+                        playerViewModel.collapse()
+                        navController.navigate(NavDestination.createTagEditorRoute(trackId))
+                    }
                 )
             }
         }

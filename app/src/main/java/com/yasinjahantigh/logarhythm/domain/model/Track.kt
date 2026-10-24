@@ -21,5 +21,9 @@ data class Track(
     /** Album-artist tag when the platform exposes it (Android 11+); empty otherwise. */
     val albumArtist: String = "",
     /** Absolute file path reported by MediaStore, used for M3U export and duplicate hints. */
-    val filePath: String = ""
+    val filePath: String = "",
+    val year: Int = 0,
+    val trackNumber: Int = 0,
+    val discNumber: Int = 0,
+    val composer: String = ""
 )

@@ -14,7 +14,8 @@ import com.yasinjahantigh.logarhythm.domain.model.Track
         Index("album"),
         Index("folder"),
         Index("genre"),
-        Index("dateAdded")
+        Index("dateAdded"),
+        Index("year")
     ]
 )
 data class TrackEntity(
@@ -32,7 +33,11 @@ data class TrackEntity(
     val folder: String = "",
     val genre: String = "",
     @ColumnInfo(defaultValue = "''") val albumArtist: String = "",
-    @ColumnInfo(defaultValue = "''") val filePath: String = ""
+    @ColumnInfo(defaultValue = "''") val filePath: String = "",
+    @ColumnInfo(defaultValue = "0") val year: Int = 0,
+    @ColumnInfo(defaultValue = "0") val trackNumber: Int = 0,
+    @ColumnInfo(defaultValue = "0") val discNumber: Int = 0,
+    @ColumnInfo(defaultValue = "''") val composer: String = ""
 ) {
     fun toDomain(): Track = Track(
         id = id,
@@ -48,7 +53,11 @@ data class TrackEntity(
         folder = folder,
         genre = genre,
         albumArtist = albumArtist,
-        filePath = filePath
+        filePath = filePath,
+        year = year,
+        trackNumber = trackNumber,
+        discNumber = discNumber,
+        composer = composer
     )
 
     companion object {
@@ -66,7 +75,11 @@ data class TrackEntity(
             folder = track.folder,
             genre = track.genre,
             albumArtist = track.albumArtist,
-            filePath = track.filePath
+            filePath = track.filePath,
+            year = track.year,
+            trackNumber = track.trackNumber,
+            discNumber = track.discNumber,
+            composer = track.composer
         )
     }
 }

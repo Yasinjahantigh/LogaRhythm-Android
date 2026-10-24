@@ -8,5 +8,7 @@ data class LyricsCandidate(
     val durationMs: Long = 0L,
     val isSynced: Boolean = false,
     val sourceName: String = "Online",
-    val lyrics: Lyrics
+    val lyrics: Lyrics,
+    /** Stable provider key used for cache attribution; [sourceName] is the display label. */
+    val providerId: String = sourceName.lowercase().replace(' ', '_')
 )
