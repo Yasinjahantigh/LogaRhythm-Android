@@ -1,73 +1,37 @@
 # Releasing
 
-## 1. Create a signing key (once)
+Maintainer notes for publishing a signed APK. Do not commit the keystore or any passwords.
 
-```bash
-keytool -genkeypair -v \
-  -keystore logarhythm-release.keystore \
-  -alias logarhythm-key \
-  -keyalg RSA \
-  -keysize 2048 \
-  -validity 10000
-```
-
-Keep the keystore file and both passwords outside the repository. Losing the key means existing installations cannot be updated in place.
-
-## 2. Add repository secrets
-
-In GitHub: **Settings -> Secrets and variables -> Actions -> New repository secret**.
+## Secrets (GitHub → Settings → Secrets and variables → Actions)
 
 | Secret | Value |
 | :--- | :--- |
-| `KEYSTORE_BASE64` | Base64 of the keystore file |
+| `KEYSTORE_BASE64` | Base64 of the release keystore |
 | `KEYSTORE_PASSWORD` | Keystore password |
-| `KEY_ALIAS` | `logarhythm-key` |
+| `KEY_ALIAS` | Key alias |
 | `KEY_PASSWORD` | Key password |
 
-Encode the keystore with one of these commands:
+Encode the keystore on Linux with `base64 -w 0 logarhythm-release.keystore`.
+
+## Publish
 
 ```bash
-# Linux
-base64 -w 0 logarhythm-release.keystore > keystore_base64.txt
+git tag v1.6.0
+git push origin v1.6.0
 ```
 
-```powershell
-# Windows PowerShell
-[Convert]::ToBase64String([IO.File]::ReadAllBytes("logarhythm-release.keystore")) | Out-File -Encoding ascii keystore_base64.txt
-```
+Or run **Build and release APK** from the Actions tab with an empty version input to bump the patch version.
 
-## 3. Publish a release
+The workflow runs tests, builds a signed APK and attaches it to a GitHub release. It fails if a signing secret is missing, so nothing unsigned gets published.
 
-Create and push a tag:
+## Verify
 
 ```bash
-git tag v1.4.0
-git push origin v1.4.0
+apksigner verify --verbose --print-certs LogaRhythm-v1.6.0.apk
 ```
 
-Alternatively, run **Build and release APK** from the Actions tab and leave the version input empty to increment the patch version automatically.
+The certificate must match the one from your keystore.
 
-The workflow runs the unit tests, builds a signed release APK, verifies it with `apksigner` and attaches it to a GitHub release. It fails instead of publishing an unsigned APK when a signing secret is missing.
+## Important
 
-To build a signed release locally, point the same variables at the keystore:
-
-```powershell
-$env:KEYSTORE_PATH = "C:\path\to\logarhythm-release.keystore"
-$env:KEYSTORE_PASSWORD = "..."
-$env:KEY_ALIAS = "logarhythm-key"
-$env:KEY_PASSWORD = "..."
-$env:REQUIRE_RELEASE_SIGNING = "true"
-./gradlew :app:assembleRelease
-```
-
-## 4. Verify a downloaded APK
-
-```bash
-apksigner verify --verbose --print-certs LogaRhythm-v1.4.0.apk
-```
-
-The reported certificate should match the local keystore:
-
-```bash
-keytool -list -v -keystore logarhythm-release.keystore -alias logarhythm-key
-```
+Keep the keystore and passwords outside the repository. If the key is lost, existing installs cannot be updated in place.
