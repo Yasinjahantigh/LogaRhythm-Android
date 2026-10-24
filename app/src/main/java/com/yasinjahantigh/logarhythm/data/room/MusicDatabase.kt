@@ -16,7 +16,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         ResumePositionEntity::class,
         DownloadEntity::class
     ],
-    version = 9,
+    version = 10,
     exportSchema = true
 )
 abstract class MusicDatabase : RoomDatabase() {
@@ -110,6 +110,17 @@ abstract class MusicDatabase : RoomDatabase() {
             }
         }
 
+        /** Release year, disc/track numbers and composer for sorting and the tag studio. */
+        val MIGRATION_9_10: Migration = object : Migration(9, 10) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE tracks ADD COLUMN year INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE tracks ADD COLUMN trackNumber INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE tracks ADD COLUMN discNumber INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE tracks ADD COLUMN composer TEXT NOT NULL DEFAULT ''")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_tracks_year ON tracks (year)")
+            }
+        }
+
         val ALL_MIGRATIONS: Array<Migration> = arrayOf(
             MIGRATION_1_2,
             MIGRATION_2_3,
@@ -118,7 +129,8 @@ abstract class MusicDatabase : RoomDatabase() {
             MIGRATION_5_6,
             MIGRATION_6_7,
             MIGRATION_7_8,
-            MIGRATION_8_9
+            MIGRATION_8_9,
+            MIGRATION_9_10
         )
     }
 }

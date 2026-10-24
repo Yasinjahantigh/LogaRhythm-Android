@@ -15,6 +15,7 @@ import androidx.media3.common.util.UnstableApi
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
 import com.google.common.util.concurrent.SettableFuture
+import com.yasinjahantigh.logarhythm.core.artwork.ArtworkVersionStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.asExecutor
 
@@ -45,7 +46,7 @@ class AudioBitmapLoader(private val context: Context) : BitmapLoader {
     }
 
     override fun loadBitmap(uri: Uri): ListenableFuture<Bitmap> {
-        val cacheKey = uri.toString()
+        val cacheKey = "$uri#v${ArtworkVersionStore.versionOf(uri.toString())}"
         synchronized(cache) {
             val cached = cache.get(cacheKey)
             if (cached != null) {

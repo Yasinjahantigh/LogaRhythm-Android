@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.ColorLens
@@ -67,6 +68,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.yasinjahantigh.logarhythm.R
+import com.yasinjahantigh.logarhythm.data.ai.AiProvider
 import com.yasinjahantigh.logarhythm.ui.designsystem.LocalPlaybackBottomPadding
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -91,15 +93,26 @@ fun SettingsScreen(
     val allFolders by viewModel.allFolders.collectAsStateWithLifecycle()
     val isLrclibEnabled by viewModel.isLrclibEnabled.collectAsStateWithLifecycle()
     val isGeniusEnabled by viewModel.isGeniusEnabled.collectAsStateWithLifecycle()
+    val isNeteaseEnabled by viewModel.isNeteaseEnabled.collectAsStateWithLifecycle()
+    val isKugouEnabled by viewModel.isKugouEnabled.collectAsStateWithLifecycle()
+    val isLyricsOvhEnabled by viewModel.isLyricsOvhEnabled.collectAsStateWithLifecycle()
+    val isCustomLyricsEnabled by viewModel.isCustomLyricsEnabled.collectAsStateWithLifecycle()
+    val customLyricsUrl by viewModel.customLyricsUrl.collectAsStateWithLifecycle()
+    val sourceTestResults by viewModel.sourceTestResults.collectAsStateWithLifecycle()
+    val isTestingSources by viewModel.isTestingSources.collectAsStateWithLifecycle()
     val fadeSec by viewModel.fadeSec.collectAsStateWithLifecycle()
     val skipSilence by viewModel.skipSilence.collectAsStateWithLifecycle()
     val replayGainMode by viewModel.replayGainMode.collectAsStateWithLifecycle()
     val replayGainPreampDb by viewModel.replayGainPreampDb.collectAsStateWithLifecycle()
     val resumeOnHeadset by viewModel.resumeOnHeadset.collectAsStateWithLifecycle()
+    val swipeRightForNext by viewModel.swipeRightForNext.collectAsStateWithLifecycle()
     val splitArtists by viewModel.splitArtists.collectAsStateWithLifecycle()
     val artistSeparators by viewModel.artistSeparators.collectAsStateWithLifecycle()
+    val artistNeverSplit by viewModel.artistNeverSplit.collectAsStateWithLifecycle()
     val hiddenLyrics by viewModel.hiddenLyricsTracks.collectAsStateWithLifecycle()
     val hiddenTracks by viewModel.hiddenTracks.collectAsStateWithLifecycle()
+    val aiSettings by viewModel.aiSettings.collectAsStateWithLifecycle()
+    val aiTestState by viewModel.aiTestState.collectAsStateWithLifecycle()
     val message by viewModel.message.collectAsStateWithLifecycle()
     val context = androidx.compose.ui.platform.LocalContext.current
 
@@ -127,6 +140,7 @@ fun SettingsScreen(
     var showReplayGainDialog by remember { mutableStateOf(false) }
     var showPreampDialog by remember { mutableStateOf(false) }
     var showSeparatorsDialog by remember { mutableStateOf(false) }
+    var showNeverSplitDialog by remember { mutableStateOf(false) }
     var showHiddenLyricsDialog by remember { mutableStateOf(false) }
     var showHiddenTracksDialog by remember { mutableStateOf(false) }
     var showLanguageDialog by remember { mutableStateOf(false) }
@@ -134,6 +148,24 @@ fun SettingsScreen(
     var showCornerDialog by remember { mutableStateOf(false) }
     var showMinLengthDialog by remember { mutableStateOf(false) }
     var showFoldersDialog by remember { mutableStateOf(false) }
+    var showCustomLyricsDialog by remember { mutableStateOf(false) }
+    var showLyricsTestDialog by remember { mutableStateOf(false) }
+    var showAiDialog by remember { mutableStateOf(false) }
+
+    if (showAiDialog) {
+        AiSettingsDialog(
+            settings = aiSettings,
+            testState = aiTestState,
+            onTest = viewModel::testAiConnection,
+            onSave = { provider, baseUrl, model, apiKey ->
+                viewModel.saveAiSettings(provider, baseUrl, model, apiKey) {
+                    showAiDialog = false
+                }
+            },
+            onClearKey = viewModel::clearAiKey,
+            onDismiss = { showAiDialog = false }
+        )
+    }
 
     if (showLanguageDialog) {
         SingleChoiceDialog(
@@ -277,11 +309,47 @@ fun SettingsScreen(
         )
     }
 
+    if (showNeverSplitDialog) {
+        NeverSplitDialog(
+            current = artistNeverSplit,
+            onSave = viewModel::setArtistNeverSplit,
+            onReset = { viewModel.setArtistNeverSplit(emptySet()) },
+            onDismiss = { showNeverSplitDialog = false }
+        )
+    }
+
     if (showHiddenLyricsDialog) {
         HiddenLyricsDialog(
             tracks = hiddenLyrics,
             onRestore = viewModel::restoreLyrics,
             onDismiss = { showHiddenLyricsDialog = false }
+        )
+    }
+
+    if (showCustomLyricsDialog) {
+        TextInputDialog(
+            title = stringResource(R.string.settings_lyrics_custom_url_title),
+            initialValue = customLyricsUrl.orEmpty(),
+            label = stringResource(R.string.settings_lyrics_url_label),
+            placeholder = stringResource(R.string.settings_lyrics_custom_url_hint),
+            isValid = { it.startsWith("https://") && it.length > "https://".length },
+            invalidMessage = stringResource(R.string.settings_lyrics_custom_url_invalid),
+            onConfirm = { url ->
+                viewModel.setCustomLyricsUrl(url.ifBlank { null })
+                showCustomLyricsDialog = false
+            },
+            onDismiss = { showCustomLyricsDialog = false }
+        )
+    }
+
+    if (showLyricsTestDialog) {
+        LyricsTestDialog(
+            results = sourceTestResults.orEmpty(),
+            isTesting = isTestingSources,
+            onDismiss = {
+                showLyricsTestDialog = false
+                viewModel.dismissSourceTestResults()
+            }
         )
     }
 
@@ -457,6 +525,15 @@ fun SettingsScreen(
                             rowTag = "settings_resume_headset_item",
                             switchTag = "settings_resume_headset_switch"
                         )
+                        SettingsSwitchItem(
+                            title = stringResource(R.string.settings_swipe_next_title),
+                            subtitle = stringResource(R.string.settings_swipe_next_desc),
+                            icon = Icons.Filled.SkipNext,
+                            checked = swipeRightForNext,
+                            onCheckedChange = viewModel::setSwipeRightForNext,
+                            rowTag = "settings_swipe_next_item",
+                            switchTag = "settings_swipe_next_switch"
+                        )
                     }
                 }
 
@@ -514,6 +591,17 @@ fun SettingsScreen(
                                 onClick = { showSeparatorsDialog = true },
                                 testTag = "settings_separators_item"
                             )
+                            SettingsActionItem(
+                                title = stringResource(R.string.settings_never_split_title),
+                                subtitle = if (artistNeverSplit.isEmpty()) {
+                                    stringResource(R.string.settings_never_split_desc)
+                                } else {
+                                    artistNeverSplit.sorted().joinToString("  ")
+                                },
+                                icon = Icons.AutoMirrored.Filled.CallSplit,
+                                onClick = { showNeverSplitDialog = true },
+                                testTag = "settings_never_split_item"
+                            )
                         }
                         SettingsActionItem(
                             title = stringResource(R.string.settings_library_tools_title),
@@ -545,12 +633,97 @@ fun SettingsScreen(
                             rowTag = "settings_genius_item",
                             switchTag = "settings_genius_switch"
                         )
+                        SettingsSwitchItem(
+                            title = stringResource(R.string.settings_lyrics_netease_title),
+                            subtitle = stringResource(R.string.settings_lyrics_netease_desc),
+                            icon = Icons.Filled.Lyrics,
+                            checked = isNeteaseEnabled,
+                            onCheckedChange = viewModel::setNeteaseEnabled,
+                            rowTag = "settings_netease_item",
+                            switchTag = "settings_netease_switch"
+                        )
+                        SettingsSwitchItem(
+                            title = stringResource(R.string.settings_lyrics_kugou_title),
+                            subtitle = stringResource(R.string.settings_lyrics_kugou_desc),
+                            icon = Icons.Filled.Lyrics,
+                            checked = isKugouEnabled,
+                            onCheckedChange = viewModel::setKugouEnabled,
+                            rowTag = "settings_kugou_item",
+                            switchTag = "settings_kugou_switch"
+                        )
+                        SettingsSwitchItem(
+                            title = stringResource(R.string.settings_lyrics_ovh_title),
+                            subtitle = stringResource(R.string.settings_lyrics_ovh_desc),
+                            icon = Icons.Filled.Lyrics,
+                            checked = isLyricsOvhEnabled,
+                            onCheckedChange = viewModel::setLyricsOvhEnabled,
+                            rowTag = "settings_lyrics_ovh_item",
+                            switchTag = "settings_lyrics_ovh_switch"
+                        )
+                        SettingsSwitchItem(
+                            title = stringResource(R.string.settings_lyrics_custom_title),
+                            subtitle = stringResource(R.string.settings_lyrics_custom_desc),
+                            icon = Icons.Filled.Lyrics,
+                            checked = isCustomLyricsEnabled,
+                            onCheckedChange = viewModel::setCustomLyricsEnabled,
+                            rowTag = "settings_custom_lyrics_item",
+                            switchTag = "settings_custom_lyrics_switch"
+                        )
+                        SettingsActionItem(
+                            title = stringResource(R.string.settings_lyrics_custom_url_title),
+                            subtitle = customLyricsUrl ?: stringResource(R.string.settings_lyrics_custom_url_not_set),
+                            icon = Icons.Filled.Language,
+                            onClick = { showCustomLyricsDialog = true },
+                            testTag = "settings_custom_lyrics_url_item"
+                        )
+                        SettingsActionItem(
+                            title = stringResource(R.string.settings_lyrics_test_title),
+                            subtitle = if (isTestingSources) {
+                                stringResource(R.string.lyrics_test_running)
+                            } else {
+                                stringResource(R.string.settings_lyrics_test_desc)
+                            },
+                            icon = Icons.Filled.Lyrics,
+                            onClick = {
+                                showLyricsTestDialog = true
+                                if (!isTestingSources) viewModel.testLyricsSources()
+                            },
+                            testTag = "settings_lyrics_test_item"
+                        )
                         SettingsActionItem(
                             title = stringResource(R.string.settings_hidden_lyrics_title),
                             subtitle = stringResource(R.string.settings_hidden_lyrics_desc, hiddenLyrics.size),
                             icon = Icons.Filled.VisibilityOff,
                             onClick = { showHiddenLyricsDialog = true },
                             testTag = "settings_hidden_lyrics_item"
+                        )
+                    }
+                }
+
+                item {
+                    SettingsGroup(title = stringResource(R.string.settings_category_ai)) {
+                        SettingsActionItem(
+                            title = stringResource(R.string.settings_ai_title),
+                            subtitle = if (aiSettings.hasKey) {
+                                stringResource(
+                                    R.string.settings_ai_configured,
+                                    stringResource(
+                                        if (aiSettings.provider == AiProvider.GEMINI) {
+                                            R.string.settings_ai_provider_gemini
+                                        } else {
+                                            R.string.settings_ai_provider_openai
+                                        }
+                                    )
+                                )
+                            } else {
+                                stringResource(R.string.settings_ai_not_configured)
+                            },
+                            icon = Icons.Filled.AutoAwesome,
+                            onClick = {
+                                viewModel.resetAiTestState()
+                                showAiDialog = true
+                            },
+                            testTag = "settings_ai_item"
                         )
                     }
                 }

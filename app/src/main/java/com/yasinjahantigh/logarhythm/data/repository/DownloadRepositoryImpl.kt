@@ -19,9 +19,11 @@ import com.yasinjahantigh.logarhythm.domain.model.DownloadStatus
 import com.yasinjahantigh.logarhythm.domain.repository.DownloadRepository
 import com.yausername.youtubedl_android.YoutubeDL
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.UUID
 import java.util.concurrent.TimeUnit
@@ -34,6 +36,15 @@ class DownloadRepositoryImpl @Inject constructor(
     private val dao: DownloadDao,
     private val workspace: DownloadWorkspace
 ) : DownloadRepository {
+
+    init {
+        CoroutineScope(Dispatchers.IO).launch {
+            runCatching {
+                val now = System.currentTimeMillis()
+                dao.markStaleActive(now, now - STALE_ACTIVE_AFTER_MS)
+            }
+        }
+    }
 
     override fun observeHistory(): Flow<List<DownloadItem>> =
         dao.observeAll().map { entities -> entities.map(DownloadEntity::toDomain) }
@@ -111,4 +122,8 @@ class DownloadRepositoryImpl @Inject constructor(
     }
 
     private fun workName(id: String): String = "download_$id"
+
+    private companion object {
+        const val STALE_ACTIVE_AFTER_MS = 10 * 60 * 1000L
+    }
 }

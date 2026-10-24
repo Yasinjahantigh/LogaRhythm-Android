@@ -46,7 +46,6 @@ import androidx.compose.ui.focus.focusRequester
 import com.yasinjahantigh.logarhythm.R
 import com.yasinjahantigh.logarhythm.domain.model.Track
 import com.yasinjahantigh.logarhythm.core.utils.rememberMediaStoreConsent
-import com.yasinjahantigh.logarhythm.feature.player.EditTrackDialog
 import com.yasinjahantigh.logarhythm.feature.playlist.AddToPlaylistDialog
 import com.yasinjahantigh.logarhythm.feature.playlist.PlaylistViewModel
 import com.yasinjahantigh.logarhythm.feature.playlist.SongMenuBottomSheet
@@ -58,6 +57,7 @@ fun SearchScreen(
     onNavigateBack: () -> Unit = {},
     onNavigateToAlbum: (String) -> Unit = {},
     onNavigateToArtist: (String) -> Unit = {},
+    onNavigateToTagEditor: (String) -> Unit = {},
     viewModel: SearchViewModel = hiltViewModel(),
     playlistViewModel: PlaylistViewModel = hiltViewModel()
 ) {
@@ -71,9 +71,6 @@ fun SearchScreen(
 
     var selectedTrackForMenu by remember { mutableStateOf<Track?>(null) }
     var showAddToPlaylistDialog by remember { mutableStateOf(false) }
-    var selectedTrackForEdit by remember { mutableStateOf<Track?>(null) }
-    var editTrackError by remember { mutableStateOf(false) }
-    var editTrackSaving by remember { mutableStateOf(false) }
 
     if (selectedTrackForMenu != null) {
         val menuTrack = selectedTrackForMenu!!
@@ -97,43 +94,16 @@ fun SearchScreen(
                 })
                 selectedTrackForMenu = null
             },
-            onEditTrack = { selectedTrackForEdit = menuTrack },
+            onEditTrack = { onNavigateToTagEditor(menuTrack.id) },
             onGoToAlbum = if (menuTrack.album.isNotBlank() && menuTrack.album != "Unknown Album") {
                 { onNavigateToAlbum(menuTrack.album) }
             } else null,
             onGoToArtist = if (menuTrack.artist.isNotBlank() && menuTrack.artist != "Unknown Artist") {
-                { onNavigateToArtist(menuTrack.artist) }
+                { artistName -> onNavigateToArtist(artistName) }
             } else null,
             onHideTrack = {
                 viewModel.hideTrack(menuTrack)
                 Toast.makeText(context, context.getString(R.string.track_hidden_toast, menuTrack.title), Toast.LENGTH_SHORT).show()
-            }
-        )
-    }
-
-    selectedTrackForEdit?.let { track ->
-        EditTrackDialog(
-            track = track,
-            onDismiss = { selectedTrackForEdit = null; editTrackError = false; editTrackSaving = false },
-            errorMessage = if (editTrackError) context.getString(R.string.track_metadata_write_failed) else null,
-            isSaving = editTrackSaving,
-            onSave = { newTitle, newArtist, newAlbum, newGenre ->
-                if (!editTrackSaving) {
-                    editTrackSaving = true
-                    editTrackError = false
-                    mediaStoreConsent.write(track, onApproved = {
-                        viewModel.updateTrackMetadata(track.id, newTitle, newArtist, newAlbum, newGenre) { updated ->
-                            editTrackSaving = false
-                            if (updated != null) {
-                                selectedTrackForEdit = null
-                                Toast.makeText(context, context.getString(R.string.track_updated_toast), Toast.LENGTH_SHORT).show()
-                            } else editTrackError = true
-                        }
-                    }, onCancelled = {
-                        editTrackSaving = false
-                        editTrackError = true
-                    })
-                }
             }
         )
     }

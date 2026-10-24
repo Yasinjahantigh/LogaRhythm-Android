@@ -6,6 +6,7 @@ import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Transaction
 import androidx.room.Update
+import com.yasinjahantigh.logarhythm.domain.model.TrackPlayStat
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -143,8 +144,24 @@ interface MusicDao {
     @Update
     suspend fun updateTracks(tracks: List<TrackEntity>)
 
-    @Query("UPDATE tracks SET title = :title, artist = :artist, album = :album, genre = :genre WHERE id = :id")
-    suspend fun updateTrackMetadata(id: String, title: String, artist: String, album: String, genre: String)
+    @Query(
+        "UPDATE tracks SET title = :title, artist = :artist, album = :album, albumArtist = :albumArtist, " +
+            "genre = :genre, year = :year, trackNumber = :trackNumber, discNumber = :discNumber, " +
+            "composer = :composer, dateModified = :dateModified WHERE id = :id"
+    )
+    suspend fun updateTrackMetadata(
+        id: String,
+        title: String,
+        artist: String,
+        album: String,
+        albumArtist: String,
+        genre: String,
+        year: Int,
+        trackNumber: Int,
+        discNumber: Int,
+        composer: String,
+        dateModified: Long
+    )
 
     @Query("DELETE FROM tracks WHERE id IN (:ids)")
     suspend fun deleteTracksByIds(ids: List<String>)
@@ -179,6 +196,15 @@ interface MusicDao {
 
     @Query("SELECT COALESCE(SUM(listenedMs), 0) FROM play_events WHERE timestamp >= :sinceTimestamp")
     fun getTotalListenTimeMs(sinceTimestamp: Long): Flow<Long>
+
+    /** Completed plays per track; used for library sorting, artist top tracks and smart mixes. */
+    @Query("""
+        SELECT trackId, COUNT(*) AS playCount, MAX(timestamp) AS lastPlayedAt
+        FROM play_events
+        WHERE skipped = 0
+        GROUP BY trackId
+    """)
+    fun getPlayStats(): Flow<List<TrackPlayStat>>
 
     @Query("""
         SELECT t.id, t.title, t.artist, t.album, t.durationMs, t.artworkUri, t.sourceType, t.uri, t.dateModified, t.folder, t.genre, t.dateAdded,

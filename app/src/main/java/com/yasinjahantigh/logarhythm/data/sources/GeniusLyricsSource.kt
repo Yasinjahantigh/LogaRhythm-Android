@@ -1,158 +1,139 @@
 package com.yasinjahantigh.logarhythm.data.sources
 
+import com.yasinjahantigh.logarhythm.data.lyrics.LyricsHttpClient
+import com.yasinjahantigh.logarhythm.data.lyrics.LyricsSearchResult
+import com.yasinjahantigh.logarhythm.data.lyrics.OnlineLyricsSource
+import com.yasinjahantigh.logarhythm.data.lyrics.encode
+import com.yasinjahantigh.logarhythm.domain.lyrics.LyricsMatchScorer
+import com.yasinjahantigh.logarhythm.domain.lyrics.LyricsQuery
+import com.yasinjahantigh.logarhythm.domain.lyrics.LyricsSourceStatus
+import com.yasinjahantigh.logarhythm.domain.lyrics.LyricsTextNormalizer
 import com.yasinjahantigh.logarhythm.domain.model.Lyrics
-import com.yasinjahantigh.logarhythm.domain.model.Track
-import com.yasinjahantigh.logarhythm.domain.source.LyricsSource
+import com.yasinjahantigh.logarhythm.domain.model.LyricsCandidate
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
-import java.io.BufferedReader
-import java.net.HttpURLConnection
-import java.net.URL
-import java.net.URLEncoder
 import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Last-resort lyrics provider using Genius' public search endpoint and song pages.
- * Genius only offers plain (unsynced) lyrics, so this source is consulted after every
- * synced provider and after lyrics.ovh.
+ * Genius has the best coverage for popular songs, but no official lyrics API and no timing.
+ * Direct access is preferred; a Cloudflare challenge is reported as BLOCKED, never bypassed.
  */
 @Singleton
-class GeniusLyricsSource @Inject constructor() : LyricsSource {
+class GeniusLyricsSource @Inject constructor(
+    private val http: LyricsHttpClient
+) : OnlineLyricsSource {
 
-    override val name: String = "genius"
+    override val id: String = "genius"
+    override val displayName: String = "Genius"
 
-    companion object {
-        private const val SEARCH_URL = "https://genius.com/api/search/multi"
-        private const val USER_AGENT =
-            "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Mobile Safari/537.36"
-        private const val TIMEOUT_MS = 8000
-    }
+    override suspend fun search(query: LyricsQuery): LyricsSearchResult = withContext(Dispatchers.IO) {
+        val title = LyricsTextNormalizer.queryTitle(query.title)
+        val artist = LyricsTextNormalizer.queryArtist(query.artist)
+        if (title.isBlank()) return@withContext LyricsSearchResult(status = LyricsSourceStatus.EMPTY)
 
-    override suspend fun getLyrics(track: Track): Lyrics? = withContext(Dispatchers.IO) {
-        val title = sanitizeTitle(track.title)
-        val artist = sanitizeArtist(track.artist)
-        if (title.isBlank()) return@withContext null
-
-        val songUrl = findSongUrl(title, artist) ?: return@withContext null
-        val html = fetchText(songUrl) ?: return@withContext null
-        val text = parseLyricsHtml(html) ?: return@withContext null
-        Lyrics(plainText = text)
-    }
-
-    private suspend fun findSongUrl(title: String, artist: String): String? {
         val queries = buildList {
             add(listOf(title, artist).filter { it.isNotBlank() }.joinToString(" "))
-            // File tags often carry features or noisy suffixes; a title-only pass recovers those songs.
             if (artist.isNotBlank()) add(title)
         }.distinct()
 
-        for (query in queries) {
-            val url = findSongUrlForQuery(query, title, artist)
-            if (url != null) return url
+        var blocked = false
+        var timedOut = false
+        var lastError: String? = null
+        val candidates = mutableListOf<LyricsCandidate>()
+
+        for (searchQuery in queries) {
+            val search = http.get(
+                "https://genius.com/api/search/multi?per_page=6&q=${encode(searchQuery)}",
+                mapOf("Referer" to "https://genius.com/", "Accept" to "application/json")
+            )
+            when {
+                search.blocked -> { blocked = true; continue }
+                search.timedOut -> { timedOut = true; continue }
+                !search.ok -> { lastError = search.error; continue }
+            }
+
+            val hits = parseSongHits(search.body, query)
+            for (hit in hits.take(2)) {
+                val page = http.get(
+                    hit.url,
+                    mapOf("Referer" to "https://genius.com/", "Accept" to "text/html,application/xhtml+xml")
+                )
+                when {
+                    page.blocked -> { blocked = true; break }
+                    page.timedOut -> { timedOut = true; break }
+                    !page.ok -> continue
+                }
+                val html = page.body ?: continue
+                val text = parseLyricsHtml(html) ?: continue
+                candidates += LyricsCandidate(
+                    id = "genius_${hit.id}",
+                    trackName = hit.title,
+                    artistName = hit.artist,
+                    isSynced = false,
+                    sourceName = displayName,
+                    providerId = id,
+                    lyrics = Lyrics(plainText = text)
+                )
+            }
+            if (candidates.isNotEmpty() || blocked || timedOut) break
         }
-        return null
+
+        when {
+            candidates.isNotEmpty() -> LyricsSearchResult(candidates, LyricsSourceStatus.OK)
+            blocked -> LyricsSearchResult(
+                status = LyricsSourceStatus.BLOCKED,
+                detail = "Genius is challenging this network"
+            )
+            timedOut -> LyricsSearchResult(status = LyricsSourceStatus.TIMEOUT)
+            lastError != null -> LyricsSearchResult(status = LyricsSourceStatus.ERROR, detail = lastError)
+            else -> LyricsSearchResult(status = LyricsSourceStatus.EMPTY)
+        }
     }
 
-    private suspend fun findSongUrlForQuery(query: String, title: String, artist: String): String? {
-        val body = fetchText("$SEARCH_URL?per_page=5&q=" + URLEncoder.encode(query, "UTF-8")) ?: return null
+    private data class SongHit(
+        val id: String,
+        val title: String,
+        val artist: String,
+        val url: String
+    )
+
+    private fun parseSongHits(body: String?, query: LyricsQuery): List<SongHit> {
+        if (body.isNullOrBlank()) return emptyList()
         val sections = runCatching {
             JSONObject(body).getJSONObject("response").optJSONArray("sections")
-        }.getOrNull() ?: return null
+        }.getOrNull() ?: return emptyList()
 
-        var bestUrl: String? = null
-        var bestScore = Int.MIN_VALUE
-        val wantedTitle = normalize(title)
-
+        val hits = mutableListOf<Pair<SongHit, Int>>()
         for (i in 0 until sections.length()) {
             val section = sections.optJSONObject(i) ?: continue
-            val hits = section.optJSONArray("hits") ?: continue
-            for (j in 0 until hits.length()) {
-                val result = hits.optJSONObject(j)?.optJSONObject("result") ?: continue
-                // Articles, videos and album pages also show up in search; only song pages end in "-lyrics".
+            val sectionHits = section.optJSONArray("hits") ?: continue
+            for (j in 0 until sectionHits.length()) {
+                val result = sectionHits.optJSONObject(j)?.optJSONObject("result") ?: continue
                 val url = result.optString("url").takeIf {
                     it.startsWith("https://genius.com/") && it.substringBefore('?').endsWith("-lyrics")
                 } ?: continue
-                val resultTitle = normalize(result.optString("title"))
-                val resultArtist = normalize(result.optJSONObject("primary_artist")?.optString("name").orEmpty())
-                var score = when {
-                    resultTitle == wantedTitle -> 3
-                    resultTitle.contains(wantedTitle) || wantedTitle.contains(resultTitle) -> 2
-                    else -> 0
-                }
-                if (artist.isNotBlank() && resultArtist == normalize(artist)) score += 2
-                if (score > bestScore) {
-                    bestScore = score
-                    bestUrl = url
+                val id = result.optString("id").ifBlank { url.hashCode().toString() }
+                val title = result.optString("title")
+                val artist = result.optJSONObject("primary_artist")?.optString("name").orEmpty()
+                val metadataCandidate = LyricsCandidate(
+                    id = id,
+                    trackName = title,
+                    artistName = artist,
+                    lyrics = Lyrics()
+                )
+                val match = LyricsMatchScorer.match(query, metadataCandidate)
+                val artistKnown = LyricsTextNormalizer.queryArtist(query.artist).isNotBlank()
+                // Never auto-pick an unrelated song just because it is the first search hit.
+                val artistOk = if (artistKnown) match.artistScore > 0 else match.titleScore == 6
+                if (match.titleScore >= 4 && artistOk && match.total >= 4) {
+                    hits += SongHit(id, title, artist, url) to match.total
                 }
             }
         }
-        return bestUrl?.takeIf { bestScore > 0 }
+        return hits.sortedByDescending { it.second }.map { it.first }
     }
-
-    private suspend fun fetchText(url: String): String? {
-        val first = fetchOnce(url)
-        if (first.body != null) return first.body
-        // Genius occasionally answers 422/429 while throttling; one short retry recovers those.
-        if (first.code != 422 && first.code !in 429..599) return null
-        delay(400)
-        return fetchOnce(url).body
-    }
-
-    private data class FetchResult(val code: Int, val body: String?)
-
-    private fun fetchOnce(url: String): FetchResult {
-        var connection: HttpURLConnection? = null
-        return try {
-            connection = (URL(url).openConnection() as HttpURLConnection).apply {
-                requestMethod = "GET"
-                connectTimeout = TIMEOUT_MS
-                readTimeout = TIMEOUT_MS
-                instanceFollowRedirects = true
-                setRequestProperty("User-Agent", USER_AGENT)
-                setRequestProperty("Accept", "application/json, text/html;q=0.9, */*;q=0.8")
-                setRequestProperty("Accept-Language", "en-US,en;q=0.8")
-                setRequestProperty("Referer", "https://genius.com/")
-            }
-            val code = connection.responseCode
-            if (code != HttpURLConnection.HTTP_OK) {
-                FetchResult(code, null)
-            } else {
-                FetchResult(code, connection.inputStream.bufferedReader().use(BufferedReader::readText))
-            }
-        } catch (_: Exception) {
-            FetchResult(-1, null)
-        } finally {
-            connection?.disconnect()
-        }
-    }
-
-    private fun sanitizeTitle(title: String): String = title
-        .replace(Regex("""^\d+[\s.\-_]+"""), "")
-        .replace(Regex("""\.(mp3|m4a|flac|wav|ogg|aac)$""", RegexOption.IGNORE_CASE), "")
-        .replace(Regex("""\s*[\(\[](feat|ft)\.?\s+[^\)\]]+[\)\]]""", RegexOption.IGNORE_CASE), "")
-        .replace(
-            Regex(
-                """\s*[\(\[](official\s+(audio|video|music\s+video|lyric\s+video)|remix|remaster(ed)?|prod\.?\s+by\s+[^\)\]]+)[\)\]]""",
-                RegexOption.IGNORE_CASE
-            ),
-            ""
-        )
-        .trim()
-
-    private fun sanitizeArtist(artist: String): String {
-        if (artist.isBlank() || artist.equals("<unknown>", true) || artist.equals("unknown", true) ||
-            artist.equals("unknown artist", true)
-        ) return ""
-        return artist.split(Regex("""[,;&]|\s+(feat|ft)\.?\s+""", RegexOption.IGNORE_CASE))
-            .firstOrNull()?.trim().orEmpty()
-    }
-
-    private fun normalize(value: String): String = value.lowercase()
-        .replace(Regex("""[^\p{L}\p{N}]+"""), " ")
-        .trim()
 }
 
 /**

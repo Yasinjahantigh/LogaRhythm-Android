@@ -16,12 +16,39 @@ import org.robolectric.annotation.Config
 class MusicDatabaseMigrationTest {
 
     @Test
-    fun testAllMigrationsArray_hasEightMigrations() {
-        assertEquals(8, MusicDatabase.ALL_MIGRATIONS.size)
+    fun testAllMigrationsArray_hasNineMigrations() {
+        assertEquals(9, MusicDatabase.ALL_MIGRATIONS.size)
         assertEquals(1, MusicDatabase.ALL_MIGRATIONS[0].startVersion)
         assertEquals(2, MusicDatabase.ALL_MIGRATIONS[0].endVersion)
-        assertEquals(8, MusicDatabase.ALL_MIGRATIONS[7].startVersion)
-        assertEquals(9, MusicDatabase.ALL_MIGRATIONS[7].endVersion)
+        assertEquals(9, MusicDatabase.ALL_MIGRATIONS[8].startVersion)
+        assertEquals(10, MusicDatabase.ALL_MIGRATIONS[8].endVersion)
+    }
+
+    @Test
+    fun testV10TrackColumnsAndYearIndexExist() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val db = Room.inMemoryDatabaseBuilder(context, MusicDatabase::class.java)
+            .addMigrations(*MusicDatabase.ALL_MIGRATIONS)
+            .allowMainThreadQueries()
+            .build()
+
+        val sqliteDb: SupportSQLiteDatabase = db.openHelper.writableDatabase
+        val columns = mutableSetOf<String>()
+        sqliteDb.query("PRAGMA table_info(tracks)").use { cursor ->
+            val nameIndex = cursor.getColumnIndex("name")
+            while (cursor.moveToNext()) columns.add(cursor.getString(nameIndex))
+        }
+        assertTrue(columns.contains("year"))
+        assertTrue(columns.contains("trackNumber"))
+        assertTrue(columns.contains("discNumber"))
+        assertTrue(columns.contains("composer"))
+
+        val indexes = mutableSetOf<String>()
+        sqliteDb.query("SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='tracks'").use { cursor ->
+            while (cursor.moveToNext()) indexes.add(cursor.getString(0))
+        }
+        assertTrue(indexes.contains("index_tracks_year"))
+        db.close()
     }
 
     @Test

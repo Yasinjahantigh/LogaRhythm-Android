@@ -68,6 +68,9 @@ interface PlaylistDao {
     @Query("SELECT COUNT(*) > 0 FROM playlist_tracks WHERE playlistId = :playlistId AND trackId = :trackId")
     fun isTrackInPlaylist(playlistId: Long, trackId: String): Flow<Boolean>
 
+    @Query("SELECT trackId FROM playlist_tracks WHERE playlistId = :playlistId")
+    fun observePlaylistTrackIds(playlistId: Long): Flow<List<String>>
+
     @Query("SELECT trackId FROM playlist_tracks WHERE playlistId = :playlistId ORDER BY orderIndex ASC")
     suspend fun getPlaylistTrackIds(playlistId: Long): List<String>
 

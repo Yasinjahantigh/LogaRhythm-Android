@@ -6,10 +6,15 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.yasinjahantigh.logarhythm.data.datastore.PreferencesManager
 import com.yasinjahantigh.logarhythm.R
+import com.yasinjahantigh.logarhythm.data.ai.AiProvider
+import com.yasinjahantigh.logarhythm.data.ai.AiSettings
 import com.yasinjahantigh.logarhythm.data.backup.BackupManager
 import com.yasinjahantigh.logarhythm.data.backup.PlaylistFileService
 import com.yasinjahantigh.logarhythm.domain.library.ArtistSplitter
+import com.yasinjahantigh.logarhythm.domain.lyrics.LyricsSourceTestResult
+import com.yasinjahantigh.logarhythm.domain.model.AiFailure
 import com.yasinjahantigh.logarhythm.domain.model.Track
+import com.yasinjahantigh.logarhythm.domain.repository.AiPlaylistRepository
 import com.yasinjahantigh.logarhythm.domain.repository.LyricsRepository
 import com.yasinjahantigh.logarhythm.domain.repository.TrackRepository
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -24,11 +29,19 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
+/** Result of the "Test connection" button inside the AI settings dialog. */
+data class AiTestState(
+    val testing: Boolean = false,
+    val success: Boolean = false,
+    val failure: AiFailure? = null
+)
+
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
     private val preferencesManager: PreferencesManager,
     private val trackRepository: TrackRepository,
     private val lyricsRepository: LyricsRepository,
+    private val aiPlaylistRepository: AiPlaylistRepository,
     private val backupManager: BackupManager,
     private val playlistFileService: PlaylistFileService
 ) : ViewModel() {
@@ -50,11 +63,15 @@ class SettingsViewModel @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0f)
     val resumeOnHeadset: StateFlow<Boolean> = preferencesManager.resumeOnHeadset
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
+    val swipeRightForNext: StateFlow<Boolean> = preferencesManager.swipeRightForNext
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
     val splitArtists: StateFlow<Boolean> = preferencesManager.splitArtists
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
     val artistSeparators: StateFlow<List<String>> = preferencesManager.artistSeparators
         .map { ArtistSplitter.parseSeparators(it) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ArtistSplitter.DEFAULT_SEPARATORS)
+    val artistNeverSplit: StateFlow<Set<String>> = preferencesManager.artistNeverSplit
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptySet())
 
     /** Songs whose lyrics are hidden, so the user can bring them back from one place. */
     val hiddenLyricsTracks: StateFlow<List<Track>> =
@@ -63,16 +80,58 @@ class SettingsViewModel @Inject constructor(
             tracks.filter { it.id in wanted }
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    val aiSettings: StateFlow<AiSettings> = aiPlaylistRepository.observeSettings()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), AiSettings())
+
+    private val _aiTestState = MutableStateFlow(AiTestState())
+    val aiTestState: StateFlow<AiTestState> = _aiTestState.asStateFlow()
+
+    fun saveAiSettings(
+        provider: AiProvider,
+        baseUrl: String,
+        model: String,
+        apiKey: String?,
+        onSaved: () -> Unit = {}
+    ) {
+        viewModelScope.launch {
+            aiPlaylistRepository.saveSettings(provider, baseUrl, model, apiKey)
+            _aiTestState.value = AiTestState()
+            onSaved()
+        }
+    }
+
+    fun clearAiKey() {
+        viewModelScope.launch { aiPlaylistRepository.clearKey() }
+    }
+
+    fun testAiConnection(provider: AiProvider, baseUrl: String, model: String, apiKey: String?) {
+        if (_aiTestState.value.testing) return
+        viewModelScope.launch {
+            _aiTestState.value = AiTestState(testing = true)
+            val failure = aiPlaylistRepository.testConnection(provider, baseUrl, model, apiKey)
+            _aiTestState.value = AiTestState(success = failure == null, failure = failure)
+        }
+    }
+
+    fun resetAiTestState() {
+        _aiTestState.value = AiTestState()
+    }
+
     fun setFadeSec(seconds: Int) { viewModelScope.launch { preferencesManager.setFadeBetweenSongsSec(seconds) } }
     fun setSkipSilence(enabled: Boolean) { viewModelScope.launch { preferencesManager.setSkipSilence(enabled) } }
     fun setReplayGainMode(mode: String) { viewModelScope.launch { preferencesManager.setReplayGainMode(mode) } }
     fun setReplayGainPreampDb(db: Float) { viewModelScope.launch { preferencesManager.setReplayGainPreampDb(db) } }
     fun setResumeOnHeadset(enabled: Boolean) { viewModelScope.launch { preferencesManager.setResumeOnHeadset(enabled) } }
+    fun setSwipeRightForNext(enabled: Boolean) { viewModelScope.launch { preferencesManager.setSwipeRightForNext(enabled) } }
     fun setSplitArtists(enabled: Boolean) { viewModelScope.launch { preferencesManager.setSplitArtists(enabled) } }
     fun setArtistSeparators(raw: String?) {
         viewModelScope.launch {
             preferencesManager.setArtistSeparators(raw?.takeIf { it.isNotBlank() })
         }
+    }
+
+    fun setArtistNeverSplit(names: Set<String>) {
+        viewModelScope.launch { preferencesManager.setArtistNeverSplit(names) }
     }
 
     fun restoreLyrics(trackId: String) {
@@ -189,7 +248,7 @@ class SettingsViewModel @Inject constructor(
         .stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5000),
-            initialValue = false
+            initialValue = true
         )
 
     val isGeniusEnabled: StateFlow<Boolean> = preferencesManager.isGeniusEnabled
@@ -198,6 +257,27 @@ class SettingsViewModel @Inject constructor(
             started = SharingStarted.WhileSubscribed(5000),
             initialValue = true
         )
+
+    val isNeteaseEnabled: StateFlow<Boolean> = preferencesManager.lyricsSourcePreferences
+        .map { it.netease }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+    val isKugouEnabled: StateFlow<Boolean> = preferencesManager.lyricsSourcePreferences
+        .map { it.kugou }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+    val isLyricsOvhEnabled: StateFlow<Boolean> = preferencesManager.lyricsSourcePreferences
+        .map { it.lyricsOvh }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
+    val isCustomLyricsEnabled: StateFlow<Boolean> = preferencesManager.lyricsSourcePreferences
+        .map { it.custom }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+    val customLyricsUrl: StateFlow<String?> = preferencesManager.lyricsSourcePreferences
+        .map { it.customUrl }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
+    private val _sourceTestResults = MutableStateFlow<List<LyricsSourceTestResult>?>(null)
+    val sourceTestResults: StateFlow<List<LyricsSourceTestResult>?> = _sourceTestResults.asStateFlow()
+    private val _isTestingSources = MutableStateFlow(false)
+    val isTestingSources: StateFlow<Boolean> = _isTestingSources.asStateFlow()
 
     fun setAppLanguage(
         language: String,
@@ -291,5 +371,46 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch {
             preferencesManager.setGeniusEnabled(enabled)
         }
+    }
+
+    fun setNeteaseEnabled(enabled: Boolean) {
+        viewModelScope.launch { preferencesManager.setNeteaseEnabled(enabled) }
+    }
+
+    fun setKugouEnabled(enabled: Boolean) {
+        viewModelScope.launch { preferencesManager.setKugouEnabled(enabled) }
+    }
+
+    fun setLyricsOvhEnabled(enabled: Boolean) {
+        viewModelScope.launch { preferencesManager.setLyricsOvhEnabled(enabled) }
+    }
+
+    fun setCustomLyricsEnabled(enabled: Boolean) {
+        viewModelScope.launch { preferencesManager.setCustomLyricsEnabled(enabled) }
+    }
+
+    fun setCustomLyricsUrl(url: String?) {
+        viewModelScope.launch { preferencesManager.setCustomLyricsUrl(url) }
+    }
+
+    fun testLyricsSources() {
+        if (_isTestingSources.value) return
+        viewModelScope.launch {
+            _isTestingSources.value = true
+            _sourceTestResults.value = emptyList()
+            try {
+                _sourceTestResults.value = lyricsRepository.testLyricsSources()
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                _sourceTestResults.value = emptyList()
+            } finally {
+                _isTestingSources.value = false
+            }
+        }
+    }
+
+    fun dismissSourceTestResults() {
+        _sourceTestResults.value = null
     }
 }

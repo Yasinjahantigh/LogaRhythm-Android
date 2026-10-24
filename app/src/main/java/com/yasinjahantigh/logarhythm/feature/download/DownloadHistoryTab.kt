@@ -20,6 +20,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
@@ -52,6 +53,8 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.yasinjahantigh.logarhythm.R
 import com.yasinjahantigh.logarhythm.domain.model.DOWNLOAD_NETWORK_RETRY_DETAIL
+import com.yasinjahantigh.logarhythm.domain.model.DOWNLOAD_SAVED_WITHOUT_TAGS_DETAIL
+import com.yasinjahantigh.logarhythm.domain.model.DOWNLOAD_TAG_WRITE_FAILED_DETAIL
 import com.yasinjahantigh.logarhythm.domain.model.DownloadItem
 import com.yasinjahantigh.logarhythm.domain.model.DownloadStatus
 import com.yasinjahantigh.logarhythm.ui.components.ArtworkImage
@@ -67,7 +70,8 @@ fun DownloadHistoryTab(
     onRetry: (DownloadItem) -> Unit,
     onRemove: (DownloadItem) -> Unit,
     onClearFinished: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onEditTags: ((DownloadItem) -> Unit)? = null
 ) {
     if (history.isEmpty()) {
         EmptyHistory(bottomPadding = bottomPadding, modifier = modifier)
@@ -113,7 +117,8 @@ fun DownloadHistoryTab(
                 onShare = onShare,
                 onCancel = onCancel,
                 onRetry = onRetry,
-                onRemove = onRemove
+                onRemove = onRemove,
+                onEditTags = onEditTags
             )
         }
     }
@@ -127,7 +132,8 @@ private fun DownloadHistoryItem(
     onShare: (DownloadItem) -> Unit,
     onCancel: (DownloadItem) -> Unit,
     onRetry: (DownloadItem) -> Unit,
-    onRemove: (DownloadItem) -> Unit
+    onRemove: (DownloadItem) -> Unit,
+    onEditTags: ((DownloadItem) -> Unit)? = null
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
 
@@ -226,6 +232,21 @@ private fun DownloadHistoryItem(
                         color = MaterialTheme.colorScheme.tertiary
                     )
                 }
+                if (item.status == DownloadStatus.SAVED) {
+                    val tagWarning = when (item.statusDetail) {
+                        DOWNLOAD_SAVED_WITHOUT_TAGS_DETAIL -> R.string.download_saved_without_tags
+                        DOWNLOAD_TAG_WRITE_FAILED_DETAIL -> R.string.download_tag_write_failed
+                        else -> null
+                    }
+                    if (tagWarning != null) {
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = stringResource(tagWarning),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.tertiary
+                        )
+                    }
+                }
             }
             Spacer(modifier = Modifier.width(4.dp))
             Box {
@@ -254,6 +275,13 @@ private fun DownloadHistoryItem(
                         onDismissRequest = { menuExpanded = false }
                     ) {
                         if (item.status == DownloadStatus.SAVED) {
+                            if (onEditTags != null && item.mediaStoreId != null) {
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(R.string.download_edit_tags)) },
+                                    leadingIcon = { Icon(Icons.Filled.Edit, contentDescription = null) },
+                                    onClick = { menuExpanded = false; onEditTags(item) }
+                                )
+                            }
                             DropdownMenuItem(
                                 text = { Text(stringResource(R.string.download_play)) },
                                 leadingIcon = { Icon(Icons.Filled.PlayArrow, contentDescription = null) },

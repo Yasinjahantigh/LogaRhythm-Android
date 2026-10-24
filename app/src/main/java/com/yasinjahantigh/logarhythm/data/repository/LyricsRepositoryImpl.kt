@@ -1,40 +1,62 @@
 package com.yasinjahantigh.logarhythm.data.repository
 
 import com.yasinjahantigh.logarhythm.data.datastore.PreferencesManager
+import com.yasinjahantigh.logarhythm.data.lyrics.LyricsCircuitBreaker
+import com.yasinjahantigh.logarhythm.data.lyrics.LyricsSearchResult
+import com.yasinjahantigh.logarhythm.data.lyrics.OnlineLyricsSource
 import com.yasinjahantigh.logarhythm.data.room.LyricsDao
 import com.yasinjahantigh.logarhythm.data.room.LyricsEntity
+import com.yasinjahantigh.logarhythm.data.sources.CustomLyricsSource
 import com.yasinjahantigh.logarhythm.data.sources.GeniusLyricsSource
+import com.yasinjahantigh.logarhythm.data.sources.KugouLyricsSource
 import com.yasinjahantigh.logarhythm.data.sources.LocalFileLyricsSource
 import com.yasinjahantigh.logarhythm.data.sources.LrclibLyricsSource
 import com.yasinjahantigh.logarhythm.data.sources.LyricsOvhLyricsSource
 import com.yasinjahantigh.logarhythm.data.sources.NeteaseLyricsSource
-import com.yasinjahantigh.logarhythm.data.sources.KugouLyricsSource
 import com.yasinjahantigh.logarhythm.domain.lyrics.LrcParser
+import com.yasinjahantigh.logarhythm.domain.lyrics.LyricsMatchScore
+import com.yasinjahantigh.logarhythm.domain.lyrics.LyricsMatchScorer
+import com.yasinjahantigh.logarhythm.domain.lyrics.LyricsMismatch
+import com.yasinjahantigh.logarhythm.domain.lyrics.LyricsQuery
+import com.yasinjahantigh.logarhythm.domain.lyrics.LyricsSourceStatus
+import com.yasinjahantigh.logarhythm.domain.lyrics.LyricsSourceTestResult
+import com.yasinjahantigh.logarhythm.domain.lyrics.LyricsTextNormalizer
 import com.yasinjahantigh.logarhythm.domain.model.Lyrics
+import com.yasinjahantigh.logarhythm.domain.model.LyricsCandidate
 import com.yasinjahantigh.logarhythm.domain.model.Track
 import com.yasinjahantigh.logarhythm.domain.repository.LyricsRepository
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.supervisorScope
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withTimeoutOrNull
 import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Resolves lyrics from the Room cache, embedded/local .lrc data, then online sources
- * (synced results before plain ones), caching every hit for offline use.
+ * Resolves lyrics from the Room cache, embedded/local .lrc data, then online providers raced in
+ * parallel under a hard deadline. A confident synced result wins; plain results need a stronger
+ * metadata match. Manual choices are locked and never replaced by cache refreshes.
  */
 @Singleton
 class LyricsRepositoryImpl @Inject constructor(
     private val lyricsDao: LyricsDao,
     private val localFileLyricsSource: LocalFileLyricsSource,
-    private val lrclibLyricsSource: LrclibLyricsSource,
-    private val neteaseLyricsSource: NeteaseLyricsSource,
-    private val kugouLyricsSource: KugouLyricsSource,
-    private val lyricsOvhLyricsSource: LyricsOvhLyricsSource,
-    private val geniusLyricsSource: GeniusLyricsSource,
+    private val lrclib: LrclibLyricsSource,
+    private val netease: NeteaseLyricsSource,
+    private val kugou: KugouLyricsSource,
+    private val lyricsOvh: LyricsOvhLyricsSource,
+    private val genius: GeniusLyricsSource,
+    private val custom: CustomLyricsSource,
+    private val circuitBreaker: LyricsCircuitBreaker,
     private val preferencesManager: PreferencesManager
 ) : LyricsRepository {
 
@@ -49,164 +71,142 @@ class LyricsRepositoryImpl @Inject constructor(
     }
 
     override suspend fun loadLyrics(track: Track): Lyrics? = withContext(Dispatchers.IO) {
-        // Cached result
         val cached = lyricsDao.getLyricsForTrackOnce(track.id)
-        if (cached != null) {
-            if (cached.source == "deleted") {
-                return@withContext null
-            }
-            val parsed = LrcParser.parse(cached.content).copy(source = cached.source)
-            if (!parsed.isEmpty) return@withContext parsed
+        if (cached?.source == "deleted") return@withContext null
+
+        val cachedLyrics = cached?.takeIf { it.content.isNotBlank() }?.let {
+            LrcParser.parse(it.content).copy(source = it.source).takeIf { parsed -> !parsed.isEmpty }
+        }
+        if (cachedLyrics != null && isFresh(cached)) return@withContext cachedLyrics
+
+        // Companion .lrc or embedded tags still beat a network lookup.
+        val local = localFileLyricsSource.getLyrics(track)
+        if (local != null && !local.isEmpty) {
+            cacheLyrics(track.id, local, local.source ?: "local_file")
+            return@withContext local
         }
 
-        // Companion .lrc or embedded tags
-        val localLyrics = localFileLyricsSource.getLyrics(track)
-        if (localLyrics != null && !localLyrics.isEmpty) {
-            val source = localLyrics.source ?: "local_file"
-            cacheLyrics(track.id, localLyrics, source)
-            return@withContext localLyrics
+        val online = searchBest(track)
+        if (online != null) {
+            cacheLyrics(track.id, online.lyrics, online.providerId)
+            return@withContext online.lyrics.copy(source = online.providerId)
         }
 
-        // Online banks, synced results first. Genius has its own switch.
-        val foundLyrics = searchAllOnlineSources(
-            track,
-            includeGeneralSources = preferencesManager.isLrclibEnabled.first()
-        )
-        if (foundLyrics != null && !foundLyrics.lyrics.isEmpty) {
-            val sourcedLyrics = foundLyrics.lyrics.copy(source = foundLyrics.sourceName)
-            cacheLyrics(track.id, sourcedLyrics, foundLyrics.sourceName)
-            // Loading/searching must never mutate shared audio files in the background.
-            // Embedded writes are reserved for explicit user save actions after consent.
-            return@withContext sourcedLyrics
-        }
-
-        null
+        // A stale cached copy is still better than an empty screen.
+        cachedLyrics
     }
 
     override suspend fun fetchOnlineLyrics(track: Track): Lyrics? = withContext(Dispatchers.IO) {
-        val foundLyrics = searchAllOnlineSources(track)
-        if (foundLyrics != null && !foundLyrics.lyrics.isEmpty) {
-            val sourcedLyrics = foundLyrics.lyrics.copy(source = foundLyrics.sourceName)
-            cacheLyrics(track.id, sourcedLyrics, foundLyrics.sourceName)
-            return@withContext sourcedLyrics
-        }
-        null
+        val found = searchBest(track) ?: return@withContext null
+        cacheLyrics(track.id, found.lyrics, found.providerId)
+        found.lyrics.copy(source = found.providerId)
     }
 
     override suspend fun searchLyricsCandidates(
         title: String,
+        artist: String,
+        album: String,
+        durationMs: Long
+    ): List<LyricsCandidate> = withContext(Dispatchers.IO) {
+        val query = LyricsQuery(title, artist, album, durationMs)
+        val providers = enabledProviders()
+        if (providers.isEmpty()) return@withContext emptyList()
+
+        val results = raceProviders(providers, query, stopOnConfidentSynced = false)
+        val scored = results.flatMap { (_, result) ->
+            result.candidates.map { candidate ->
+                candidate to LyricsMatchScorer.match(query, candidate)
+            }
+        }.filter { (candidate, match) ->
+            !candidate.lyrics.isEmpty && match.total > 0
+        }
+
+        val seen = HashSet<String>()
+        scored
+            .sortedWith(
+                compareByDescending<Pair<LyricsCandidate, LyricsMatchScore>> {
+                    if (it.first.isSynced) 1 else 0
+                }.thenByDescending { it.second.total }
+            )
+            .map { it.first }
+            .filter { candidate ->
+                val key = buildString {
+                    append(candidate.providerId).append('|')
+                    append(LyricsTextNormalizer.normalize(candidate.trackName)).append('|')
+                    append(LyricsTextNormalizer.normalize(candidate.artistName)).append('|')
+                    append(candidate.isSynced)
+                }
+                seen.add(key)
+            }
+            .take(MAX_CANDIDATES)
+    }
+
+    override suspend fun saveCandidate(track: Track, candidate: LyricsCandidate): Boolean =
+        withContext(Dispatchers.IO) {
+            val content = formatLyricsToLrc(candidate.lyrics).trim()
+            if (content.isBlank()) return@withContext false
+            val source = "manual:${candidate.providerId}"
+            lyricsDao.insertLyrics(
+                LyricsEntity(
+                    trackId = track.id,
+                    content = content,
+                    isSynced = candidate.lyrics.isSynced,
+                    source = source,
+                    updatedAt = System.currentTimeMillis()
+                )
+            )
+            localFileLyricsSource.saveEmbeddedLyrics(track, content)
+        }
+
+    override suspend fun testLyricsSources(
+        title: String,
         artist: String
-    ): List<com.yasinjahantigh.logarhythm.domain.model.LyricsCandidate> = withContext(Dispatchers.IO) {
-        try {
-            lrclibLyricsSource.searchCandidates(title, artist)
-        } catch (cancelled: CancellationException) {
-            throw cancelled
-        } catch (_: Exception) {
-            emptyList()
+    ): List<LyricsSourceTestResult> = withContext(Dispatchers.IO) {
+        val query = LyricsQuery(title, artist)
+        coroutineScope {
+            enabledProviders().map { provider ->
+                async {
+                    circuitBreaker.reset(provider.id)
+                    val started = System.currentTimeMillis()
+                    val result = try {
+                        withTimeout(PROVIDER_TIMEOUT_MS) { provider.search(query) }
+                    } catch (timeout: TimeoutCancellationException) {
+                        LyricsSearchResult(status = LyricsSourceStatus.TIMEOUT)
+                    } catch (cancelled: CancellationException) {
+                        throw cancelled
+                    } catch (error: Exception) {
+                        LyricsSearchResult(status = LyricsSourceStatus.ERROR, detail = error.message)
+                    }
+                    if (result.status == LyricsSourceStatus.OK || result.status == LyricsSourceStatus.EMPTY) {
+                        circuitBreaker.recordSuccess(provider.id)
+                    } else {
+                        circuitBreaker.recordFailure(provider.id)
+                    }
+                    LyricsSourceTestResult(
+                        id = provider.id,
+                        displayName = provider.displayName,
+                        status = result.status,
+                        latencyMs = System.currentTimeMillis() - started,
+                        candidateCount = result.candidates.size,
+                        detail = result.detail
+                    )
+                }
+            }.awaitAll()
         }
     }
 
-    private data class LyricsSearchResult(val lyrics: Lyrics, val sourceName: String)
-
-    /** Online providers, synced results first, with the first plain result kept as a fallback. */
-    private suspend fun searchAllOnlineSources(
-        track: Track,
-        includeGeneralSources: Boolean = true
-    ): LyricsSearchResult? {
-        var fallbackPlainLyrics: LyricsSearchResult? = null
-
-        if (includeGeneralSources) {
-            try {
-                val lrclibRes = lrclibLyricsSource.getLyrics(track)
-                if (lrclibRes != null && !lrclibRes.isEmpty) {
-                    if (lrclibRes.isSynced) {
-                        return LyricsSearchResult(lrclibRes, "lrclib")
-                    } else if (fallbackPlainLyrics == null) {
-                        fallbackPlainLyrics = LyricsSearchResult(lrclibRes, "lrclib")
-                    }
-                }
-            } catch (cancelled: CancellationException) {
-                throw cancelled
-            } catch (_: Exception) {
-            }
-
-            try {
-                val neteaseRes = neteaseLyricsSource.getLyrics(track)
-                if (neteaseRes != null && !neteaseRes.isEmpty) {
-                    if (neteaseRes.isSynced) {
-                        return LyricsSearchResult(neteaseRes, "netease")
-                    } else if (fallbackPlainLyrics == null) {
-                        fallbackPlainLyrics = LyricsSearchResult(neteaseRes, "netease")
-                    }
-                }
-            } catch (cancelled: CancellationException) {
-                throw cancelled
-            } catch (_: Exception) {
-            }
-
-            try {
-                val kugouRes = kugouLyricsSource.getLyrics(track)
-                if (kugouRes != null && !kugouRes.isEmpty) {
-                    if (kugouRes.isSynced) {
-                        return LyricsSearchResult(kugouRes, "kugou")
-                    } else if (fallbackPlainLyrics == null) {
-                        fallbackPlainLyrics = LyricsSearchResult(kugouRes, "kugou")
-                    }
-                }
-            } catch (cancelled: CancellationException) {
-                throw cancelled
-            } catch (_: Exception) {
-            }
-
-            if (fallbackPlainLyrics != null) {
-                return fallbackPlainLyrics
-            }
-
-            try {
-                val ovhRes = lyricsOvhLyricsSource.getLyrics(track)
-                if (ovhRes != null && !ovhRes.isEmpty) {
-                    return LyricsSearchResult(ovhRes, "lyrics_ovh")
-                }
-            } catch (cancelled: CancellationException) {
-                throw cancelled
-            } catch (_: Exception) {
-            }
-        }
-
-        // Genius has no timed lyrics, so it is only asked when every other enabled provider came back empty.
-        if (preferencesManager.isGeniusEnabled.first()) {
-            try {
-                val geniusRes = geniusLyricsSource.getLyrics(track)
-                if (geniusRes != null && !geniusRes.isEmpty) {
-                    return LyricsSearchResult(geniusRes, "genius")
-                }
-            } catch (cancelled: CancellationException) {
-                throw cancelled
-            } catch (_: Exception) {
-            }
-        }
-
-        return null
-    }
-
-    /**
-     * Saves lyrics to app storage first, then attempts embedded MP3 tags. The return value
-     * is true only when embedded lyrics were written and verified. Room remains a fallback,
-     * and its presence is never described as an embedded-file write.
-     */
     override suspend fun saveLyrics(track: Track, content: String, source: String): Boolean =
         withContext(Dispatchers.IO) {
             val cleanContent = content.trim()
             if (cleanContent.isBlank()) return@withContext false
             val parsed = LrcParser.parse(cleanContent)
-            // Cache regardless of file writability; the return value reports tag writing.
-            // The return value specifically reports whether embedded audio tags were verified.
             lyricsDao.insertLyrics(
                 LyricsEntity(
                     trackId = track.id,
                     content = cleanContent,
                     isSynced = parsed.isSynced,
-                    source = source
+                    source = source,
+                    updatedAt = System.currentTimeMillis()
                 )
             )
             localFileLyricsSource.saveEmbeddedLyrics(track, cleanContent)
@@ -218,15 +218,21 @@ class LyricsRepositoryImpl @Inject constructor(
                 trackId = trackId,
                 content = "",
                 isSynced = false,
-                source = "deleted"
+                source = "deleted",
+                updatedAt = System.currentTimeMillis()
             )
         )
     }
 
     override suspend fun deleteLyrics(track: Track, removeFromFile: Boolean): Boolean = withContext(Dispatchers.IO) {
-        // The tombstone keeps lyrics from being re-discovered online or from stale caches.
         lyricsDao.insertLyrics(
-            LyricsEntity(trackId = track.id, content = "", isSynced = false, source = "deleted")
+            LyricsEntity(
+                trackId = track.id,
+                content = "",
+                isSynced = false,
+                source = "deleted",
+                updatedAt = System.currentTimeMillis()
+            )
         )
         localFileLyricsSource.deleteCompanionLrc(track)
         if (!removeFromFile) return@withContext false
@@ -243,9 +249,117 @@ class LyricsRepositoryImpl @Inject constructor(
 
     override fun getHiddenTrackIds(): Flow<List<String>> = lyricsDao.getHiddenTrackIds()
 
-    /** Removes the app's override/tombstone so normal local/embedded/default lookup resumes. */
     override suspend fun resetLyricsToDefault(trackId: String) = withContext(Dispatchers.IO) {
         lyricsDao.deleteLyricsForTrack(trackId)
+    }
+
+    // ---- online lookup ---------------------------------------------------------------------
+
+    private data class OnlineHit(val lyrics: Lyrics, val providerId: String)
+
+    private suspend fun enabledProviders(): List<OnlineLyricsSource> {
+        val prefs = preferencesManager.lyricsSourcePreferencesNow()
+        return buildList {
+            if (prefs.lrclib) add(lrclib)
+            if (prefs.netease) add(netease)
+            if (prefs.kugou) add(kugou)
+            if (prefs.lyricsOvh) add(lyricsOvh)
+            if (prefs.genius) add(genius)
+            if (prefs.customUsable) add(custom)
+        }
+    }
+
+    private suspend fun searchBest(track: Track): OnlineHit? {
+        val providers = enabledProviders()
+        if (providers.isEmpty()) return null
+        val query = LyricsQuery(track.title, track.artist, track.album, track.durationMs)
+        val results = raceProviders(providers, query, stopOnConfidentSynced = true)
+        val scored = results.flatMap { (_, result) ->
+            result.candidates.map { candidate -> candidate to LyricsMatchScorer.match(query, candidate) }
+        }.filter { (candidate, match) ->
+            !candidate.lyrics.isEmpty && match.confident &&
+                !(candidate.isSynced && LyricsMismatch.isLikely(candidate.lyrics.lines, track.durationMs))
+        }
+
+        val bestSynced = scored
+            .filter { it.first.isSynced }
+            .maxByOrNull { it.second.total }
+        val bestPlain = scored
+            .filter { !it.first.isSynced }
+            .maxByOrNull { it.second.total }
+        val best = bestSynced ?: bestPlain ?: return null
+        return OnlineHit(best.first.lyrics, best.first.providerId)
+    }
+
+    /**
+     * Runs providers concurrently and returns before the slowest source when a confident synced
+     * result arrives. The per-provider and overall deadlines keep a blocked host from freezing
+     * the lyrics screen.
+     */
+    private suspend fun raceProviders(
+        providers: List<OnlineLyricsSource>,
+        query: LyricsQuery,
+        stopOnConfidentSynced: Boolean
+    ): List<Pair<OnlineLyricsSource, LyricsSearchResult>> = supervisorScope {
+        val jobs = providers.map { provider ->
+            provider to async {
+                if (circuitBreaker.isOpen(provider.id)) {
+                    return@async LyricsSearchResult(
+                        status = LyricsSourceStatus.BLOCKED,
+                        detail = "Temporarily skipped after failures"
+                    )
+                }
+                val result = try {
+                    withTimeout(PROVIDER_TIMEOUT_MS) { provider.search(query) }
+                } catch (timeout: TimeoutCancellationException) {
+                    LyricsSearchResult(status = LyricsSourceStatus.TIMEOUT)
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (error: Exception) {
+                    LyricsSearchResult(status = LyricsSourceStatus.ERROR, detail = error.message)
+                }
+                if (result.status == LyricsSourceStatus.OK || result.status == LyricsSourceStatus.EMPTY) {
+                    circuitBreaker.recordSuccess(provider.id)
+                } else {
+                    circuitBreaker.recordFailure(provider.id)
+                }
+                result
+            }
+        }
+
+        val results = mutableListOf<Pair<OnlineLyricsSource, LyricsSearchResult>>()
+        val deadline = System.currentTimeMillis() + TOTAL_BUDGET_MS
+        for ((provider, deferred) in jobs) {
+            val remaining = deadline - System.currentTimeMillis()
+            if (remaining <= 0L) {
+                deferred.cancel()
+                continue
+            }
+            val result = withTimeoutOrNull(remaining) { deferred.await() }
+            if (result == null) {
+                deferred.cancel()
+                continue
+            }
+            results += provider to result
+            if (stopOnConfidentSynced && result.candidates.any { candidate ->
+                    candidate.isSynced && LyricsMatchScorer.match(query, candidate).confident
+                }
+            ) {
+                jobs.forEach { (_, job) -> job.cancel() }
+                break
+            }
+        }
+        results
+    }
+
+    private fun isFresh(entity: LyricsEntity): Boolean {
+        if (entity.source.startsWith("manual") ||
+            entity.source == "user_manual" ||
+            entity.source == "user_clipboard" ||
+            entity.source == "imported_file"
+        ) return true
+        if (entity.updatedAt <= 0L) return false
+        return System.currentTimeMillis() - entity.updatedAt < CACHE_TTL_MS
     }
 
     private suspend fun cacheLyrics(trackId: String, lyrics: Lyrics, source: String) {
@@ -255,7 +369,8 @@ class LyricsRepositoryImpl @Inject constructor(
                 trackId = trackId,
                 content = raw,
                 isSynced = lyrics.isSynced,
-                source = source
+                source = source,
+                updatedAt = System.currentTimeMillis()
             )
         )
     }
@@ -273,5 +388,12 @@ class LyricsRepositoryImpl @Inject constructor(
         } else {
             lyrics.plainText.orEmpty()
         }
+    }
+
+    private companion object {
+        const val PROVIDER_TIMEOUT_MS = 6_000L
+        const val TOTAL_BUDGET_MS = 7_000L
+        const val CACHE_TTL_MS = 30L * 24 * 60 * 60 * 1000
+        const val MAX_CANDIDATES = 30
     }
 }

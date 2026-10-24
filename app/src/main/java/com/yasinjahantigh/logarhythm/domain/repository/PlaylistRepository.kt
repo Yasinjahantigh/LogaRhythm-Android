@@ -12,6 +12,7 @@ interface PlaylistRepository {
     suspend fun renamePlaylist(playlistId: Long, newName: String)
     suspend fun deletePlaylist(playlistId: Long)
     suspend fun addTrackToPlaylist(playlistId: Long, trackId: String)
+    suspend fun addTracksToPlaylist(playlistId: Long, trackIds: List<String>)
     suspend fun removeTrackFromPlaylist(playlistId: Long, trackId: String)
     suspend fun reorderPlaylistTracks(playlistId: Long, fromIndex: Int, toIndex: Int)
     fun isTrackFavorite(trackId: String): Flow<Boolean>

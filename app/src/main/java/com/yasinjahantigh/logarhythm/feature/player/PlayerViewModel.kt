@@ -31,11 +31,14 @@ class PlayerViewModel @Inject constructor(
     private val playlistRepository: PlaylistRepository,
     private val trackRepository: TrackRepository,
     private val statsRepository: StatsRepository,
-    preferencesManager: PreferencesManager
+    private val preferencesManager: PreferencesManager
 ) : ViewModel() {
 
     val isCompactMiniPlayer: StateFlow<Boolean> = preferencesManager.isCompactMiniPlayer
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+
+    val swipeRightForNext: StateFlow<Boolean> = preferencesManager.swipeRightForNext
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
 
     val currentTrack: StateFlow<Track?> = playerController.currentTrack
     val isPlaying: StateFlow<Boolean> = playerController.isPlaying

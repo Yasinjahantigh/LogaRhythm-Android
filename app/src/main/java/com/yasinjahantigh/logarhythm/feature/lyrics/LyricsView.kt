@@ -171,8 +171,7 @@ fun LyricsView(
         )
     }
     val isLoading by viewModel.isLoading.collectAsStateWithLifecycle()
-    val isOnlineEnabled by viewModel.isOnlineEnabled.collectAsStateWithLifecycle()
-    val isGeniusEnabled by viewModel.isGeniusEnabled.collectAsStateWithLifecycle()
+    val isAnyOnlineEnabled by viewModel.isAnyOnlineEnabled.collectAsStateWithLifecycle()
     val isManualEditOpen by viewModel.isManualEditOpen.collectAsStateWithLifecycle()
     val showCandidatePicker by viewModel.showCandidatePicker.collectAsStateWithLifecycle()
     val lyricsCandidates by viewModel.lyricsCandidates.collectAsStateWithLifecycle()
@@ -411,7 +410,7 @@ fun LyricsView(
 
                 lyrics == null || lyrics?.isEmpty == true -> {
                     LyricsEmptyContent(
-                        isOnlineEnabled = isOnlineEnabled || isGeniusEnabled,
+                        isOnlineEnabled = isAnyOnlineEnabled,
                         onImportClick = { filePicker.launch(arrayOf("*/*", "text/*")) },
                         onFetchOnlineClick = { viewModel.retryOnlineLyrics() },
                         onSearchGoogleClick = onSearchGoogleLyrics,
@@ -473,17 +472,20 @@ fun LyricsView(
                             )
                         }
 
-                        val sourceLabel = when (lyrics!!.source) {
-                            "embedded" -> stringResource(R.string.lyrics_source_embedded)
-                            "companion" -> stringResource(R.string.lyrics_source_companion)
-                            "user_manual" -> stringResource(R.string.lyrics_source_manual)
-                            "imported_file" -> stringResource(R.string.lyrics_source_imported)
-                            "user_clipboard" -> stringResource(R.string.lyrics_source_clipboard)
-                            "lrclib" -> stringResource(R.string.lyrics_source_online, stringResource(R.string.lyrics_provider_lrclib))
-                            "netease" -> stringResource(R.string.lyrics_source_online, stringResource(R.string.lyrics_provider_netease))
-                            "kugou" -> stringResource(R.string.lyrics_source_online, stringResource(R.string.lyrics_provider_kugou))
-                            "lyrics_ovh" -> stringResource(R.string.lyrics_source_online, stringResource(R.string.lyrics_provider_lyrics_ovh))
-                            "genius" -> stringResource(R.string.lyrics_source_online, stringResource(R.string.lyrics_provider_genius))
+                        val lyricsSource = lyrics!!.source.orEmpty()
+                        val sourceLabel = when {
+                            lyricsSource == "embedded" -> stringResource(R.string.lyrics_source_embedded)
+                            lyricsSource == "companion" -> stringResource(R.string.lyrics_source_companion)
+                            lyricsSource == "user_manual" -> stringResource(R.string.lyrics_source_manual)
+                            lyricsSource == "imported_file" -> stringResource(R.string.lyrics_source_imported)
+                            lyricsSource == "user_clipboard" -> stringResource(R.string.lyrics_source_clipboard)
+                            lyricsSource.startsWith("manual") -> stringResource(R.string.lyrics_source_manual)
+                            lyricsSource == "lrclib" -> stringResource(R.string.lyrics_source_online, stringResource(R.string.lyrics_provider_lrclib))
+                            lyricsSource == "netease" -> stringResource(R.string.lyrics_source_online, stringResource(R.string.lyrics_provider_netease))
+                            lyricsSource == "kugou" -> stringResource(R.string.lyrics_source_online, stringResource(R.string.lyrics_provider_kugou))
+                            lyricsSource == "lyrics_ovh" -> stringResource(R.string.lyrics_source_online, stringResource(R.string.lyrics_provider_lyrics_ovh))
+                            lyricsSource == "genius" -> stringResource(R.string.lyrics_source_online, stringResource(R.string.lyrics_provider_genius))
+                            lyricsSource == "custom" -> stringResource(R.string.lyrics_source_online, stringResource(R.string.lyrics_provider_custom))
                             else -> stringResource(R.string.lyrics_source_cached)
                         }
 

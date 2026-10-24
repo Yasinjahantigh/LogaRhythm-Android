@@ -60,8 +60,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.yasinjahantigh.logarhythm.R
 import com.yasinjahantigh.logarhythm.core.utils.PermissionUtils
 import com.yasinjahantigh.logarhythm.domain.model.Track
+import com.yasinjahantigh.logarhythm.domain.smart.SmartMixType
 import com.yasinjahantigh.logarhythm.core.utils.rememberMediaStoreConsent
-import com.yasinjahantigh.logarhythm.feature.player.EditTrackDialog
 import com.yasinjahantigh.logarhythm.feature.playlist.AddToPlaylistDialog
 import com.yasinjahantigh.logarhythm.feature.playlist.PlaylistsTabContent
 import com.yasinjahantigh.logarhythm.feature.playlist.SongMenuBottomSheet
@@ -78,7 +78,10 @@ fun LibraryScreen(
     onNavigateToFolder: (String) -> Unit = {},
     onNavigateToGenre: (String) -> Unit = {},
     onNavigateToPlaylist: (Long) -> Unit = {},
+    onNavigateToSmartMix: (SmartMixType) -> Unit = {},
+    onNavigateToSettings: () -> Unit = {},
     onNavigateToSearch: () -> Unit = {},
+    onNavigateToTagEditor: (String) -> Unit = {},
     viewModel: LibraryViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -118,12 +121,9 @@ fun LibraryScreen(
     var tracksForAddToPlaylist by remember { mutableStateOf<List<Track>?>(null) }
     var selectionMode by remember { mutableStateOf(false) }
     var selectedTrackIds by remember { mutableStateOf<Set<String>>(emptySet()) }
-    val selectedTracks = remember(uiState.tracks, selectedTrackIds) {
-        uiState.tracks.filter { it.id in selectedTrackIds }
+    val selectedTracks = remember(uiState.visibleTracks, selectedTrackIds) {
+        uiState.visibleTracks.filter { it.id in selectedTrackIds }
     }
-    var selectedTrackForEdit by remember { mutableStateOf<Track?>(null) }
-    var editTrackError by remember { mutableStateOf(false) }
-    var editTrackSaving by remember { mutableStateOf(false) }
     var showSortSheet by remember { mutableStateOf(false) }
 
     val permissionLauncher = rememberLauncherForActivityResult(
@@ -143,9 +143,12 @@ fun LibraryScreen(
         SortBottomSheet(
             currentSort = uiState.sortOption,
             onSortSelected = { newSort ->
-                viewModel.setSortOption(newSort)
+                val reshuffle = newSort.field == SortField.RANDOM &&
+                    uiState.sortOption.field == SortField.RANDOM
+                viewModel.setSortOption(newSort, reshuffle = reshuffle)
             },
-            onDismissRequest = { showSortSheet = false }
+            onDismissRequest = { showSortSheet = false },
+            availableFields = SortField.fieldsFor(uiState.selectedTab)
         )
     }
 
@@ -219,44 +222,17 @@ fun LibraryScreen(
                     scope.launch { snackbarHostState.showSnackbar(context.getString(R.string.track_delete_failed)) }
                 })
             },
-            onEditTrack = { selectedTrackForEdit = track },
+            onEditTrack = { onNavigateToTagEditor(track.id) },
             onGoToAlbum = if (track.album.isNotBlank() && track.album != "Unknown Album") {
                 { onNavigateToAlbum(track.album) }
             } else null,
             onGoToArtist = if (track.artist.isNotBlank() && track.artist != "Unknown Artist") {
-                { onNavigateToArtist(track.artist) }
+                { artistName -> onNavigateToArtist(artistName) }
             } else null,
             onHideTrack = {
                 viewModel.hideTrack(track)
                 scope.launch {
                     snackbarHostState.showSnackbar(context.getString(R.string.track_hidden_toast, track.title))
-                }
-            }
-        )
-    }
-
-    selectedTrackForEdit?.let { track ->
-        EditTrackDialog(
-            track = track,
-            onDismiss = { selectedTrackForEdit = null; editTrackError = false; editTrackSaving = false },
-            errorMessage = if (editTrackError) context.getString(R.string.track_metadata_write_failed) else null,
-            isSaving = editTrackSaving,
-            onSave = { newTitle, newArtist, newAlbum, newGenre ->
-                if (!editTrackSaving) {
-                    editTrackSaving = true
-                    editTrackError = false
-                    mediaStoreConsent.write(track, onApproved = {
-                        viewModel.updateTrackMetadata(track.id, newTitle, newArtist, newAlbum, newGenre) { updated ->
-                            editTrackSaving = false
-                            if (updated != null) {
-                                selectedTrackForEdit = null
-                                scope.launch { snackbarHostState.showSnackbar(context.getString(R.string.track_updated_toast)) }
-                            } else editTrackError = true
-                        }
-                    }, onCancelled = {
-                        editTrackSaving = false
-                        editTrackError = true
-                    })
                 }
             }
         )
@@ -277,13 +253,14 @@ fun LibraryScreen(
                 if (selectionMode) {
                     SelectionTopBar(
                         selectedCount = selectedTracks.size,
-                        allSelected = uiState.tracks.isNotEmpty() && selectedTracks.size == uiState.tracks.size,
+                        allSelected = uiState.visibleTracks.isNotEmpty() &&
+                            selectedTracks.size == uiState.visibleTracks.size,
                         onClose = ::exitSelection,
                         onToggleSelectAll = {
-                            if (selectedTracks.size == uiState.tracks.size) {
+                            if (selectedTracks.size == uiState.visibleTracks.size) {
                                 exitSelection()
                             } else {
-                                selectedTrackIds = uiState.tracks.map { it.id }.toSet()
+                                selectedTrackIds = uiState.visibleTracks.map { it.id }.toSet()
                             }
                         }
                     )
@@ -350,7 +327,7 @@ fun LibraryScreen(
                         ) {
                             when (uiState.selectedTab) {
                                 LibraryTab.SONGS -> SongsTabContent(
-                                    tracks = uiState.tracks,
+                                    tracks = uiState.visibleTracks,
                                     currentTrackId = currentTrack?.id,
                                     isPlaying = isPlaying,
                                     onTrackClick = viewModel::playTrack,
@@ -362,11 +339,17 @@ fun LibraryScreen(
                                     onTrackLongClick = { track ->
                                         if (selectionMode) toggleSelection(track) else startSelection(track)
                                     },
-                                    onToggleSelect = ::toggleSelection
+                                    onToggleSelect = ::toggleSelection,
+                                    filter = uiState.trackFilter,
+                                    onFilterChange = viewModel::setTrackFilter
                                 )
                                 LibraryTab.ALBUMS -> AlbumsTabContent(albums = uiState.albums, onAlbumClick = onNavigateToAlbum)
                                 LibraryTab.ARTISTS -> ArtistsTabContent(artists = uiState.artists, onArtistClick = onNavigateToArtist)
-                                LibraryTab.PLAYLISTS -> PlaylistsTabContent(onPlaylistClick = onNavigateToPlaylist)
+                                LibraryTab.PLAYLISTS -> PlaylistsTabContent(
+                                    onPlaylistClick = onNavigateToPlaylist,
+                                    onSmartMixClick = onNavigateToSmartMix,
+                                    onOpenAiSettings = onNavigateToSettings
+                                )
                                 LibraryTab.GENRES -> GenresTabContent(genres = uiState.genres, onGenreClick = onNavigateToGenre)
                                 LibraryTab.FOLDERS -> FoldersTabContent(folders = uiState.folders, onFolderClick = onNavigateToFolder)
                             }

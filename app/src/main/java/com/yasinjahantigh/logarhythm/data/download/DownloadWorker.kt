@@ -8,6 +8,7 @@ import com.yasinjahantigh.logarhythm.R
 import com.yasinjahantigh.logarhythm.core.library.LibrarySync
 import com.yasinjahantigh.logarhythm.data.download.metadata.MetadataResolver
 import com.yasinjahantigh.logarhythm.data.room.DownloadDao
+import com.yasinjahantigh.logarhythm.data.download.TagEnrichStatus
 import com.yasinjahantigh.logarhythm.domain.download.DownloadErrorClassifier
 import com.yasinjahantigh.logarhythm.domain.download.DownloadMetadataMerge
 import com.yasinjahantigh.logarhythm.domain.download.DownloadPipelineException
@@ -18,6 +19,8 @@ import com.yasinjahantigh.logarhythm.domain.model.DownloadSearchResult
 import com.yasinjahantigh.logarhythm.domain.model.DownloadSource
 import com.yasinjahantigh.logarhythm.domain.model.DownloadStatus
 import com.yasinjahantigh.logarhythm.domain.model.DOWNLOAD_NETWORK_RETRY_DETAIL
+import com.yasinjahantigh.logarhythm.domain.model.DOWNLOAD_SAVED_WITHOUT_TAGS_DETAIL
+import com.yasinjahantigh.logarhythm.domain.model.DOWNLOAD_TAG_WRITE_FAILED_DETAIL
 import com.yausername.youtubedl_android.YoutubeDL
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
@@ -70,11 +73,20 @@ class DownloadWorker @AssistedInject constructor(
             executePipeline(item)
         } catch (cancelled: CancellationException) {
             downloader.cancel(id)
+            markCancelled(id)
             throw cancelled
         } catch (_: YoutubeDL.CanceledException) {
+            markCancelled(id)
             Result.success()
         } catch (error: Throwable) {
             fail(item, DownloadErrorKind.UNKNOWN, error.message)
+        }
+    }
+
+    private suspend fun markCancelled(id: String) {
+        withContext(NonCancellable) {
+            dao.markCancelledIfActive(id, now())
+            workspace.cleanup(id)
         }
     }
 
@@ -303,7 +315,7 @@ class DownloadWorker @AssistedInject constructor(
 
         val audioFile = mp4Remuxer.normalize(outcome.file)
         val artworkBytes = artworkLoader.load(outcome.artworkUrl)
-        tagEnricher.enrich(
+        val tagOutcome = tagEnricher.enrich(
             file = audioFile,
             title = outcome.title,
             artist = outcome.artist,
@@ -315,6 +327,11 @@ class DownloadWorker @AssistedInject constructor(
             discNumber = discNumber,
             composer = composer
         )
+        val tagDetail = when (tagOutcome.status) {
+            TagEnrichStatus.UNSUPPORTED -> DOWNLOAD_SAVED_WITHOUT_TAGS_DETAIL
+            TagEnrichStatus.FAILED -> DOWNLOAD_TAG_WRITE_FAILED_DETAIL
+            else -> null
+        }
         val saved = mediaStoreSaver.save(audioFile, outcome.title, outcome.artist, album)
 
         withContext(NonCancellable) {
@@ -325,7 +342,7 @@ class DownloadWorker @AssistedInject constructor(
                 path = saved.filePath,
                 size = saved.sizeBytes,
                 artwork = outcome.artworkUrl,
-                detail = if (outcome.usedFallback) FALLBACK_DETAIL else null,
+                detail = tagDetail ?: if (outcome.usedFallback) FALLBACK_DETAIL else null,
                 now = now()
             )
             notifications.notifyFinished(id, outcome.title, true, null)

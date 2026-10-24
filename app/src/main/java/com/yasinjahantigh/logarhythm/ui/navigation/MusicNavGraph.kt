@@ -10,6 +10,7 @@ import androidx.navigation.navArgument
 import com.yasinjahantigh.logarhythm.feature.album.AlbumDetailScreen
 import com.yasinjahantigh.logarhythm.feature.artist.ArtistDetailScreen
 import com.yasinjahantigh.logarhythm.feature.download.DownloadScreen
+import com.yasinjahantigh.logarhythm.feature.editor.TagEditorScreen
 import com.yasinjahantigh.logarhythm.feature.equalizer.EqualizerScreen
 import com.yasinjahantigh.logarhythm.feature.folder.FolderDetailScreen
 import com.yasinjahantigh.logarhythm.feature.genre.GenreDetailScreen
@@ -18,6 +19,7 @@ import com.yasinjahantigh.logarhythm.feature.library.LibraryScreen
 import com.yasinjahantigh.logarhythm.feature.playlist.PlaylistDetailScreen
 import com.yasinjahantigh.logarhythm.feature.search.SearchScreen
 import com.yasinjahantigh.logarhythm.feature.settings.SettingsScreen
+import com.yasinjahantigh.logarhythm.feature.smart.SmartMixDetailScreen
 import com.yasinjahantigh.logarhythm.feature.tools.LibraryToolsScreen
 import com.yasinjahantigh.logarhythm.feature.stats.StatsScreen
 import com.yasinjahantigh.logarhythm.feature.theme.ThemeScreen
@@ -45,6 +47,9 @@ fun MusicNavGraph(
                 },
                 onNavigateToDownload = {
                     navController.navigate(NavDestination.ROUTE_DOWNLOAD)
+                },
+                onNavigateToTagEditor = { trackId ->
+                    navController.navigate(NavDestination.createTagEditorRoute(trackId))
                 }
             )
         }
@@ -56,6 +61,9 @@ fun MusicNavGraph(
                 },
                 onNavigateToArtist = { artistName ->
                     navController.navigate(NavDestination.createArtistDetailRoute(artistName))
+                },
+                onNavigateToTagEditor = { trackId ->
+                    navController.navigate(NavDestination.createTagEditorRoute(trackId))
                 }
             )
         }
@@ -76,8 +84,19 @@ fun MusicNavGraph(
                 onNavigateToPlaylist = { playlistId ->
                     navController.navigate(NavDestination.createPlaylistDetailRoute(playlistId))
                 },
+                onNavigateToSmartMix = { type ->
+                    navController.navigate(NavDestination.createSmartMixRoute(type))
+                },
+                onNavigateToSettings = {
+                    navController.navigate(NavDestination.Settings.route) {
+                        launchSingleTop = true
+                    }
+                },
                 onNavigateToSearch = {
                     navController.navigate(NavDestination.Search.route)
+                },
+                onNavigateToTagEditor = { trackId ->
+                    navController.navigate(NavDestination.createTagEditorRoute(trackId))
                 }
             )
         }
@@ -104,7 +123,12 @@ fun MusicNavGraph(
             ThemeScreen(onNavigateBack = { navController.popBackStack() })
         }
         composable(NavDestination.ROUTE_DOWNLOAD) {
-            DownloadScreen(onNavigateBack = { navController.popBackStack() })
+            DownloadScreen(
+                onNavigateBack = { navController.popBackStack() },
+                onNavigateToTagEditor = { trackId ->
+                    navController.navigate(NavDestination.createTagEditorRoute(trackId))
+                }
+            )
         }
         composable(NavDestination.ROUTE_LIBRARY_TOOLS) {
             LibraryToolsScreen(onNavigateBack = { navController.popBackStack() })
@@ -144,6 +168,9 @@ fun MusicNavGraph(
                 onNavigateBack = { navController.popBackStack() },
                 onNavigateToAlbum = { albumName ->
                     navController.navigate(NavDestination.createAlbumDetailRoute(albumName))
+                },
+                onNavigateToArtist = { artistName ->
+                    navController.navigate(NavDestination.createArtistDetailRoute(artistName))
                 }
             )
         }
@@ -170,6 +197,18 @@ fun MusicNavGraph(
             PlaylistDetailScreen(
                 onNavigateBack = { navController.popBackStack() }
             )
+        }
+        composable(
+            route = NavDestination.ROUTE_SMART_MIX,
+            arguments = listOf(navArgument("mixType") { type = NavType.StringType })
+        ) {
+            SmartMixDetailScreen(onNavigateBack = { navController.popBackStack() })
+        }
+        composable(
+            route = NavDestination.ROUTE_TAG_EDITOR,
+            arguments = listOf(navArgument("trackId") { type = NavType.StringType })
+        ) {
+            TagEditorScreen(onNavigateBack = { navController.popBackStack() })
         }
     }
 }

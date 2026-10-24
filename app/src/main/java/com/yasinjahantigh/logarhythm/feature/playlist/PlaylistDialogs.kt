@@ -18,9 +18,10 @@ import com.yasinjahantigh.logarhythm.R
 @Composable
 fun CreatePlaylistDialog(
     onDismiss: () -> Unit,
-    onConfirm: (name: String) -> Unit
+    onConfirm: (name: String) -> Unit,
+    initialName: String = ""
 ) {
-    var name by remember { mutableStateOf("") }
+    var name by remember(initialName) { mutableStateOf(initialName) }
 
     AlertDialog(
         onDismissRequest = onDismiss,

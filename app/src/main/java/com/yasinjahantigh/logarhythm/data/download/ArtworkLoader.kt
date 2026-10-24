@@ -1,5 +1,9 @@
 package com.yasinjahantigh.logarhythm.data.download
 
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.graphics.Canvas
+import android.graphics.Color
 import kotlinx.coroutines.suspendCancellableCoroutine
 import okhttp3.Call
 import okhttp3.Callback
@@ -11,6 +15,7 @@ import java.io.IOException
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.coroutines.resume
+import kotlin.math.max
 
 /** Fetches cover art for embedding; failures simply leave the file without artwork. */
 @Singleton
@@ -55,21 +60,62 @@ class ArtworkLoader @Inject constructor(
                 output.write(buffer, 0, read)
             }
         }
-        return output.toByteArray().takeIf(::isSupported)
+        return normalizeCover(output.toByteArray())
     }
 
-    private fun isSupported(bytes: ByteArray): Boolean {
-        val jpeg = bytes.size > 3 &&
-            (bytes[0].toInt() and 0xff) == 0xFF && (bytes[1].toInt() and 0xff) == 0xD8
-        val png = bytes.size > 8 &&
-            (bytes[0].toInt() and 0xff) == 0x89 &&
-            bytes[1].toInt() == 'P'.code &&
-            bytes[2].toInt() == 'N'.code &&
-            bytes[3].toInt() == 'G'.code
-        return jpeg || png
+    /**
+     * YouTube/SoundCloud serve WebP as often as JPEG. Re-encode everything as a JPEG no larger
+     * than 1200 px so every tag engine and the FLAC/MP4 cover limits accept it.
+     */
+    private fun normalizeCover(bytes: ByteArray): ByteArray? {
+        if (bytes.size < 16) return null
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
+
+        var sample = 1
+        while (max(bounds.outWidth, bounds.outHeight) / (sample * 2) >= MAX_DECODE_EDGE) sample *= 2
+        val decoded = BitmapFactory.decodeByteArray(
+            bytes,
+            0,
+            bytes.size,
+            BitmapFactory.Options().apply {
+                inSampleSize = sample
+                inPreferredConfig = Bitmap.Config.ARGB_8888
+            }
+        ) ?: return null
+
+        val largest = max(decoded.width, decoded.height)
+        val scaled = if (largest > MAX_EDGE) {
+            val ratio = MAX_EDGE.toFloat() / largest
+            Bitmap.createScaledBitmap(
+                decoded,
+                (decoded.width * ratio).toInt().coerceAtLeast(1),
+                (decoded.height * ratio).toInt().coerceAtLeast(1),
+                true
+            )
+        } else decoded
+        if (scaled !== decoded) decoded.recycle()
+
+        val flat = if (scaled.hasAlpha()) {
+            Bitmap.createBitmap(scaled.width, scaled.height, Bitmap.Config.ARGB_8888).also { canvasBitmap ->
+                Canvas(canvasBitmap).apply {
+                    drawColor(Color.WHITE)
+                    drawBitmap(scaled, 0f, 0f, null)
+                }
+            }
+        } else scaled
+        if (flat !== scaled) scaled.recycle()
+
+        val output = ByteArrayOutputStream()
+        flat.compress(Bitmap.CompressFormat.JPEG, 90, output)
+        flat.recycle()
+        return output.toByteArray()
     }
 
     private companion object {
         const val MAX_BYTES = 5 * 1024 * 1024
+        const val MAX_DECODE_EDGE = 2400
+        const val MAX_EDGE = 1200
     }
 }

@@ -3,25 +3,37 @@ package com.yasinjahantigh.logarhythm.data.repository
 import android.content.Context
 import android.net.Uri
 import android.provider.MediaStore
+import com.yasinjahantigh.logarhythm.core.artwork.ArtworkVersionStore
 import com.yasinjahantigh.logarhythm.core.utils.SearchUtils
 import com.yasinjahantigh.logarhythm.data.datastore.PreferencesManager
+import com.yasinjahantigh.logarhythm.data.room.DownloadDao
 import com.yasinjahantigh.logarhythm.data.room.MusicDao
 import com.yasinjahantigh.logarhythm.data.room.PlaylistDao
 import com.yasinjahantigh.logarhythm.data.room.TrackEntity
 import com.yasinjahantigh.logarhythm.data.sources.LocalMusicSource
 import com.yasinjahantigh.logarhythm.data.tagger.AudioFileTagWriter
+import com.yasinjahantigh.logarhythm.data.tagger.TagWriteOutcome
+import com.yasinjahantigh.logarhythm.data.tagger.engine.TagEdit
+import com.yasinjahantigh.logarhythm.domain.library.ArtistIndex
+import com.yasinjahantigh.logarhythm.domain.library.ArtistSplitConfig
+import com.yasinjahantigh.logarhythm.domain.library.ArtistSplitter
 import com.yasinjahantigh.logarhythm.domain.model.Album
 import com.yasinjahantigh.logarhythm.domain.model.Artist
+import com.yasinjahantigh.logarhythm.domain.model.ArtistProfile
 import com.yasinjahantigh.logarhythm.domain.model.Folder
 import com.yasinjahantigh.logarhythm.domain.model.Genre
+import com.yasinjahantigh.logarhythm.domain.model.Playlist
 import com.yasinjahantigh.logarhythm.domain.model.SourceType
 import com.yasinjahantigh.logarhythm.domain.model.Track
+import com.yasinjahantigh.logarhythm.domain.model.TrackEdit
+import com.yasinjahantigh.logarhythm.domain.model.TrackEditFailure
+import com.yasinjahantigh.logarhythm.domain.model.TrackEditResult
+import com.yasinjahantigh.logarhythm.domain.model.TrackPlayStat
 import com.yasinjahantigh.logarhythm.domain.repository.TrackRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
-import com.yasinjahantigh.logarhythm.domain.library.ArtistSplitter
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
@@ -41,6 +53,7 @@ class TrackRepositoryImpl @Inject constructor(
     private val localMusicSource: LocalMusicSource,
     private val musicDao: MusicDao,
     private val playlistDao: PlaylistDao,
+    private val downloadDao: DownloadDao,
     private val musicDatabase: com.yasinjahantigh.logarhythm.data.room.MusicDatabase,
     private val preferencesManager: PreferencesManager,
     private val audioFileTagWriter: AudioFileTagWriter
@@ -98,19 +111,28 @@ class TrackRepositoryImpl @Inject constructor(
 
     override fun getAlbums(): Flow<List<Album>> {
         return getAllTracks().map { tracks ->
-            class AlbumAcc(val name: String, val artist: String, var trackCount: Int, var artworkUri: String?)
+            class AlbumAcc(
+                val name: String,
+                val artist: String,
+                var trackCount: Int,
+                var artworkUri: String?,
+                var year: Int
+            )
             val map = linkedMapOf<String, AlbumAcc>()
             for (track in tracks) {
+                // The full album-artist string stays the grouping key: "A & B" is its own album
+                // artist and must not collapse into either solo artist's discography.
                 val artistKey = track.albumArtist.ifBlank { track.artist }
                 val key = "${track.album}|$artistKey"
                 val existing = map[key]
                 if (existing == null) {
-                    map[key] = AlbumAcc(track.album, artistKey, 1, track.artworkUri)
+                    map[key] = AlbumAcc(track.album, artistKey, 1, track.artworkUri, track.year)
                 } else {
                     existing.trackCount++
                     if (existing.artworkUri.isNullOrBlank() && !track.artworkUri.isNullOrBlank()) {
                         existing.artworkUri = track.artworkUri
                     }
+                    if (track.year > existing.year) existing.year = track.year
                 }
             }
             map.values.map {
@@ -119,42 +141,64 @@ class TrackRepositoryImpl @Inject constructor(
                     name = it.name,
                     artist = it.artist,
                     trackCount = it.trackCount,
-                    artworkUri = it.artworkUri
+                    artworkUri = it.artworkUri,
+                    year = it.year
                 )
             }.sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.name })
         }.flowOn(Dispatchers.Default)
     }
 
-    /** Separators when multi-artist splitting is on, null when it is off. */
-    private fun splitConfig(): Flow<List<String>?> =
-        combine(preferencesManager.splitArtists, preferencesManager.artistSeparators) { on, raw ->
-            if (on) ArtistSplitter.parseSeparators(raw) else null
-        }
-
-    override fun getArtists(): Flow<List<Artist>> = splitConfig().flatMapLatest { separators ->
-        getAllTracks().map { tracks ->
-            val sepList = separators ?: emptyList()
-            buildArtistsFromTracks(tracks, sepList)
-        }.flowOn(Dispatchers.Default)
-    }
-
-    private fun buildArtistsFromTracks(tracks: List<Track>, separators: List<String>): List<Artist> {
-        class Acc(val name: String) { var tracks = 0; val albums = HashSet<String>() }
-        val byName = HashMap<String, Acc>()
-        for (track in tracks) {
-            val names = if (separators.isEmpty()) listOf(track.artist) else ArtistSplitter.split(track.artist, separators)
-            for (name in names) {
-                if (name.isNotBlank()) {
-                    val acc = byName.getOrPut(name.lowercase()) { Acc(name) }
-                    acc.tracks++
-                    acc.albums.add(track.album)
-                }
+    private fun splitConfig(): Flow<ArtistSplitConfig> =
+        combine(
+            preferencesManager.splitArtists,
+            preferencesManager.artistSeparators,
+            preferencesManager.artistNeverSplit
+        ) { enabled, raw, neverSplit ->
+            if (enabled) {
+                ArtistSplitConfig(
+                    enabled = true,
+                    separators = ArtistSplitter.parseSeparators(raw),
+                    neverSplit = neverSplit
+                )
+            } else {
+                ArtistSplitConfig.OFF
             }
         }
-        return byName.values
-            .sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.name })
-            .map { Artist(id = "artist:${it.name}", name = it.name, trackCount = it.tracks, albumCount = it.albums.size) }
-    }
+
+    private fun artistIndexFlow(): Flow<ArtistIndex> =
+        splitConfig().flatMapLatest { config ->
+            getAllTracks().map { tracks -> ArtistIndex.build(tracks, config) }
+                .flowOn(Dispatchers.Default)
+        }
+
+    override fun getArtists(): Flow<List<Artist>> = artistIndexFlow().map { it.artists }
+
+    override fun getArtistProfile(artist: String): Flow<ArtistProfile?> =
+        combine(artistIndexFlow(), getPlayStats()) { index, playStats ->
+            index.profileOf(artist)?.let { profile ->
+                profile.copy(topTracks = rankTopTracks(profile.tracks, playStats))
+            }
+        }
+
+    private fun rankTopTracks(tracks: List<Track>, playStats: Map<String, TrackPlayStat>): List<Track> =
+        tracks.sortedWith(
+            compareByDescending<Track> { playStats[it.id]?.playCount ?: 0 }
+                .thenByDescending { playStats[it.id]?.lastPlayedAt ?: 0L }
+                .thenBy(String.CASE_INSENSITIVE_ORDER) { it.title }
+        ).take(5)
+
+    override fun getPlayStats(): Flow<Map<String, TrackPlayStat>> =
+        musicDao.getPlayStats().map { stats -> stats.associateBy { it.trackId } }
+
+    override fun getFavoriteTrackIds(): Flow<Set<String>> =
+        playlistDao.observePlaylistTrackIds(Playlist.FAVORITES_ID)
+            .map { ids -> ids.toSet() }
+            .flowOn(Dispatchers.Default)
+
+    override fun getDownloadedTrackUris(): Flow<Set<String>> =
+        downloadDao.observeSavedContentUris()
+            .map { uris -> uris.filter { it.isNotBlank() }.toSet() }
+            .flowOn(Dispatchers.Default)
 
     override fun getFolders(): Flow<List<Folder>> {
         return getAllTracks().map { tracks ->
@@ -195,23 +239,16 @@ class TrackRepositoryImpl @Inject constructor(
     override fun getTracksByAlbum(album: String): Flow<List<Track>> {
         return getAllTracks().map { tracks ->
             tracks.filter { it.album.equals(album, ignoreCase = true) }
-        }
+                .sortedWith(
+                    compareBy<Track> { it.discNumber.coerceAtLeast(0) }
+                        .thenBy { if (it.trackNumber > 0) it.trackNumber else Int.MAX_VALUE }
+                        .thenBy(String.CASE_INSENSITIVE_ORDER) { it.title }
+                )
+        }.flowOn(Dispatchers.Default)
     }
 
     override fun getTracksByArtist(artist: String): Flow<List<Track>> =
-        splitConfig().flatMapLatest { separators ->
-            if (separators == null) {
-                getAllTracks().map { tracks ->
-                    tracks.filter { it.artist.equals(artist, ignoreCase = true) }
-                }
-            } else {
-                getAllTracks().map { tracks ->
-                    tracks.filter { e ->
-                        ArtistSplitter.split(e.artist, separators).any { it.equals(artist, ignoreCase = true) }
-                    }
-                }.flowOn(Dispatchers.Default)
-            }
-        }
+        artistIndexFlow().map { it.tracksOf(artist) }
 
     override fun getTracksByFolder(folder: String): Flow<List<Track>> {
         return getAllTracks().map { tracks ->
@@ -230,13 +267,7 @@ class TrackRepositoryImpl @Inject constructor(
     }
 
     override fun getArtistByName(artist: String): Flow<Artist?> =
-        splitConfig().flatMapLatest { separators ->
-            if (separators == null) {
-                getArtists().map { list -> list.firstOrNull { it.name.equals(artist, ignoreCase = true) } }
-            } else {
-                getArtists().map { list -> list.firstOrNull { it.name.equals(artist, ignoreCase = true) } }
-            }
-        }
+        artistIndexFlow().map { it.artistOf(artist) }
 
     override fun getGenreByName(genre: String): Flow<Genre?> {
         return getGenres().map { list -> list.firstOrNull { it.name.equals(genre, ignoreCase = true) } }
@@ -280,7 +311,12 @@ class TrackRepositoryImpl @Inject constructor(
                         title = current.title,
                         artist = current.artist,
                         album = current.album,
-                        genre = current.genre
+                        genre = current.genre,
+                        albumArtist = current.albumArtist,
+                        year = current.year,
+                        trackNumber = current.trackNumber,
+                        discNumber = current.discNumber,
+                        composer = current.composer
                     )
                     if (current != preservedEntity) {
                         toUpdate.add(preservedEntity)
@@ -323,10 +359,105 @@ class TrackRepositoryImpl @Inject constructor(
             )
             if (!wroteAndVerified) return@withContext null
 
-            musicDao.updateTrackMetadata(id, cleanTitle, cleanArtist, cleanAlbum, cleanGenre)
+            musicDao.updateTrackMetadata(
+                id = id,
+                title = cleanTitle,
+                artist = cleanArtist,
+                album = cleanAlbum,
+                albumArtist = existing.albumArtist,
+                genre = cleanGenre,
+                year = existing.year,
+                trackNumber = existing.trackNumber,
+                discNumber = existing.discNumber,
+                composer = existing.composer,
+                dateModified = existing.dateModified
+            )
             musicDao.getTrackByIdOnce(id)?.toDomain()
         }
     }
+
+    override suspend fun updateTrackDetails(id: String, edit: TrackEdit): TrackEditResult =
+        withContext(Dispatchers.IO) {
+            val existing = musicDao.getTrackByIdOnce(id)
+                ?: return@withContext TrackEditResult.Failure(TrackEditFailure.FAILED)
+            if (!id.startsWith("local:")) {
+                return@withContext TrackEditResult.Failure(TrackEditFailure.NOT_LOCAL)
+            }
+
+            val cleanTitle = edit.title.trim().ifBlank { "Unknown Title" }
+            val cleanArtist = edit.artist.trim().ifBlank { "Unknown Artist" }
+            val cleanAlbum = edit.album.trim().ifBlank { "Unknown Album" }
+            val cleanAlbumArtist = edit.albumArtist.trim()
+            val cleanGenre = edit.genre.trim().ifBlank { "Unknown Genre" }
+            val cleanComposer = edit.composer.trim()
+
+            fun textEdit(newValue: String, oldValue: String, placeholder: String): String? {
+                val old = oldValue.trim()
+                if (newValue == old) return null
+                return if (newValue.equals(placeholder, ignoreCase = true)) "" else newValue
+            }
+            fun rawEdit(newValue: String, oldValue: String): String? =
+                if (newValue == oldValue.trim()) null else newValue
+
+            val year = edit.year.coerceAtLeast(0)
+            val trackNumber = edit.trackNumber.coerceAtLeast(0)
+            val discNumber = edit.discNumber.coerceAtLeast(0)
+            val artworkEdit: ByteArray? = when {
+                edit.removeArtwork -> ByteArray(0)
+                edit.artwork != null && edit.artwork.isNotEmpty() -> edit.artwork
+                else -> null
+            }
+            val tagEdit = TagEdit(
+                title = textEdit(cleanTitle, existing.title, "Unknown Title"),
+                artist = textEdit(cleanArtist, existing.artist, "Unknown Artist"),
+                album = textEdit(cleanAlbum, existing.album, "Unknown Album"),
+                albumArtist = rawEdit(cleanAlbumArtist, existing.albumArtist),
+                genre = textEdit(cleanGenre, existing.genre, "Unknown Genre"),
+                year = if (year == existing.year) null else year.takeIf { it > 0 }?.toString() ?: "",
+                trackNumber = if (trackNumber == existing.trackNumber) null else trackNumber,
+                discNumber = if (discNumber == existing.discNumber) null else discNumber,
+                composer = rawEdit(cleanComposer, existing.composer),
+                artwork = artworkEdit,
+                artworkMime = edit.artworkMime.takeIf { artworkEdit != null && artworkEdit.isNotEmpty() }
+            )
+
+            val outcome = if (tagEdit.isEmpty) {
+                TagWriteOutcome.Success
+            } else {
+                withContext(NonCancellable) {
+                    audioFileTagWriter.applyEdit(existing.toDomain(), tagEdit)
+                }
+            }
+            when (outcome) {
+                TagWriteOutcome.Success -> Unit
+                is TagWriteOutcome.Unsupported ->
+                    return@withContext TrackEditResult.Failure(TrackEditFailure.UNSUPPORTED, outcome.reason)
+                TagWriteOutcome.Denied ->
+                    return@withContext TrackEditResult.Failure(TrackEditFailure.DENIED)
+                TagWriteOutcome.NoSpace ->
+                    return@withContext TrackEditResult.Failure(TrackEditFailure.NO_SPACE)
+                TagWriteOutcome.Failed ->
+                    return@withContext TrackEditResult.Failure(TrackEditFailure.FAILED)
+            }
+
+            musicDao.updateTrackMetadata(
+                id = id,
+                title = cleanTitle,
+                artist = cleanArtist,
+                album = cleanAlbum,
+                albumArtist = cleanAlbumArtist,
+                genre = cleanGenre,
+                year = year,
+                trackNumber = trackNumber,
+                discNumber = discNumber,
+                composer = cleanComposer,
+                dateModified = System.currentTimeMillis() / 1000
+            )
+            ArtworkVersionStore.bump(existing.uri)
+            musicDao.getTrackByIdOnce(id)?.toDomain()
+                ?.let { TrackEditResult.Success(it) }
+                ?: TrackEditResult.Failure(TrackEditFailure.FAILED)
+        }
 
     /**
      * Delete through the MediaStore URI, not a stale DATA filesystem path. On modern

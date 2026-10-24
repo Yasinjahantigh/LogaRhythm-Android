@@ -88,6 +88,24 @@ class PlaylistRepositoryImpl @Inject constructor(
         playlistDao.deletePlaylistTrack(playlistId, trackId)
     }
 
+    override suspend fun addTracksToPlaylist(playlistId: Long, trackIds: List<String>) =
+        withContext(Dispatchers.IO) {
+            if (trackIds.isEmpty()) return@withContext
+            val existing = playlistDao.getPlaylistTrackIds(playlistId).toHashSet()
+            var nextIndex = (playlistDao.getMaxOrderIndex(playlistId) ?: -1) + 1
+            trackIds.distinct().forEach { trackId ->
+                if (existing.add(trackId)) {
+                    playlistDao.insertPlaylistTrack(
+                        PlaylistTrackEntity(
+                            playlistId = playlistId,
+                            trackId = trackId,
+                            orderIndex = nextIndex++
+                        )
+                    )
+                }
+            }
+        }
+
     override suspend fun reorderPlaylistTracks(
         playlistId: Long,
         fromIndex: Int,

@@ -65,6 +65,7 @@ object Mp4Engine : TagEngine {
     private val KEY_TITLE = "\u00A9nam"
     private val KEY_ARTIST = "\u00A9ART"
     private val KEY_ALBUM = "\u00A9alb"
+    private val KEY_ALBUM_ARTIST = "aART"
     private val KEY_GENRE = "\u00A9gen"
     private val KEY_LYRICS = "\u00A9lyr"
     private val KEY_YEAR = "\u00A9day"
@@ -75,12 +76,33 @@ object Mp4Engine : TagEngine {
         return box(key, data)
     }
 
-    private fun artworkItem(image: ByteArray): ByteArray {
-        val png = image.size > 8 && (image[0].toInt() and 0xff) == 0x89 &&
-            image[1].toInt() == 'P'.code
-        val type = if (png) 14 else 13 // JPEG / PNG in the data box flags
+    private fun artworkItem(image: ByteArray, mimeHint: String? = null): ByteArray {
+        val mime = mimeHint?.takeIf { it.isNotBlank() } ?: FlacPicture.detectMime(image)
+        val type = when (mime.lowercase()) {
+            "image/png" -> 14
+            "image/gif" -> 12
+            "image/bmp" -> 27
+            else -> 13
+        }
         val data = box("data", byteArrayOf(0, 0, 0, type.toByte(), 0, 0, 0, 0) + image)
         return box("covr", data)
+    }
+
+    private class Cover(val mime: String, val data: ByteArray)
+
+    private fun itemArtwork(item: Child): Cover? {
+        val inner = children(item.bytes, 8, item.bytes.size).firstOrNull { it.type == "data" } ?: return null
+        if (inner.bytes.size < 16) return null
+        val flags = be32(inner.bytes, 8).toInt() and 0xffffff
+        val payload = inner.bytes.copyOfRange(16, inner.bytes.size)
+        if (payload.isEmpty()) return null
+        val mime = when (flags) {
+            12 -> "image/gif"
+            14 -> "image/png"
+            27 -> "image/bmp"
+            else -> "image/jpeg"
+        }
+        return Cover(mime, payload)
     }
 
     private fun itemText(item: Child): String? {
@@ -125,16 +147,20 @@ object Mp4Engine : TagEngine {
         val items = children(ilst.bytes, 8, ilst.bytes.size)
         fun get(key: String) = items.firstOrNull { it.type == latin1Key(key) }?.let { itemText(it) }
         fun pair(key: String) = items.firstOrNull { it.type == key }?.let { itemPair(it) }
+        val cover = items.firstOrNull { it.type == "covr" }?.let { itemArtwork(it) }
         AudioTags(
             title = get(KEY_TITLE),
             artist = get(KEY_ARTIST),
             album = get(KEY_ALBUM),
+            albumArtist = get(KEY_ALBUM_ARTIST),
             genre = get(KEY_GENRE),
             lyrics = get(KEY_LYRICS),
             year = get(KEY_YEAR),
             trackNumber = pair("trkn"),
             discNumber = pair("disk"),
-            composer = get(KEY_COMPOSER)
+            composer = get(KEY_COMPOSER),
+            artwork = cover?.data,
+            artworkMime = cover?.mime
         )
     }
 
@@ -172,13 +198,16 @@ object Mp4Engine : TagEngine {
             setText(KEY_TITLE, edit.title)
             setText(KEY_ARTIST, edit.artist)
             setText(KEY_ALBUM, edit.album)
+            setText(KEY_ALBUM_ARTIST, edit.albumArtist)
             setText(KEY_GENRE, edit.genre, also = listOf("gnre"))
             setText(KEY_LYRICS, edit.lyrics)
             setText(KEY_YEAR, edit.year)
             setText(KEY_COMPOSER, edit.composer)
             if (edit.artwork != null) {
                 items.removeAll { it.type == "covr" }
-                if (edit.artwork.isNotEmpty()) items.add(Child("covr", artworkItem(edit.artwork)))
+                if (edit.artwork.isNotEmpty()) {
+                    items.add(Child("covr", artworkItem(edit.artwork, edit.artworkMime)))
+                }
             }
             edit.trackNumber?.let { value ->
                 items.removeAll { it.type == "trkn" }

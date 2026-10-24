@@ -80,6 +80,16 @@ class TagEngineTest {
         assertEquals(3, tags.trackNumber)
         assertEquals(1, tags.discNumber)
         assertEquals("Comp", tags.composer)
+        assertArrayEquals(cover, tags.artwork)
+        assertEquals("image/jpeg", tags.artworkMime)
+    }
+
+    @Test
+    fun mp3_album_artist_round_trips() {
+        val src = temp("a", audio)
+        val dst = out()
+        Id3Engine.rewrite(src, dst, TagEdit(albumArtist = "Various Artists"))
+        assertEquals("Various Artists", Id3Engine.read(dst).albumArtist)
     }
 
     @Test
@@ -131,6 +141,40 @@ class TagEngineTest {
         val bytes = dst.readBytes()
         assertArrayEquals(audio, bytes.copyOfRange(bytes.size - audio.size, bytes.size))
         assertTrue(String(bytes, Charsets.ISO_8859_1).contains("ALBUMARTIST=Keep"))
+        assertEquals("Keep", t.albumArtist)
+    }
+
+    @Test
+    fun flac_artwork_round_trips_and_can_be_removed() {
+        val src = temp("f", flac())
+        val withCover = out()
+        val cover = byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0xFF.toByte(), 0xE0.toByte(), 1, 2, 3, 4)
+        FlacEngine.rewrite(
+            src,
+            withCover,
+            TagEdit(artwork = cover, artworkMime = "image/jpeg", albumArtist = "AA")
+        )
+        val tags = FlacEngine.read(withCover)
+        assertArrayEquals(cover, tags.artwork)
+        assertEquals("image/jpeg", tags.artworkMime)
+        assertEquals("AA", tags.albumArtist)
+        val bytes = withCover.readBytes()
+        assertArrayEquals(audio, bytes.copyOfRange(bytes.size - audio.size, bytes.size))
+
+        val removed = out()
+        FlacEngine.rewrite(withCover, removed, TagEdit(artwork = ByteArray(0)))
+        assertNull(FlacEngine.read(removed).artwork)
+        assertArrayEquals(audio, removed.readBytes().copyOfRange(removed.length().toInt() - audio.size, removed.length().toInt()))
+    }
+
+    @Test
+    fun flac_picture_block_round_trips() {
+        val image = byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0xFF.toByte(), 0xE0.toByte(), 9, 8, 7, 6)
+        val encoded = FlacPicture.encode(image, "image/jpeg")
+        val picture = FlacPicture.decode(encoded)!!
+        assertEquals(FlacPicture.TYPE_FRONT_COVER, picture.type)
+        assertEquals("image/jpeg", picture.mime)
+        assertArrayEquals(image, picture.data)
     }
 
     private fun box(type: String, payload: ByteArray) = putBe32(payload.size + 8L) + type.toByteArray(Charsets.ISO_8859_1) + payload
@@ -173,7 +217,7 @@ class TagEngineTest {
             src,
             dst,
             TagEdit(
-                title = "T", artwork = cover, year = "2021",
+                title = "T", artwork = cover, year = "2021", albumArtist = "Various Artists",
                 trackNumber = 7, discNumber = 2, composer = "Comp"
             )
         )
@@ -190,6 +234,8 @@ class TagEngineTest {
         assertEquals(7, tags.trackNumber)
         assertEquals(2, tags.discNumber)
         assertEquals("Comp", tags.composer)
+        assertEquals("Various Artists", tags.albumArtist)
+        assertArrayEquals(cover, tags.artwork)
     }
 
     @Test

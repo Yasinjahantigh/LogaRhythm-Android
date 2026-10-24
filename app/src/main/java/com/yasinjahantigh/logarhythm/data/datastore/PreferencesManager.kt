@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -25,6 +26,30 @@ data class SavedQueueState(
     val currentIndex: Int,
     val positionMs: Long
 )
+
+/** Raw AI settings; the API key is kept separately in the encrypted [com.yasinjahantigh.logarhythm.data.ai.AiKeyStore]. */
+data class AiPreferences(
+    val provider: String?,
+    val baseUrl: String?,
+    val model: String?
+)
+
+/** Every online lyrics source and the optional user-owned endpoint. */
+data class LyricsSourcePreferences(
+    val lrclib: Boolean = true,
+    val netease: Boolean = false,
+    val kugou: Boolean = false,
+    val lyricsOvh: Boolean = true,
+    val genius: Boolean = true,
+    val custom: Boolean = false,
+    val customUrl: String? = null
+) {
+    val customUsable: Boolean
+        get() = custom && !customUrl.isNullOrBlank() && customUrl.startsWith("https://")
+
+    val anyEnabled: Boolean
+        get() = lrclib || netease || kugou || lyricsOvh || genius || customUsable
+}
 
 @Singleton
 class PreferencesManager @Inject constructor(
@@ -50,6 +75,11 @@ class PreferencesManager @Inject constructor(
     private val keyQueuePositionMs = longPreferencesKey("key_queue_position_ms")
     private val keyLrclibEnabled = booleanPreferencesKey("key_lrclib_enabled")
     private val keyGeniusEnabled = booleanPreferencesKey("key_genius_enabled")
+    private val keyNeteaseEnabled = booleanPreferencesKey("key_netease_enabled")
+    private val keyKugouEnabled = booleanPreferencesKey("key_kugou_enabled")
+    private val keyLyricsOvhEnabled = booleanPreferencesKey("key_lyrics_ovh_enabled")
+    private val keyCustomLyricsEnabled = booleanPreferencesKey("key_custom_lyrics_enabled")
+    private val keyCustomLyricsUrl = stringPreferencesKey("key_custom_lyrics_url")
     private val keyEqualizerEnabled = booleanPreferencesKey("key_equalizer_enabled")
     private val keyEqualizerPreset = intPreferencesKey("key_equalizer_preset")
     private val keyEqualizerBandLevels = stringPreferencesKey("key_equalizer_band_levels")
@@ -329,6 +359,46 @@ class PreferencesManager @Inject constructor(
         }
     }
 
+    val lyricsSourcePreferences: Flow<LyricsSourcePreferences> = dataStore.data.map { preferences ->
+        LyricsSourcePreferences(
+            lrclib = preferences[keyLrclibEnabled] ?: true,
+            netease = preferences[keyNeteaseEnabled] ?: false,
+            kugou = preferences[keyKugouEnabled] ?: false,
+            lyricsOvh = preferences[keyLyricsOvhEnabled] ?: true,
+            genius = preferences[keyGeniusEnabled] ?: true,
+            custom = preferences[keyCustomLyricsEnabled] ?: false,
+            customUrl = preferences[keyCustomLyricsUrl]?.takeIf { it.isNotBlank() }
+        )
+    }
+
+    val anyLyricsSourceEnabled: Flow<Boolean> = lyricsSourcePreferences.map { it.anyEnabled }
+
+    suspend fun lyricsSourcePreferencesNow(): LyricsSourcePreferences = lyricsSourcePreferences.first()
+
+    suspend fun setNeteaseEnabled(enabled: Boolean) {
+        dataStore.edit { it[keyNeteaseEnabled] = enabled }
+    }
+
+    suspend fun setKugouEnabled(enabled: Boolean) {
+        dataStore.edit { it[keyKugouEnabled] = enabled }
+    }
+
+    suspend fun setLyricsOvhEnabled(enabled: Boolean) {
+        dataStore.edit { it[keyLyricsOvhEnabled] = enabled }
+    }
+
+    suspend fun setCustomLyricsEnabled(enabled: Boolean) {
+        dataStore.edit { it[keyCustomLyricsEnabled] = enabled }
+    }
+
+    suspend fun setCustomLyricsUrl(url: String?) {
+        dataStore.edit { preferences ->
+            val clean = url?.trim()?.takeIf { it.startsWith("https://") }
+            if (clean == null) preferences.remove(keyCustomLyricsUrl)
+            else preferences[keyCustomLyricsUrl] = clean
+        }
+    }
+
     val recentSearches: Flow<List<String>> = dataStore.data.map { preferences ->
         val raw = preferences[keyRecentSearches].orEmpty()
         if (raw.isBlank()) emptyList()
@@ -470,6 +540,7 @@ class PreferencesManager @Inject constructor(
     private val keyReplayGain = stringPreferencesKey("key_replay_gain_mode")
     private val keyReplayGainPreamp = floatPreferencesKey("key_replay_gain_preamp_db")
     private val keyResumeOnHeadset = booleanPreferencesKey("key_resume_on_headset")
+    private val keySwipeRightForNext = booleanPreferencesKey("key_swipe_right_for_next")
 
     /** 0 = off. The player fades out/in around each song change (single player, no overlap). */
     val fadeBetweenSongsSec: Flow<Int> = dataStore.data.map { it[keyFadeSec] ?: 0 }
@@ -479,22 +550,34 @@ class PreferencesManager @Inject constructor(
     /** Manual pre-amplifier added on top of the picked ReplayGain tag, in dB [-6, +6]. */
     val replayGainPreampDb: Flow<Float> = dataStore.data.map { it[keyReplayGainPreamp] ?: 0f }
     val resumeOnHeadset: Flow<Boolean> = dataStore.data.map { it[keyResumeOnHeadset] ?: true }
+    /** RTL-friendly default: swipe right skips forward, swipe left goes back. */
+    val swipeRightForNext: Flow<Boolean> = dataStore.data.map { it[keySwipeRightForNext] ?: true }
 
     suspend fun setFadeBetweenSongsSec(seconds: Int) { dataStore.edit { it[keyFadeSec] = seconds.coerceIn(0, 12) } }
     suspend fun setSkipSilence(enabled: Boolean) { dataStore.edit { it[keySkipSilence] = enabled } }
     suspend fun setReplayGainMode(mode: String) { dataStore.edit { it[keyReplayGain] = mode } }
     suspend fun setReplayGainPreampDb(db: Float) { dataStore.edit { it[keyReplayGainPreamp] = db.coerceIn(-6f, 6f) } }
     suspend fun setResumeOnHeadset(enabled: Boolean) { dataStore.edit { it[keyResumeOnHeadset] = enabled } }
+    suspend fun setSwipeRightForNext(enabled: Boolean) { dataStore.edit { it[keySwipeRightForNext] = enabled } }
 
     // ---- Library intelligence ---------------------------------------------------------------
 
     private val keySplitArtists = booleanPreferencesKey("key_split_artists")
     private val keyArtistSeparators = stringPreferencesKey("key_artist_separators")
+    private val keyArtistNeverSplit = stringPreferencesKey("key_artist_never_split")
     private val keyLibraryGeneration = stringPreferencesKey("key_library_generation")
 
     val splitArtists: Flow<Boolean> = dataStore.data.map { it[keySplitArtists] ?: true }
     /** One separator per line; null means "use the built-in defaults". */
     val artistSeparators: Flow<String?> = dataStore.data.map { it[keyArtistSeparators] }
+    /** Artist names the user never wants split, one per line. */
+    val artistNeverSplit: Flow<Set<String>> = dataStore.data.map { preferences ->
+        preferences[keyArtistNeverSplit].orEmpty()
+            .split("\n")
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+            .toSet()
+    }
     /** MediaStore version+generation seen by the last successful scan; lets a scan be skipped. */
     val libraryGeneration: Flow<String?> = dataStore.data.map { it[keyLibraryGeneration] }
 
@@ -502,8 +585,31 @@ class PreferencesManager @Inject constructor(
     suspend fun setArtistSeparators(raw: String?) {
         dataStore.edit { if (raw == null) it.remove(keyArtistSeparators) else it[keyArtistSeparators] = raw }
     }
+    suspend fun setArtistNeverSplit(names: Set<String>) {
+        dataStore.edit { preferences ->
+            val clean = names.map { it.trim() }.filter { it.isNotBlank() }
+            if (clean.isEmpty()) preferences.remove(keyArtistNeverSplit)
+            else preferences[keyArtistNeverSplit] = clean.joinToString("\n")
+        }
+    }
     suspend fun setLibraryGeneration(value: String?) {
         dataStore.edit { if (value == null) it.remove(keyLibraryGeneration) else it[keyLibraryGeneration] = value }
+    }
+
+    // ---- Library sorting --------------------------------------------------------------------
+
+    private fun librarySortKey(tab: String) = stringPreferencesKey("key_library_sort_${tab.lowercase()}")
+
+    /** Persisted field/direction pair for one library tab, e.g. ("YEAR", "DESCENDING"). */
+    fun librarySortOrder(tab: String): Flow<Pair<String, String>> = dataStore.data.map { preferences ->
+        val raw = preferences[librarySortKey(tab)]
+        val field = raw?.substringBefore('|')?.takeIf { it.isNotBlank() } ?: "TITLE"
+        val direction = raw?.substringAfter('|', "")?.takeIf { it.isNotBlank() } ?: "ASCENDING"
+        field to direction
+    }
+
+    suspend fun setLibrarySortOrder(tab: String, field: String, direction: String) {
+        dataStore.edit { it[librarySortKey(tab)] = "$field|$direction" }
     }
 
     // ---- Music download ---------------------------------------------------------------------
@@ -546,5 +652,27 @@ class PreferencesManager @Inject constructor(
 
     suspend fun setYtdlpFirstUpdateDone(done: Boolean) {
         dataStore.edit { it[keyYtdlpFirstUpdateDone] = done }
+    }
+
+    // ---- Optional bring-your-own-key AI -----------------------------------------------------
+
+    private val keyAiProvider = stringPreferencesKey("key_ai_provider")
+    private val keyAiBaseUrl = stringPreferencesKey("key_ai_base_url")
+    private val keyAiModel = stringPreferencesKey("key_ai_model")
+
+    val aiPreferences: Flow<AiPreferences> = dataStore.data.map { preferences ->
+        AiPreferences(
+            provider = preferences[keyAiProvider],
+            baseUrl = preferences[keyAiBaseUrl],
+            model = preferences[keyAiModel]
+        )
+    }
+
+    suspend fun setAiPreferences(provider: String, baseUrl: String, model: String) {
+        dataStore.edit { preferences ->
+            preferences[keyAiProvider] = provider
+            preferences[keyAiBaseUrl] = baseUrl
+            preferences[keyAiModel] = model
+        }
     }
 }

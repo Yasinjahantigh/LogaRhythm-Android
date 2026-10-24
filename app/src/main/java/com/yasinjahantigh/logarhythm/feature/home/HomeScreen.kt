@@ -75,7 +75,6 @@ import com.yasinjahantigh.logarhythm.domain.model.DailyMix
 import com.yasinjahantigh.logarhythm.domain.model.Track
 import com.yasinjahantigh.logarhythm.core.utils.rememberMediaStoreConsent
 import com.yasinjahantigh.logarhythm.feature.library.TrackListItem
-import com.yasinjahantigh.logarhythm.feature.player.EditTrackDialog
 import com.yasinjahantigh.logarhythm.feature.playlist.AddToPlaylistDialog
 import com.yasinjahantigh.logarhythm.feature.playlist.SongMenuBottomSheet
 import com.yasinjahantigh.logarhythm.ui.theme.DisplayFontFamily
@@ -90,6 +89,7 @@ fun HomeScreen(
     modifier: Modifier = Modifier,
     onNavigateToSearch: () -> Unit = {},
     onNavigateToDownload: () -> Unit = {},
+    onNavigateToTagEditor: (String) -> Unit = {},
     viewModel: HomeViewModel = hiltViewModel()
 ) {
     val dailyMixes by viewModel.dailyMixes.collectAsStateWithLifecycle()
@@ -105,9 +105,6 @@ fun HomeScreen(
 
     var selectedTrackForMenu by remember { mutableStateOf<Track?>(null) }
     var trackForAddToPlaylist by remember { mutableStateOf<Track?>(null) }
-    var selectedTrackForEdit by remember { mutableStateOf<Track?>(null) }
-    var editTrackError by remember { mutableStateOf(false) }
-    var editTrackSaving by remember { mutableStateOf(false) }
     var selectedMixForDetail by remember { mutableStateOf<DailyMix?>(null) }
     val snackbarHostState = remember { SnackbarHostState() }
     val coroutineScope = rememberCoroutineScope()
@@ -415,40 +412,13 @@ fun HomeScreen(
             },
             onEditTrack = {
                 selectedTrackForMenu = null
-                selectedTrackForEdit = track
+                onNavigateToTagEditor(track.id)
             },
             onHideTrack = {
                 viewModel.hideTrack(track)
                 selectedTrackForMenu = null
                 coroutineScope.launch {
                     snackbarHostState.showSnackbar(context.getString(R.string.track_hidden_toast, track.title))
-                }
-            }
-        )
-    }
-
-    selectedTrackForEdit?.let { track ->
-        EditTrackDialog(
-            track = track,
-            onDismiss = { selectedTrackForEdit = null; editTrackError = false; editTrackSaving = false },
-            errorMessage = if (editTrackError) context.getString(R.string.track_metadata_write_failed) else null,
-            isSaving = editTrackSaving,
-            onSave = { newTitle, newArtist, newAlbum, newGenre ->
-                if (!editTrackSaving) {
-                    editTrackSaving = true
-                    editTrackError = false
-                    mediaStoreConsent.write(track, onApproved = {
-                        viewModel.updateTrackMetadata(track.id, newTitle, newArtist, newAlbum, newGenre) { updated ->
-                            editTrackSaving = false
-                            if (updated != null) {
-                                selectedTrackForEdit = null
-                                coroutineScope.launch { snackbarHostState.showSnackbar(context.getString(R.string.track_updated_toast)) }
-                            } else editTrackError = true
-                        }
-                    }, onCancelled = {
-                        editTrackSaving = false
-                        editTrackError = true
-                    })
                 }
             }
         )

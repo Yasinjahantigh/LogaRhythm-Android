@@ -1,123 +1,100 @@
 package com.yasinjahantigh.logarhythm.data.sources
 
+import com.yasinjahantigh.logarhythm.data.lyrics.LyricsHttpClient
+import com.yasinjahantigh.logarhythm.data.lyrics.LyricsSearchResult
+import com.yasinjahantigh.logarhythm.data.lyrics.OnlineLyricsSource
+import com.yasinjahantigh.logarhythm.data.lyrics.encode
 import com.yasinjahantigh.logarhythm.domain.lyrics.LrcParser
-import com.yasinjahantigh.logarhythm.domain.model.Lyrics
-import com.yasinjahantigh.logarhythm.domain.model.Track
-import com.yasinjahantigh.logarhythm.domain.source.LyricsSource
+import com.yasinjahantigh.logarhythm.domain.lyrics.LyricsQuery
+import com.yasinjahantigh.logarhythm.domain.lyrics.LyricsSourceStatus
+import com.yasinjahantigh.logarhythm.domain.lyrics.LyricsTextNormalizer
+import com.yasinjahantigh.logarhythm.domain.model.LyricsCandidate
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
-import java.io.BufferedReader
-import java.net.HttpURLConnection
-import java.net.URL
-import java.net.URLEncoder
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/**
- * Online lyrics provider querying Netease Cloud Music (163 Cloud Music) API.
- * Netease is one of the world's largest lyrics databases, featuring synced (.lrc)
- * and translated lyrics for global, western, and international songs.
- */
+/** NetEase Cloud Music's public web endpoints; blocked from some networks, hence opt-in. */
 @Singleton
-class NeteaseLyricsSource @Inject constructor() : LyricsSource {
+class NeteaseLyricsSource @Inject constructor(
+    private val http: LyricsHttpClient
+) : OnlineLyricsSource {
 
-    override val name: String = "netease"
+    override val id: String = "netease"
+    override val displayName: String = "NetEase"
 
-    companion object {
-        private const val SEARCH_URL = "https://music.163.com/api/search/get/web"
-        private const val LYRIC_URL = "https://music.163.com/api/song/lyric"
-        private const val USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36"
-        private const val TIMEOUT_MS = 6000
-    }
+    override suspend fun search(query: LyricsQuery): LyricsSearchResult = withContext(Dispatchers.IO) {
+        val title = LyricsTextNormalizer.queryTitle(query.title)
+        if (title.isBlank()) return@withContext LyricsSearchResult(status = LyricsSourceStatus.EMPTY)
+        val artist = LyricsTextNormalizer.queryArtist(query.artist)
+        val keyword = listOf(title, artist).filter { it.isNotBlank() }.joinToString(" ")
 
-    override suspend fun getLyrics(track: Track): Lyrics? = withContext(Dispatchers.IO) {
-        val cleanTitle = track.title
-            .replace(Regex("""^\d+[\s.\-_]+"""), "")
-            .replace(Regex("""\.(mp3|m4a|flac|wav|ogg|aac)$""", RegexOption.IGNORE_CASE), "")
-            .replace(Regex("""\s*[\(\[](feat|ft)\.?\s+[^\)\]]+[\)\]]""", RegexOption.IGNORE_CASE), "")
-            .trim()
-        if (cleanTitle.isBlank()) return@withContext null
-
-        val cleanArtist = track.artist
-            .split(Regex("[,;&]|\\s+(feat|ft)\\.?\\s+", RegexOption.IGNORE_CASE))
-            .firstOrNull()
-            ?.trim()
-            ?.takeIf { !it.equals("Unknown Artist", ignoreCase = true) && !it.equals("<unknown>", ignoreCase = true) }
-            .orEmpty()
-
-        try {
-            val query = if (cleanArtist.isNotBlank()) "$cleanTitle $cleanArtist" else cleanTitle
-
-            val songId = searchSongId(query) ?: return@withContext null
-            val lyricsLrc = fetchLyricById(songId) ?: return@withContext null
-            val parsed = LrcParser.parse(lyricsLrc)
-            if (!parsed.isEmpty) {
-                return@withContext parsed
-            }
-        } catch (_: Exception) {
+        val search = http.get(
+            "https://music.163.com/api/search/get/web?csrf_token=&hlpretag=&hlposttag=&s=${encode(keyword)}&type=1&offset=0&total=true&limit=5",
+            mapOf("Referer" to "https://music.163.com/", "Accept" to "application/json")
+        )
+        when {
+            search.blocked -> return@withContext LyricsSearchResult(status = LyricsSourceStatus.BLOCKED, detail = search.error)
+            search.timedOut -> return@withContext LyricsSearchResult(status = LyricsSourceStatus.TIMEOUT, detail = search.error)
+            !search.ok -> return@withContext LyricsSearchResult(
+                status = if (search.code == 404) LyricsSourceStatus.EMPTY else LyricsSourceStatus.ERROR,
+                detail = search.error
+            )
         }
 
-        null
-    }
-
-    private fun searchSongId(query: String): Long? {
-        var connection: HttpURLConnection? = null
         try {
-            val encodedQuery = URLEncoder.encode(query, "UTF-8")
-            val url = URL("$SEARCH_URL?csrf_token=&hlpretag=&hlposttag=&s=$encodedQuery&type=1&offset=0&total=true&limit=5")
-            connection = (url.openConnection() as HttpURLConnection).apply {
-                requestMethod = "GET"
-                connectTimeout = TIMEOUT_MS
-                readTimeout = TIMEOUT_MS
-                setRequestProperty("User-Agent", USER_AGENT)
-                setRequestProperty("Referer", "https://music.163.com/")
-                setRequestProperty("Accept", "application/json")
-            }
-
-            if (connection.responseCode == HttpURLConnection.HTTP_OK) {
-                val responseText = connection.inputStream.bufferedReader().use(BufferedReader::readText)
-                val json = JSONObject(responseText)
-                val result = json.optJSONObject("result") ?: return null
-                val songs = result.optJSONArray("songs") ?: return null
-                if (songs.length() > 0) {
-                    val firstSong = songs.getJSONObject(0)
-                    return firstSong.optLong("id")
+            val songs = JSONObject(search.body).optJSONObject("result")?.optJSONArray("songs")
+                ?: return@withContext LyricsSearchResult(status = LyricsSourceStatus.EMPTY)
+            val candidates = buildList {
+                for (i in 0 until songs.length().coerceAtMost(3)) {
+                    val song = songs.optJSONObject(i) ?: continue
+                    val songId = song.optLong("id", 0L)
+                    if (songId <= 0L) continue
+                    val lyricText = fetchLyric(songId) ?: continue
+                    val parsed = LrcParser.parse(lyricText)
+                    if (parsed.isEmpty) continue
+                    val artists = song.optJSONArray("artists")
+                    val artistName = if (artists != null && artists.length() > 0) {
+                        (0 until artists.length()).mapNotNull {
+                            artists.optJSONObject(it)?.optString("name")?.takeIf(String::isNotBlank)
+                        }.joinToString(", ")
+                    } else {
+                        artist
+                    }
+                    add(
+                        LyricsCandidate(
+                            id = "netease_$songId",
+                            trackName = song.optString("name").ifBlank { title },
+                            artistName = artistName.ifBlank { artist },
+                            albumName = song.optJSONObject("album")?.optString("name").orEmpty(),
+                            durationMs = song.optLong("duration", 0L),
+                            isSynced = parsed.isSynced,
+                            sourceName = displayName,
+                            providerId = id,
+                            lyrics = parsed
+                        )
+                    )
                 }
             }
-        } catch (_: Exception) {
-        } finally {
-            connection?.disconnect()
+            LyricsSearchResult(
+                candidates = candidates,
+                status = if (candidates.isEmpty()) LyricsSourceStatus.EMPTY else LyricsSourceStatus.OK
+            )
+        } catch (error: Exception) {
+            LyricsSearchResult(status = LyricsSourceStatus.ERROR, detail = error.message)
         }
-        return null
     }
 
-    private fun fetchLyricById(songId: Long): String? {
-        var connection: HttpURLConnection? = null
-        try {
-            val url = URL("$LYRIC_URL?os=pc&id=$songId&lv=-1&kv=-1&tv=-1")
-            connection = (url.openConnection() as HttpURLConnection).apply {
-                requestMethod = "GET"
-                connectTimeout = TIMEOUT_MS
-                readTimeout = TIMEOUT_MS
-                setRequestProperty("User-Agent", USER_AGENT)
-                setRequestProperty("Referer", "https://music.163.com/")
-                setRequestProperty("Accept", "application/json")
-            }
-
-            if (connection.responseCode == HttpURLConnection.HTTP_OK) {
-                val responseText = connection.inputStream.bufferedReader().use(BufferedReader::readText)
-                val json = JSONObject(responseText)
-                val lrcObj = json.optJSONObject("lrc")
-                val lyricText = lrcObj?.let { LyricsResponseFields.text(it, "lyric") }
-                if (!lyricText.isNullOrEmpty() && lyricText != "[00:00.000] 纯音乐，请欣赏") {
-                    return lyricText
-                }
-            }
-        } catch (_: Exception) {
-        } finally {
-            connection?.disconnect()
-        }
-        return null
+    private suspend fun fetchLyric(songId: Long): String? {
+        val response = http.get(
+            "https://music.163.com/api/song/lyric?os=pc&id=$songId&lv=-1&kv=-1&tv=-1",
+            mapOf("Referer" to "https://music.163.com/", "Accept" to "application/json")
+        )
+        if (!response.ok) return null
+        val lyric = runCatching {
+            JSONObject(response.body).optJSONObject("lrc")?.let { LyricsResponseFields.text(it, "lyric") }
+        }.getOrNull()
+        return lyric?.takeIf { it.isNotBlank() && it != "[00:00.000] 纯音乐，请欣赏" }
     }
 }

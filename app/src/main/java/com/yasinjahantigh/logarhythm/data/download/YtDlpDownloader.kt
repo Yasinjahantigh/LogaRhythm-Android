@@ -6,7 +6,6 @@ import com.yasinjahantigh.logarhythm.domain.download.DownloadTitleParser
 import com.yasinjahantigh.logarhythm.domain.model.DownloadErrorKind
 import com.yausername.youtubedl_android.YoutubeDL
 import com.yausername.youtubedl_android.YoutubeDLRequest
-import kotlinx.coroutines.runInterruptible
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.Dispatchers
 import java.io.File
@@ -50,7 +49,7 @@ class YtDlpDownloader @Inject constructor(
     /** Keeps a complete file even when yt-dlp reports an error after writing it. */
     suspend fun findUsableFile(workspace: File): File? = withContext(Dispatchers.IO) {
         workspace.listFiles()
-            ?.filter { it.isFile && it.length() > 32 * 1024 && it.extension.lowercase() in AUDIO_EXTENSIONS }
+            ?.filter { it.isFile && it.extension.lowercase() in AUDIO_EXTENSIONS && AudioFileProbe.isUsable(it) }
             ?.maxByOrNull { it.lastModified() }
     }
 

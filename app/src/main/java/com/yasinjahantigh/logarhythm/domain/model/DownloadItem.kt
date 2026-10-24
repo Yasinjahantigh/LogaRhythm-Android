@@ -3,6 +3,12 @@ package com.yasinjahantigh.logarhythm.domain.model
 /** Stored in statusDetail while a network failure waits for WorkManager's automatic retry. */
 const val DOWNLOAD_NETWORK_RETRY_DETAIL = "network_retry"
 
+/** Saved successfully, but the container (usually WebM) cannot carry the requested tags. */
+const val DOWNLOAD_SAVED_WITHOUT_TAGS_DETAIL = "saved_without_tags"
+
+/** The file was saved, but writing/verifying its tags failed. */
+const val DOWNLOAD_TAG_WRITE_FAILED_DETAIL = "tag_write_failed"
+
 /** Where a downloadable search result comes from. */
 enum class DownloadSource(val raw: String) {
     YOUTUBE("youtube"),
