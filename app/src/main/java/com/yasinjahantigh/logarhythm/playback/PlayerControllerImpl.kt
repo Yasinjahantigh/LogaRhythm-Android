@@ -33,9 +33,14 @@ class PlayerControllerImpl @Inject constructor(
 
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
     private var mediaController: MediaController? = null
+    private var reconnectAttempts = 0
     private val pendingActions = mutableListOf<(MediaController) -> Unit>()
     private val trackMap = mutableMapOf<String, Track>()
     private var originalQueue: List<Track> = emptyList()
+
+    private companion object {
+        const val MAX_RECONNECT_ATTEMPTS = 5
+    }
 
     private val _currentTrack = MutableStateFlow<Track?>(null)
     override val currentTrack: StateFlow<Track?> = _currentTrack.asStateFlow()
@@ -67,16 +72,40 @@ class PlayerControllerImpl @Inject constructor(
     override val equalizerState: StateFlow<EqualizerState> = equalizerManager.equalizerState
 
     init {
+        connect()
+        startPositionTracker()
+    }
+
+    private fun connect() {
         val token = SessionToken(context, ComponentName(context, PlaybackService::class.java))
-        val future = MediaController.Builder(context, token).buildAsync()
+        val future = MediaController.Builder(context, token)
+            .setListener(object : MediaController.Listener {
+                override fun onDisconnected(controller: MediaController) {
+                    mediaController = null
+                    scheduleReconnect()
+                }
+            })
+            .buildAsync()
         future.addListener({
             try {
                 val controller = future.get()
                 mediaController = controller
+                reconnectAttempts = 0
                 setupController(controller)
-            } catch (_: Exception) {}
+            } catch (_: Exception) {
+                scheduleReconnect()
+            }
         }, ContextCompat.getMainExecutor(context))
-        startPositionTracker()
+    }
+
+    /** The service can be killed by the system, which leaves the controller holding a dead session. */
+    private fun scheduleReconnect() {
+        if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) return
+        reconnectAttempts++
+        scope.launch {
+            delay(2_000L)
+            connect()
+        }
     }
 
     private fun setupController(controller: MediaController) {
@@ -130,8 +159,6 @@ class PlayerControllerImpl @Inject constructor(
 
     private fun startPositionTracker() {
         scope.launch {
-            val powerManager = context.getSystemService(android.os.PowerManager::class.java)
-            var lastWidgetUpdate = android.os.SystemClock.elapsedRealtime()
             while (isActive) {
                 delay(if (_isPlaying.value) 500L else 1_000L)
                 val controller = mediaController ?: continue
@@ -140,11 +167,6 @@ class PlayerControllerImpl @Inject constructor(
                 _position.value = controller.currentPosition.coerceAtLeast(0L)
                 if (controller.duration > 0L) _duration.value = controller.duration
                 playScrobbler.onTick(playing, _currentTrack.value, _duration.value)
-                val now = android.os.SystemClock.elapsedRealtime()
-                if (playing && powerManager.isInteractive && now - lastWidgetUpdate >= 15_000L) {
-                    lastWidgetUpdate = now
-                    com.yasinjahantigh.logarhythm.widget.MusicWidgetUpdater.requestUpdate(context)
-                }
             }
         }
     }
