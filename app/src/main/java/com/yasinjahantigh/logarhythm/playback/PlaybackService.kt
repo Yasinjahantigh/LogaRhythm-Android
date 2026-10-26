@@ -6,6 +6,7 @@ import android.os.Bundle
 import androidx.annotation.OptIn
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
+import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.DefaultLoadControl
@@ -29,7 +30,9 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -47,6 +50,14 @@ class PlaybackService : MediaSessionService() {
         const val ACTION_PREVIOUS = "com.yasinjahantigh.logarhythm.action.PREVIOUS"
         private const val ACTION_TOGGLE_SHUFFLE = "com.yasinjahantigh.logarhythm.action.TOGGLE_SHUFFLE"
         private const val ACTION_CYCLE_REPEAT = "com.yasinjahantigh.logarhythm.action.CYCLE_REPEAT"
+
+        /**
+         * The player of the running service. The widget reads playback state from it because the
+         * app side controller keeps a stale session when the service is restarted by the system.
+         */
+        @Volatile
+        var livePlayer: Player? = null
+            private set
     }
 
     @Inject
@@ -126,12 +137,33 @@ class PlaybackService : MediaSessionService() {
             // Keeps the CPU awake for local playback with the screen off (no stutter on idle devices).
             .setWakeMode(C.WAKE_MODE_LOCAL)
             .build()
+        livePlayer = player
 
         enhancer = PlaybackEnhancer(this, player, preferencesManager, musicDao, sleepTimerManager)
             .also { it.start() }
 
         // Attach Sleep Timer to player
         sleepTimerManager.attachPlayer(player)
+
+        // The widget follows the service player, so it has to be told about every state change.
+        player.addListener(object : Player.Listener {
+            override fun onIsPlayingChanged(isPlaying: Boolean) {
+                com.yasinjahantigh.logarhythm.widget.MusicWidgetUpdater.requestUpdate(this@PlaybackService)
+            }
+
+            override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+                com.yasinjahantigh.logarhythm.widget.MusicWidgetUpdater.requestUpdate(this@PlaybackService)
+            }
+        })
+
+        scope.launch {
+            while (isActive) {
+                delay(10_000L)
+                if (player.isPlaying) {
+                    com.yasinjahantigh.logarhythm.widget.MusicWidgetUpdater.requestProgressUpdate(this@PlaybackService)
+                }
+            }
+        }
 
         // Attach Equalizer to player audio session and observe changes
         player.addAnalyticsListener(object : AnalyticsListener {
@@ -248,6 +280,7 @@ class PlaybackService : MediaSessionService() {
 
     override fun onDestroy() {
         scope.cancel()
+        livePlayer = null
         enhancer?.release()
         enhancer = null
         sleepTimerManager.detachPlayer()

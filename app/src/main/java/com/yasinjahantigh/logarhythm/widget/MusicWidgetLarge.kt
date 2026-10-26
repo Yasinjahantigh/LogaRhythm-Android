@@ -50,19 +50,23 @@ class MusicWidgetLarge : GlanceAppWidget() {
         val snapshot = MusicWidgetUpdater.snapshot(context)
         val cover = WidgetArtworkCache.blurred(context, snapshot.track?.artworkUri)
         val thumbnails = snapshot.upcoming.map { WidgetArtworkCache.thumbnail(context, it.value.artworkUri) }
-        val maxHeight = runCatching {
-            val appWidgetId = GlanceAppWidgetManager(context).getAppWidgetId(id)
-            AppWidgetManager.getInstance(context).getAppWidgetOptions(appWidgetId)
-                .getInt(AppWidgetManager.OPTION_APPWIDGET_MAX_HEIGHT)
+        val appWidgetId = runCatching { GlanceAppWidgetManager(context).getAppWidgetId(id) }.getOrDefault(0)
+        val appWidgetManager = AppWidgetManager.getInstance(context)
+        val reportedHeight = runCatching {
+            appWidgetManager.getAppWidgetOptions(appWidgetId).getInt(AppWidgetManager.OPTION_APPWIDGET_MAX_HEIGHT)
         }.getOrDefault(0)
+        // This launcher reports a height smaller than the widget it hosts, so an implausible value
+        // is treated as unknown and the full list is shown.
+        val declaredMinHeight = appWidgetManager.getAppWidgetInfo(appWidgetId)?.minHeight ?: 0
+        val maxHeight = if (reportedHeight in 1 until declaredMinHeight) 0 else reportedHeight
         val queueRows = when {
-            maxHeight <= 0 -> 3
-            maxHeight >= 262 -> 4
-            maxHeight >= 232 -> 3
-            maxHeight >= 202 -> 2
+            maxHeight <= 0 -> 4
+            maxHeight >= 710 -> 4
+            maxHeight >= 630 -> 3
+            maxHeight >= 555 -> 2
             else -> 1
         }
-        Log.d("MusicWidgetLarge", "maxHeight=$maxHeight rows=$queueRows upcoming=${snapshot.upcoming.size}")
+        Log.d("MusicWidgetLarge", "reported=$reportedHeight min=$declaredMinHeight rows=$queueRows")
         provideContent {
             if (snapshot.track == null) {
                 WidgetEmptyState()
