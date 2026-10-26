@@ -49,14 +49,14 @@
         </service>
 
         <receiver
-            android:name="com.yasinjahantigh.logarhythm.widget.MusicWidgetReceiver"
-            android:exported="true">
+            android:name="com.yasinjahantigh.logarhythm.widget.MusicWidgetLargeReceiver"
+            android:exported="false">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
             </intent-filter>
             <meta-data
                 android:name="android.appwidget.provider"
-                android:resource="@xml/music_widget_info" />
+                android:resource="@xml/music_widget_large_info" />
         </receiver>
 
         <!-- Long-running WorkManager downloads use the dataSync foreground type on Android 14+. -->

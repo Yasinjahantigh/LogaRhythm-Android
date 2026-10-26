@@ -9,7 +9,6 @@ import androidx.media3.common.Player
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import com.yasinjahantigh.logarhythm.domain.model.Track
-import com.yasinjahantigh.logarhythm.widget.MusicWidgetUpdater
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -84,7 +83,7 @@ class PlayerControllerImpl @Inject constructor(
         controller.addListener(object : Player.Listener {
             override fun onIsPlayingChanged(playing: Boolean) {
                 _isPlaying.value = playing
-                MusicWidgetUpdater.update(context, _currentTrack.value?.title, _currentTrack.value?.artist, _currentTrack.value?.artworkUri, playing)
+                com.yasinjahantigh.logarhythm.widget.MusicWidgetUpdater.requestUpdate(context)
                 if (!playing) saveQueueState()
             }
             override fun onMediaItemTransition(item: MediaItem?, reason: Int) {
@@ -123,7 +122,6 @@ class PlayerControllerImpl @Inject constructor(
             _currentTrack.value = track
             _position.value = restored.positionMs
             if (track != null && track.durationMs > 0L) _duration.value = track.durationMs
-            MusicWidgetUpdater.update(context, track?.title, track?.artist, track?.artworkUri, false)
             val mediaItems = restored.tracks.map { MediaItemMapper.toMediaItem(it) }
             controller.setMediaItems(mediaItems, restored.currentIndex, restored.positionMs)
             controller.prepare()
@@ -132,6 +130,8 @@ class PlayerControllerImpl @Inject constructor(
 
     private fun startPositionTracker() {
         scope.launch {
+            val powerManager = context.getSystemService(android.os.PowerManager::class.java)
+            var lastWidgetUpdate = android.os.SystemClock.elapsedRealtime()
             while (isActive) {
                 delay(if (_isPlaying.value) 500L else 1_000L)
                 val controller = mediaController ?: continue
@@ -140,6 +140,11 @@ class PlayerControllerImpl @Inject constructor(
                 _position.value = controller.currentPosition.coerceAtLeast(0L)
                 if (controller.duration > 0L) _duration.value = controller.duration
                 playScrobbler.onTick(playing, _currentTrack.value, _duration.value)
+                val now = android.os.SystemClock.elapsedRealtime()
+                if (playing && powerManager.isInteractive && now - lastWidgetUpdate >= 15_000L) {
+                    lastWidgetUpdate = now
+                    com.yasinjahantigh.logarhythm.widget.MusicWidgetUpdater.requestUpdate(context)
+                }
             }
         }
     }
@@ -152,8 +157,8 @@ class PlayerControllerImpl @Inject constructor(
         // setMediaItems can emit a transition for the same seed track during radio/queue restore.
         // Preserve its seek position; only a genuinely different track starts at zero.
         if (isDifferentTrack) _position.value = 0L
-        MusicWidgetUpdater.update(context, track?.title, track?.artist, track?.artworkUri, _isPlaying.value)
         playScrobbler.onTrackChanged(track?.id)
+        com.yasinjahantigh.logarhythm.widget.MusicWidgetUpdater.requestUpdate(context)
     }
 
     private fun execute(action: (MediaController) -> Unit) {
@@ -166,6 +171,7 @@ class PlayerControllerImpl @Inject constructor(
         val idx = mediaController?.currentMediaItemIndex ?: 0
         val pos = _position.value
         scope.launch { queuePersistenceManager.saveQueue(q, idx, pos) }
+        com.yasinjahantigh.logarhythm.widget.MusicWidgetUpdater.requestUpdate(context)
     }
 
     override fun play(list: List<Track>, startIndex: Int) {
@@ -382,6 +388,8 @@ class PlayerControllerImpl @Inject constructor(
         }
     }
 
+    override fun currentQueueIndex(): Int = mediaController?.currentMediaItemIndex ?: -1
+
     override fun clearQueue() {
         originalQueue = emptyList()
         _queue.value = emptyList()
@@ -415,7 +423,6 @@ class PlayerControllerImpl @Inject constructor(
         trackMap[updatedTrack.id] = updatedTrack
         if (_currentTrack.value?.id == updatedTrack.id) {
             _currentTrack.value = updatedTrack
-            MusicWidgetUpdater.update(context, updatedTrack.title, updatedTrack.artist, updatedTrack.artworkUri, _isPlaying.value)
             // Rebuild the MediaItem so the notification, lock screen and Bluetooth metadata stop
             // showing the previous title/artist/cover. The position is restored manually because
             // replacing the current item otherwise restarts it.
