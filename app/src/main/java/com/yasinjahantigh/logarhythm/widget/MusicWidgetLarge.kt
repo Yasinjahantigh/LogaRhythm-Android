@@ -2,7 +2,6 @@ package com.yasinjahantigh.logarhythm.widget
 
 import android.appwidget.AppWidgetManager
 import android.content.Context
-import android.graphics.Bitmap
 import android.util.Log
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.unit.dp
@@ -47,45 +46,43 @@ class MusicWidgetLarge : GlanceAppWidget() {
     override val sizeMode = SizeMode.Single
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
-        val snapshot = MusicWidgetUpdater.snapshot(context)
-        val cover = WidgetArtworkCache.blurred(context, snapshot.track?.artworkUri)
-        val thumbnails = snapshot.upcoming.map { WidgetArtworkCache.thumbnail(context, it.value.artworkUri) }
-        val appWidgetId = runCatching { GlanceAppWidgetManager(context).getAppWidgetId(id) }.getOrDefault(0)
+        val state = MusicWidgetUpdater.currentState()
+        provideContent {
+            if (state.track == null) {
+                WidgetEmptyState()
+            } else {
+                LargeWidgetContent(state, queueRows(context, id))
+            }
+        }
+    }
+
+    /**
+     * This launcher reports a height smaller than the widget it hosts, so an implausible value is
+     * treated as unknown and the full list is shown.
+     */
+    private fun queueRows(context: Context, id: GlanceId): Int {
         val appWidgetManager = AppWidgetManager.getInstance(context)
+        val appWidgetId = runCatching { GlanceAppWidgetManager(context).getAppWidgetId(id) }.getOrDefault(0)
         val reportedHeight = runCatching {
             appWidgetManager.getAppWidgetOptions(appWidgetId).getInt(AppWidgetManager.OPTION_APPWIDGET_MAX_HEIGHT)
         }.getOrDefault(0)
-        // This launcher reports a height smaller than the widget it hosts, so an implausible value
-        // is treated as unknown and the full list is shown.
         val declaredMinHeight = appWidgetManager.getAppWidgetInfo(appWidgetId)?.minHeight ?: 0
         val maxHeight = if (reportedHeight in 1 until declaredMinHeight) 0 else reportedHeight
-        val queueRows = when {
+        Log.d("MusicWidgetLarge", "reported=$reportedHeight min=$declaredMinHeight")
+        return when {
             maxHeight <= 0 -> 4
             maxHeight >= 710 -> 4
             maxHeight >= 630 -> 3
             maxHeight >= 555 -> 2
             else -> 1
         }
-        Log.d("MusicWidgetLarge", "reported=$reportedHeight min=$declaredMinHeight rows=$queueRows")
-        provideContent {
-            if (snapshot.track == null) {
-                WidgetEmptyState()
-            } else {
-                LargeWidgetContent(snapshot, cover, thumbnails, queueRows)
-            }
-        }
     }
 }
 
 
 @Composable
-private fun LargeWidgetContent(
-    snapshot: MusicWidgetSnapshot,
-    cover: Bitmap?,
-    thumbnails: List<Bitmap?>,
-    queueRows: Int
-) {
-    val track = snapshot.track ?: return
+private fun LargeWidgetContent(state: MusicWidgetSnapshot, queueRows: Int) {
+    val track = state.track ?: return
     Box(
         modifier = GlanceModifier
             .fillMaxSize()
@@ -94,20 +91,18 @@ private fun LargeWidgetContent(
             .clickable(actionStartActivity<MainActivity>()),
         contentAlignment = Alignment.Center
     ) {
-        if (cover != null) {
+        state.artwork.blurred?.let {
             Image(
-                provider = ImageProvider(cover),
+                provider = ImageProvider(it),
                 contentDescription = null,
                 modifier = GlanceModifier.fillMaxSize(),
                 contentScale = ContentScale.Crop
             )
-        } else {
-            Image(
-                provider = ImageProvider(R.drawable.ic_music_placeholder),
-                contentDescription = null,
-                modifier = GlanceModifier.size(72.dp)
-            )
-        }
+        } ?: Image(
+            provider = ImageProvider(R.drawable.ic_music_placeholder),
+            contentDescription = null,
+            modifier = GlanceModifier.size(72.dp)
+        )
         Image(
             provider = ImageProvider(R.drawable.widget_scrim),
             contentDescription = null,
@@ -131,30 +126,30 @@ private fun LargeWidgetContent(
                 }
                 Spacer(modifier = GlanceModifier.width(8.dp))
                 WidgetIconButton(
-                    icon = if (snapshot.favorite) R.drawable.ic_widget_favorite_filled else R.drawable.ic_widget_favorite,
-                    description = LocalString(stringRes = if (snapshot.favorite) R.string.cd_unfavorite else R.string.cd_favorite),
+                    icon = if (state.favorite) R.drawable.ic_widget_favorite_filled else R.drawable.ic_widget_favorite,
+                    description = LocalString(stringRes = if (state.favorite) R.string.cd_unfavorite else R.string.cd_favorite),
                     action = actionRunCallback<FavoriteWidgetAction>(),
-                    active = snapshot.favorite,
+                    active = state.favorite,
                     size = 34
                 )
             }
             Spacer(modifier = GlanceModifier.height(3.dp))
-            val progress = if (snapshot.duration > 0L) snapshot.position.toFloat() / snapshot.duration.toFloat() else 0f
+            val progress = if (state.duration > 0L) state.position.toFloat() / state.duration.toFloat() else 0f
             WaveformProgress(progress.coerceIn(0f, 1f))
             Row(modifier = GlanceModifier.fillMaxWidth()) {
-                Text(TimeUtils.formatDuration(snapshot.position), style = TextStyle(color = ArtSecondaryText, fontSize = 10.sp))
+                Text(TimeUtils.formatDuration(state.position), style = TextStyle(color = ArtSecondaryText, fontSize = 10.sp))
                 Spacer(modifier = GlanceModifier.defaultWeight())
-                Text(TimeUtils.formatDuration(snapshot.duration), style = TextStyle(color = ArtSecondaryText, fontSize = 10.sp))
+                Text(TimeUtils.formatDuration(state.duration), style = TextStyle(color = ArtSecondaryText, fontSize = 10.sp))
             }
             Spacer(modifier = GlanceModifier.height(3.dp))
             Row(modifier = GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                WidgetIconButton(R.drawable.ic_widget_shuffle, LocalString(R.string.cd_shuffle), actionRunCallback<ShuffleWidgetAction>(), snapshot.shuffle, size = 34)
+                WidgetIconButton(R.drawable.ic_widget_shuffle, LocalString(R.string.cd_shuffle), actionRunCallback<ShuffleWidgetAction>(), state.shuffle, size = 34)
                 Spacer(modifier = GlanceModifier.width(4.dp))
                 WidgetIconButton(R.drawable.ic_widget_previous, LocalString(R.string.cd_skip_prev), actionRunCallback<PreviousActionCallback>(), size = 34)
                 Spacer(modifier = GlanceModifier.width(4.dp))
                 WidgetIconButton(
-                    if (snapshot.isPlaying) R.drawable.ic_widget_pause else R.drawable.ic_widget_play,
-                    LocalString(if (snapshot.isPlaying) R.string.cd_pause else R.string.cd_play),
+                    if (state.isPlaying) R.drawable.ic_widget_pause_ember else R.drawable.ic_widget_play_ember,
+                    LocalString(if (state.isPlaying) R.string.cd_pause else R.string.cd_play),
                     actionRunCallback<PlayPauseActionCallback>(),
                     active = true,
                     size = 40
@@ -163,10 +158,10 @@ private fun LargeWidgetContent(
                 WidgetIconButton(R.drawable.ic_widget_next, LocalString(R.string.cd_skip_next), actionRunCallback<NextActionCallback>(), size = 34)
                 Spacer(modifier = GlanceModifier.width(4.dp))
                 WidgetIconButton(
-                    if (snapshot.repeatMode == Player.REPEAT_MODE_ONE) R.drawable.ic_widget_repeat_one else R.drawable.ic_widget_repeat,
-                    LocalString(if (snapshot.repeatMode == Player.REPEAT_MODE_ONE) R.string.cd_repeat_one else R.string.cd_repeat),
+                    if (state.repeatMode == Player.REPEAT_MODE_ONE) R.drawable.ic_widget_repeat_one else R.drawable.ic_widget_repeat,
+                    LocalString(if (state.repeatMode == Player.REPEAT_MODE_ONE) R.string.cd_repeat_one else R.string.cd_repeat),
                     actionRunCallback<RepeatWidgetAction>(),
-                    active = snapshot.repeatMode != Player.REPEAT_MODE_OFF,
+                    active = state.repeatMode != Player.REPEAT_MODE_OFF,
                     size = 34
                 )
             }
@@ -178,15 +173,15 @@ private fun LargeWidgetContent(
             )
             Spacer(modifier = GlanceModifier.height(2.dp))
             Column(modifier = GlanceModifier.fillMaxWidth()) {
-                if (snapshot.upcoming.isEmpty()) {
+                if (state.upcoming.isEmpty()) {
                     Text(
                         text = LocalString(R.string.queue_empty),
                         style = TextStyle(color = ArtSecondaryText, fontSize = 11.sp),
                         maxLines = 1
                     )
                 } else {
-                    snapshot.upcoming.take(queueRows).forEachIndexed { position, indexedTrack ->
-                        QueueTrackRow(indexedTrack, thumbnails.getOrNull(position), position)
+                    state.upcoming.take(queueRows).forEachIndexed { position, indexedTrack ->
+                        QueueTrackRow(indexedTrack, state.artwork.thumbnails.getOrNull(position), position)
                     }
                 }
             }
@@ -196,7 +191,7 @@ private fun LargeWidgetContent(
 
 
 @Composable
-private fun QueueTrackRow(track: IndexedValue<Track>, thumbnail: Bitmap?, position: Int) {
+private fun QueueTrackRow(track: IndexedValue<Track>, thumbnail: android.graphics.Bitmap?, position: Int) {
     Row(
         modifier = GlanceModifier
             .fillMaxWidth()

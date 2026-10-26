@@ -12,9 +12,15 @@ import kotlinx.coroutines.delay
 internal fun startPlaybackAction(context: Context, action: String) {
     val intent = Intent(context, PlaybackService::class.java).setAction(action)
     try {
-        ContextCompat.startForegroundService(context, intent)
-    } catch (_: Exception) {
+        // Delivering to a running service avoids the foreground service start deadline, which
+        // kills the service when the notification is not posted in time.
         context.startService(intent)
+    } catch (_: IllegalStateException) {
+        intent.putExtra(PlaybackService.EXTRA_FORCE_FOREGROUND_ON_START, true)
+        try {
+            ContextCompat.startForegroundService(context, intent)
+        } catch (_: Exception) {
+        }
     }
 }
 
