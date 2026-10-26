@@ -7,7 +7,9 @@ import androidx.glance.GlanceId
 import androidx.glance.action.ActionParameters
 import androidx.glance.appwidget.action.ActionCallback
 import com.yasinjahantigh.logarhythm.playback.PlaybackService
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 
 internal fun startPlaybackAction(context: Context, action: String) {
     val intent = Intent(context, PlaybackService::class.java).setAction(action)
@@ -56,14 +58,18 @@ class PreviousActionCallback : ActionCallback {
 
 class ShuffleWidgetAction : ActionCallback {
     override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
-        MusicWidgetActions.entryPoint(context).playerController().toggleShuffle()
+        withContext(Dispatchers.Main) {
+            MusicWidgetActions.entryPoint(context).playerController().toggleShuffle()
+        }
         refreshAfterAction(context, 300L)
     }
 }
 
 class RepeatWidgetAction : ActionCallback {
     override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
-        MusicWidgetActions.entryPoint(context).playerController().cycleRepeat()
+        withContext(Dispatchers.Main) {
+            MusicWidgetActions.entryPoint(context).playerController().cycleRepeat()
+        }
         refreshAfterAction(context, 300L)
     }
 }
@@ -82,8 +88,10 @@ class PlayQueueWidgetAction : ActionCallback {
     override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
         val index = parameters[indexKey] ?: return
         val trackId = parameters[trackIdKey] ?: return
-        val controller = MusicWidgetActions.entryPoint(context).playerController()
-        if (controller.queue.value.getOrNull(index)?.id == trackId) controller.playQueueItem(index)
+        withContext(Dispatchers.Main) {
+            val controller = MusicWidgetActions.entryPoint(context).playerController()
+            if (controller.queue.value.getOrNull(index)?.id == trackId) controller.playQueueItem(index)
+        }
         refreshAfterAction(context)
     }
 

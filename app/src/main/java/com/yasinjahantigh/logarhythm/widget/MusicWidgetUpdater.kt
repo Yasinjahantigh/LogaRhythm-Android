@@ -22,6 +22,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -118,6 +119,32 @@ object MusicWidgetUpdater {
         }
     }
 
+    private data class LivePlayer(
+        val trackId: String?,
+        val index: Int,
+        val position: Long,
+        val duration: Long,
+        val isPlaying: Boolean,
+        val shuffle: Boolean,
+        val repeatMode: Int
+    )
+
+    /** Media3 players are thread confined to the main thread, so every read happens there. */
+    private suspend fun readLivePlayer(controller: PlayerController): Pair<LivePlayer?, Int> =
+        withContext(Dispatchers.Main.immediate) {
+            val controllerIndex = runCatching { controller.currentQueueIndex() }.getOrDefault(-1)
+            val player = PlaybackService.livePlayer ?: return@withContext null to controllerIndex
+            LivePlayer(
+                trackId = player.currentMediaItem?.mediaId,
+                index = player.currentMediaItemIndex,
+                position = player.currentPosition,
+                duration = player.duration,
+                isPlaying = player.isPlaying,
+                shuffle = player.shuffleModeEnabled,
+                repeatMode = player.repeatMode
+            ) to controllerIndex
+        }
+
     private suspend fun publishState(context: Context) {
         val entryPoint = EntryPointAccessors.fromApplication(
             context.applicationContext,
@@ -125,15 +152,15 @@ object MusicWidgetUpdater {
         )
         val controller = entryPoint.playerController()
         val queue = controller.queue.value
-        val livePlayer = PlaybackService.livePlayer
+        val (live, controllerIndex) = readLivePlayer(controller)
 
-        val liveTrackId = livePlayer?.currentMediaItem?.mediaId
+        val liveTrackId = live?.trackId
         val currentIndex = when {
             liveTrackId != null -> queue.indexOfFirst { it.id == liveTrackId }
                 .takeIf { it >= 0 }
-                ?: livePlayer?.currentMediaItemIndex?.takeIf { it in queue.indices }
+                ?: live.index.takeIf { it in queue.indices }
                 ?: -1
-            else -> controller.currentQueueIndex().takeIf { it in queue.indices }
+            else -> controllerIndex.takeIf { it in queue.indices }
                 ?: queue.indexOfFirst { it.id == controller.currentTrack.value?.id }
         }
         val track = queue.getOrNull(currentIndex) ?: controller.currentTrack.value
@@ -143,13 +170,13 @@ object MusicWidgetUpdater {
             emptyList()
         }
 
-        val duration = livePlayer?.duration?.takeIf { it > 0L }
+        val duration = live?.duration?.takeIf { it > 0L }
             ?: controller.duration.value.takeIf { it > 0L }
             ?: track?.durationMs
             ?: 0L
-        val position = livePlayer?.currentPosition?.coerceAtLeast(0L)
+        val position = live?.position?.coerceAtLeast(0L)
             ?: controller.position.value.coerceAtLeast(0L)
-        val isPlaying = livePlayer?.isPlaying ?: controller.isPlaying.value
+        val isPlaying = live?.isPlaying ?: controller.isPlaying.value
 
         if (track?.id != favoriteTrackId) {
             favoriteTrackId = track?.id
@@ -173,8 +200,8 @@ object MusicWidgetUpdater {
             isPlaying = isPlaying,
             position = if (duration > 0L) position.coerceIn(0L, duration) else position,
             duration = duration,
-            shuffle = livePlayer?.shuffleModeEnabled ?: controller.shuffle.value,
-            repeatMode = livePlayer?.repeatMode ?: controller.repeatMode.value,
+            shuffle = live?.shuffle ?: controller.shuffle.value,
+            repeatMode = live?.repeatMode ?: controller.repeatMode.value,
             favorite = favoriteValue,
             upcoming = upcoming,
             artwork = artwork
