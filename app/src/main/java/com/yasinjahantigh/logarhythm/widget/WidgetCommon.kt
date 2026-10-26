@@ -152,5 +152,17 @@ internal fun WidgetEmptyState() {
 internal fun accentColor() = WidgetAccent
 
 
+/**
+ * Reading the Glance state is what subscribes the composition to widget updates: Glance only
+ * recomposes when a state it provides changes, so without this call the widget renders once and
+ * silently ignores every later update. The data itself is prepared outside the session.
+ */
+@Composable
+internal fun widgetSnapshot(): MusicWidgetSnapshot {
+    androidx.glance.currentState<androidx.datastore.preferences.core.Preferences>()
+    return MusicWidgetUpdater.currentState()
+}
+
+
 @Composable
 internal fun LocalString(stringRes: Int): String = androidx.glance.LocalContext.current.getString(stringRes)

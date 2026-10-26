@@ -37,8 +37,8 @@ class MusicWidgetMedium : GlanceAppWidget() {
     override val sizeMode = SizeMode.Single
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
-        val state = MusicWidgetUpdater.currentState()
         provideContent {
+            val state = widgetSnapshot()
             if (state.track == null) WidgetEmptyState() else MediumWidgetContent(state)
         }
     }
