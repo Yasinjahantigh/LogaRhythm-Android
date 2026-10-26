@@ -4,6 +4,7 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
+import android.util.LruCache
 import com.yasinjahantigh.logarhythm.playback.AudioBitmapLoader
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -12,12 +13,21 @@ import java.io.FileOutputStream
 
 internal object WidgetArtworkCache {
 
+    /** Decoded copies, so a periodic refresh does not decode the same png over and over. */
+    private val memory = LruCache<String, Bitmap>(12)
+
     suspend fun cover(context: Context, uri: String?, edge: Int = 320): Bitmap? = withContext(Dispatchers.IO) {
         uri ?: return@withContext null
-        cached(context, "cover", uri, edge)?.let { return@withContext it }
+        val key = "cover_${uri.hashCode().toUInt().toString(16)}_$edge"
+        memory.get(key)?.let { return@withContext it }
+        cached(context, "cover", uri, edge)?.let {
+            memory.put(key, it)
+            return@withContext it
+        }
         val source = AudioBitmapLoader.loadAudioArtwork(context, Uri.parse(uri), edge) ?: return@withContext null
         val scaled = fit(source, edge)
         store(context, "cover", uri, scaled, edge)
+        memory.put(key, scaled)
         scaled
     }
 
@@ -28,7 +38,12 @@ internal object WidgetArtworkCache {
      */
     suspend fun blurred(context: Context, uri: String?, edge: Int = 480): Bitmap? = withContext(Dispatchers.IO) {
         uri ?: return@withContext null
-        cached(context, "blurred", uri, edge, Bitmap.Config.RGB_565)?.let { return@withContext it }
+        val key = "blurred_${uri.hashCode().toUInt().toString(16)}_$edge"
+        memory.get(key)?.let { return@withContext it }
+        cached(context, "blurred", uri, edge, Bitmap.Config.RGB_565)?.let {
+            memory.put(key, it)
+            return@withContext it
+        }
         val source = AudioBitmapLoader.loadAudioArtwork(context, Uri.parse(uri), edge) ?: return@withContext null
         val base = fit(source, edge)
         val tiny = Bitmap.createScaledBitmap(
@@ -40,15 +55,22 @@ internal object WidgetArtworkCache {
         val blurred = Bitmap.createScaledBitmap(tiny, base.width, base.height, true)
             .copy(Bitmap.Config.RGB_565, false)
         store(context, "blurred", uri, blurred, edge)
+        memory.put(key, blurred)
         blurred
     }
 
     suspend fun thumbnail(context: Context, uri: String?, edge: Int = 96): Bitmap? = withContext(Dispatchers.IO) {
         uri ?: return@withContext null
-        cached(context, "thumb", uri, edge)?.let { return@withContext it }
+        val key = "thumb_${uri.hashCode().toUInt().toString(16)}_$edge"
+        memory.get(key)?.let { return@withContext it }
+        cached(context, "thumb", uri, edge)?.let {
+            memory.put(key, it)
+            return@withContext it
+        }
         val source = AudioBitmapLoader.loadAudioArtwork(context, Uri.parse(uri), edge) ?: return@withContext null
         val scaled = fit(source, edge)
         store(context, "thumb", uri, scaled, edge)
+        memory.put(key, scaled)
         scaled
     }
 

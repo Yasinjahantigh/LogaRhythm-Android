@@ -1,30 +1,23 @@
 package com.yasinjahantigh.logarhythm.widget
 
-import android.appwidget.AppWidgetManager
 import android.content.Context
-import android.graphics.Bitmap
+import android.content.res.Configuration
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.glance.GlanceId
 import androidx.glance.GlanceModifier
 import androidx.glance.Image
 import androidx.glance.ImageProvider
-import androidx.glance.action.Action
-import androidx.glance.action.actionParametersOf
+import androidx.glance.LocalContext
 import androidx.glance.action.actionStartActivity
 import androidx.glance.action.clickable
 import androidx.glance.appwidget.GlanceAppWidget
-import androidx.glance.appwidget.GlanceAppWidgetManager
-import androidx.glance.appwidget.LinearProgressIndicator
 import androidx.glance.appwidget.SizeMode
 import androidx.glance.appwidget.action.actionRunCallback
 import androidx.glance.appwidget.cornerRadius
 import androidx.glance.appwidget.provideContent
 import androidx.glance.background
-import androidx.glance.color.ColorProvider as dayNightColorProvider
-import androidx.glance.unit.ColorProvider
 import androidx.glance.layout.Alignment
 import androidx.glance.layout.Box
 import androidx.glance.layout.Column
@@ -32,7 +25,6 @@ import androidx.glance.layout.ContentScale
 import androidx.glance.layout.Row
 import androidx.glance.layout.Spacer
 import androidx.glance.layout.fillMaxSize
-import androidx.glance.layout.fillMaxWidth
 import androidx.glance.layout.height
 import androidx.glance.layout.padding
 import androidx.glance.layout.size
@@ -40,35 +32,32 @@ import androidx.glance.layout.width
 import androidx.glance.text.FontWeight
 import androidx.glance.text.Text
 import androidx.glance.text.TextStyle
-import androidx.media3.common.Player
 import com.yasinjahantigh.logarhythm.MainActivity
 import com.yasinjahantigh.logarhythm.R
-import com.yasinjahantigh.logarhythm.core.utils.TimeUtils
 
 class MusicWidgetStrip : GlanceAppWidget() {
     override val sizeMode = SizeMode.Single
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
-        val snapshot = MusicWidgetUpdater.snapshot(context)
-        val cover = WidgetArtworkCache.cover(context, snapshot.track?.artworkUri, 160)
-        val isNight = context.resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK ==
-            android.content.res.Configuration.UI_MODE_NIGHT_YES
+        val state = MusicWidgetUpdater.currentState()
         provideContent {
-            if (snapshot.track == null) StripEmptyState() else StripWidgetContent(snapshot, cover, isNight)
+            if (state.track == null) StripEmptyState() else StripWidgetContent(state)
         }
     }
 }
 
 
 @Composable
-private fun StripWidgetContent(snapshot: MusicWidgetSnapshot, cover: Bitmap?, isNight: Boolean) {
-    val track = snapshot.track ?: return
+private fun StripWidgetContent(state: MusicWidgetSnapshot) {
+    val track = state.track ?: return
+    val isNight = LocalContext.current.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK ==
+        Configuration.UI_MODE_NIGHT_YES
     Row(
         modifier = GlanceModifier.fillMaxSize().background(WidgetBackground).cornerRadius(18.dp)
             .clickable(actionStartActivity<MainActivity>()).padding(6.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        val provider = cover?.let { ImageProvider(it) } ?: ImageProvider(R.drawable.ic_music_placeholder)
+        val provider = state.artwork.strip?.let { ImageProvider(it) } ?: ImageProvider(R.drawable.ic_music_placeholder)
         Image(
             provider = provider,
             contentDescription = null,
@@ -89,8 +78,8 @@ private fun StripWidgetContent(snapshot: MusicWidgetSnapshot, cover: Bitmap?, is
             )
             Spacer(modifier = GlanceModifier.width(4.dp))
             WidgetIconButton(
-                if (snapshot.isPlaying) R.drawable.ic_widget_pause_ember else R.drawable.ic_widget_play_ember,
-                LocalString(if (snapshot.isPlaying) R.string.cd_pause else R.string.cd_play),
+                if (state.isPlaying) R.drawable.ic_widget_pause_ember else R.drawable.ic_widget_play_ember,
+                LocalString(if (state.isPlaying) R.string.cd_pause else R.string.cd_play),
                 actionRunCallback<PlayPauseActionCallback>(), active = true, size = 38,
                 surface = WidgetControlSurface
             )
@@ -121,4 +110,3 @@ private fun StripEmptyState() {
         )
     }
 }
-

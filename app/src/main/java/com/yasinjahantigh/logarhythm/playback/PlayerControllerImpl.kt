@@ -133,6 +133,7 @@ class PlayerControllerImpl @Inject constructor(
         _repeatMode.value = controller.repeatMode
         _isPlaying.value = controller.isPlaying
         _playbackSpeed.value = controller.playbackParameters.speed
+        com.yasinjahantigh.logarhythm.widget.MusicWidgetUpdater.requestUpdate(context)
         pendingActions.forEach { it(controller) }
         pendingActions.clear()
 

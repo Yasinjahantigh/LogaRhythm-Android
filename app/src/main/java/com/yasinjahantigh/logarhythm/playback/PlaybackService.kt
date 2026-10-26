@@ -58,6 +58,10 @@ class PlaybackService : MediaSessionService() {
         @Volatile
         var livePlayer: Player? = null
             private set
+
+        /** Set when a widget command had to start the service from the background. */
+        const val EXTRA_FORCE_FOREGROUND_ON_START =
+            "com.yasinjahantigh.logarhythm.extra.FORCE_FOREGROUND_ON_START"
     }
 
     @Inject
@@ -203,6 +207,7 @@ class PlaybackService : MediaSessionService() {
         )
 
         updateNotificationButtons()
+        com.yasinjahantigh.logarhythm.widget.MusicWidgetUpdater.requestUpdate(this)
         scope.launch {
             combine(playerController.shuffle, playerController.repeatMode) { _, _ -> }
                 .collect { updateNotificationButtons() }
@@ -241,9 +246,19 @@ class PlaybackService : MediaSessionService() {
         )
     }
 
+    @OptIn(UnstableApi::class)
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val player = mediaSession?.player
-        when (intent?.action) {
+        val action = intent?.action
+        val widgetCommand = action == ACTION_PLAY_PAUSE || action == ACTION_NEXT ||
+            action == ACTION_PREVIOUS ||
+            intent?.getBooleanExtra(EXTRA_FORCE_FOREGROUND_ON_START, false) == true
+        if (widgetCommand) {
+            // The command may have started the service from the background, so the notification
+            // has to be posted before the foreground service start deadline runs out.
+            mediaSession?.let { onUpdateNotification(it, true) }
+        }
+        when (action) {
             ACTION_PLAY_PAUSE -> {
                 if (player != null) {
                     if (player.isPlaying) player.pause() else player.play()
