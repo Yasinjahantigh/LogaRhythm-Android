@@ -39,6 +39,7 @@ interface PlayerController {
     fun insertIntoQueue(index: Int, track: Track)
     fun moveQueueItem(fromIndex: Int, toIndex: Int)
     fun playQueueItem(index: Int)
+    fun currentQueueIndex(): Int
     fun clearQueue()
 
     fun setPlaybackSpeed(speed: Float)

@@ -274,11 +274,7 @@
     <string name="settings_no_folders_found">هیچ پوشه‌ای در کتابخانه یافت نشد</string>
 
     <!-- Widget and onboarding -->
-    <string name="widget_description">کنترل سریع پخش و آهنگ در حال پخش</string>
     <string name="no_track_playing">در حال پخش نیست</string>
-    <string name="cd_widget_play_pause">پخش یا توقف</string>
-    <string name="cd_widget_next">آهنگ بعدی</string>
-    <string name="cd_widget_prev">آهنگ قبلی</string>
 
     <string name="onboarding_welcome_title">به LogaRhythm خوش آمدید</string>
     <string name="onboarding_welcome_subtitle">تجربه‌ای مدرن و آفلاین که برای مجموعه موسیقی شخصی شما طراحی شده است.</string>

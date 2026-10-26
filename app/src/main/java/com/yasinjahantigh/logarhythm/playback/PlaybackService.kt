@@ -6,7 +6,6 @@ import android.os.Bundle
 import androidx.annotation.OptIn
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
-import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.DefaultLoadControl
@@ -25,7 +24,6 @@ import com.yasinjahantigh.logarhythm.R
 import com.yasinjahantigh.logarhythm.MainActivity
 import com.yasinjahantigh.logarhythm.data.datastore.PreferencesManager
 import com.yasinjahantigh.logarhythm.data.room.MusicDao
-import com.yasinjahantigh.logarhythm.widget.MusicWidgetUpdater
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -38,7 +36,7 @@ import javax.inject.Inject
 /**
  * Foreground MediaSessionService running ExoPlayer.
  * Manages audio focus, audio becoming noisy events, system notifications,
- * equalizer audio session attachment, background sleep timer, and widget sync.
+ * equalizer audio session attachment, and background sleep timer.
  */
 @AndroidEntryPoint
 class PlaybackService : MediaSessionService() {
@@ -131,30 +129,6 @@ class PlaybackService : MediaSessionService() {
 
         enhancer = PlaybackEnhancer(this, player, preferencesManager, musicDao, sleepTimerManager)
             .also { it.start() }
-
-        // Sync player events to Glance Home Screen Widget
-        player.addListener(object : Player.Listener {
-            override fun onIsPlayingChanged(isPlaying: Boolean) {
-                val item = player.currentMediaItem
-                MusicWidgetUpdater.update(
-                    this@PlaybackService,
-                    item?.mediaMetadata?.title?.toString(),
-                    item?.mediaMetadata?.artist?.toString(),
-                    item?.mediaMetadata?.artworkUri?.toString(),
-                    isPlaying
-                )
-            }
-
-            override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
-                MusicWidgetUpdater.update(
-                    this@PlaybackService,
-                    mediaItem?.mediaMetadata?.title?.toString(),
-                    mediaItem?.mediaMetadata?.artist?.toString(),
-                    mediaItem?.mediaMetadata?.artworkUri?.toString(),
-                    player.isPlaying
-                )
-            }
-        })
 
         // Attach Sleep Timer to player
         sleepTimerManager.attachPlayer(player)

@@ -273,11 +273,7 @@
     <string name="settings_no_folders_found">No folders found in library</string>
 
     <!-- Widget and onboarding -->
-    <string name="widget_description">Quick controls and your currently playing track</string>
     <string name="no_track_playing">Not Playing</string>
-    <string name="cd_widget_play_pause">Play or pause</string>
-    <string name="cd_widget_next">Next track</string>
-    <string name="cd_widget_prev">Previous track</string>
 
     <string name="onboarding_welcome_title">Welcome to LogaRhythm</string>
     <string name="onboarding_welcome_subtitle">A modern, offline music experience designed for your personal collection.</string>
