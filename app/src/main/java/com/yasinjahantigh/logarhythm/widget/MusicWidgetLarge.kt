@@ -38,7 +38,6 @@ import androidx.glance.text.TextStyle
 import androidx.media3.common.Player
 import com.yasinjahantigh.logarhythm.MainActivity
 import com.yasinjahantigh.logarhythm.R
-import com.yasinjahantigh.logarhythm.core.utils.TimeUtils
 import com.yasinjahantigh.logarhythm.domain.model.Track
 import java.util.Locale
 
@@ -136,12 +135,7 @@ private fun LargeWidgetContent(state: MusicWidgetSnapshot, queueRows: Int) {
             Spacer(modifier = GlanceModifier.height(3.dp))
             val progress = if (state.duration > 0L) state.position.toFloat() / state.duration.toFloat() else 0f
             WaveformProgress(progress.coerceIn(0f, 1f))
-            Row(modifier = GlanceModifier.fillMaxWidth()) {
-                Text(TimeUtils.formatDuration(state.position), style = TextStyle(color = ArtSecondaryText, fontSize = 10.sp))
-                Spacer(modifier = GlanceModifier.defaultWeight())
-                Text(TimeUtils.formatDuration(state.duration), style = TextStyle(color = ArtSecondaryText, fontSize = 10.sp))
-            }
-            Spacer(modifier = GlanceModifier.height(3.dp))
+            Spacer(modifier = GlanceModifier.height(7.dp))
             Row(modifier = GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 WidgetIconButton(R.drawable.ic_widget_shuffle, LocalString(R.string.cd_shuffle), actionRunCallback<ShuffleWidgetAction>(), state.shuffle, size = 34)
                 Spacer(modifier = GlanceModifier.width(4.dp))

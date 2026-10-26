@@ -36,7 +36,7 @@ internal object WidgetArtworkCache {
      * gradients without the cost of a real blur. RGB_565 keeps the bitmap small enough for the
      * RemoteViews binder limit while staying visually clean under the dark scrim.
      */
-    suspend fun blurred(context: Context, uri: String?, edge: Int = 480): Bitmap? = withContext(Dispatchers.IO) {
+    suspend fun blurred(context: Context, uri: String?, edge: Int = 540): Bitmap? = withContext(Dispatchers.IO) {
         uri ?: return@withContext null
         val key = "blurred_${uri.hashCode().toUInt().toString(16)}_$edge"
         memory.get(key)?.let { return@withContext it }
@@ -48,8 +48,8 @@ internal object WidgetArtworkCache {
         val base = fit(source, edge)
         val tiny = Bitmap.createScaledBitmap(
             base,
-            (base.width / 4).coerceAtLeast(8),
-            (base.height / 4).coerceAtLeast(8),
+            (base.width / 3).coerceAtLeast(8),
+            (base.height / 3).coerceAtLeast(8),
             true
         )
         val blurred = Bitmap.createScaledBitmap(tiny, base.width, base.height, true)
