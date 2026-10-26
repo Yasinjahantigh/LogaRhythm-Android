@@ -8,6 +8,8 @@ import android.graphics.Bitmap
 import android.util.Log
 import androidx.glance.appwidget.GlanceAppWidget
 import androidx.glance.appwidget.GlanceAppWidgetManager
+import androidx.glance.appwidget.state.updateAppWidgetState
+import androidx.datastore.preferences.core.longPreferencesKey
 import com.yasinjahantigh.logarhythm.data.room.MusicDao
 import com.yasinjahantigh.logarhythm.domain.model.Track
 import com.yasinjahantigh.logarhythm.domain.repository.PlaylistRepository
@@ -70,9 +72,9 @@ object MusicWidgetUpdater {
     private var snapshot: MusicWidgetSnapshot? = null
     private var favoriteTrackId: String? = null
     private var favoriteValue: Boolean = false
+    private val revisionKey = longPreferencesKey("music_widget_revision")
 
-    private val allWidgets: List<Pair<Class<out BroadcastReceiver>, GlanceAppWidget>> = listOf(
-        MusicWidgetSmallReceiver::class.java to MusicWidgetSmall(),
+    private val allWidgets: List<Pair<Class<out BroadcastReceiver>, GlanceAppWidget>> = listOf(        MusicWidgetSmallReceiver::class.java to MusicWidgetSmall(),
         MusicWidgetStripReceiver::class.java to MusicWidgetStrip(),
         MusicWidgetMediumReceiver::class.java to MusicWidgetMedium(),
         MusicWidgetLargeReceiver::class.java to MusicWidgetLarge()
@@ -221,7 +223,15 @@ object MusicWidgetUpdater {
             }.getOrDefault(intArrayOf())
             ids.forEach { appWidgetId ->
                 val finished = withTimeoutOrNull(5_000L) {
-                    runCatching { widget.update(appContext, glanceManager.getGlanceIdBy(appWidgetId)) }
+                    runCatching {
+                        val glanceId = glanceManager.getGlanceIdBy(appWidgetId)
+                        // Glance recomposes when a state it provides changes, so bumping the
+                        // revision is what makes update() actually redraw the widget.
+                        updateAppWidgetState(appContext, glanceId) {
+                            it[revisionKey] = System.nanoTime()
+                        }
+                        widget.update(appContext, glanceId)
+                    }
                         .onFailure { Log.w(TAG, "update failed for widget $appWidgetId", it) }
                         .isSuccess
                 }
