@@ -11,54 +11,71 @@ import java.io.File
 import java.io.FileOutputStream
 
 internal object WidgetArtworkCache {
-    suspend fun cover(context: Context, uri: String?): Bitmap? = withContext(Dispatchers.IO) {
+
+    suspend fun cover(context: Context, uri: String?, edge: Int = 320): Bitmap? = withContext(Dispatchers.IO) {
         uri ?: return@withContext null
-        cached(context, "cover", uri, 320)?.let { return@withContext it }
-        val source = AudioBitmapLoader.loadAudioArtwork(context, Uri.parse(uri), 320) ?: return@withContext null
-        val scale = 320f / maxOf(source.width, source.height).coerceAtLeast(1)
-        val cover = if (scale < 1f) {
-            Bitmap.createScaledBitmap(source, (source.width * scale).toInt(), (source.height * scale).toInt(), true)
-        } else source
-        store(context, "cover", uri, cover, 320)
-        cover
+        cached(context, "cover", uri, edge)?.let { return@withContext it }
+        val source = AudioBitmapLoader.loadAudioArtwork(context, Uri.parse(uri), edge) ?: return@withContext null
+        val scaled = fit(source, edge)
+        store(context, "cover", uri, scaled, edge)
+        scaled
     }
 
-    suspend fun blurred(context: Context, uri: String?): Bitmap? = withContext(Dispatchers.IO) {
+    /**
+     * Soft focus backdrop: a heavy downsample followed by a bilinear upscale rebuilds smooth
+     * gradients without the cost of a real blur. RGB_565 keeps the bitmap small enough for the
+     * RemoteViews binder limit while staying visually clean under the dark scrim.
+     */
+    suspend fun blurred(context: Context, uri: String?, edge: Int = 480): Bitmap? = withContext(Dispatchers.IO) {
         uri ?: return@withContext null
-        cached(context, "blurred", uri, 320)?.let { return@withContext it }
-        val source = AudioBitmapLoader.loadAudioArtwork(context, Uri.parse(uri), 320) ?: return@withContext null
-        val tinyWidth = (source.width / 10).coerceAtLeast(12)
-        val tinyHeight = (source.height / 10).coerceAtLeast(12)
-        val tiny = Bitmap.createScaledBitmap(source, tinyWidth, tinyHeight, true)
-        val targetWidth = source.width.coerceAtMost(480)
-        val targetHeight = source.height.coerceAtMost(480)
-        val blurred = Bitmap.createScaledBitmap(tiny, targetWidth, targetHeight, true)
-        store(context, "blurred", uri, blurred, 320)
+        cached(context, "blurred", uri, edge, Bitmap.Config.RGB_565)?.let { return@withContext it }
+        val source = AudioBitmapLoader.loadAudioArtwork(context, Uri.parse(uri), edge) ?: return@withContext null
+        val base = fit(source, edge)
+        val tiny = Bitmap.createScaledBitmap(
+            base,
+            (base.width / 4).coerceAtLeast(8),
+            (base.height / 4).coerceAtLeast(8),
+            true
+        )
+        val blurred = Bitmap.createScaledBitmap(tiny, base.width, base.height, true)
+            .copy(Bitmap.Config.RGB_565, false)
+        store(context, "blurred", uri, blurred, edge)
         blurred
     }
 
-    suspend fun thumbnail(context: Context, uri: String?): Bitmap? = withContext(Dispatchers.IO) {
+    suspend fun thumbnail(context: Context, uri: String?, edge: Int = 96): Bitmap? = withContext(Dispatchers.IO) {
         uri ?: return@withContext null
-        cached(context, "thumb", uri, 96)?.let { return@withContext it }
-        val source = AudioBitmapLoader.loadAudioArtwork(context, Uri.parse(uri), 96) ?: return@withContext null
-        val scale = 96f / maxOf(source.width, source.height).coerceAtLeast(1)
-        val thumbnail = if (scale < 1f) {
-            Bitmap.createScaledBitmap(
-                source,
-                (source.width * scale).toInt().coerceAtLeast(1),
-                (source.height * scale).toInt().coerceAtLeast(1),
-                true
-            )
-        } else source
-        store(context, "thumb", uri, thumbnail, 96)
-        thumbnail
+        cached(context, "thumb", uri, edge)?.let { return@withContext it }
+        val source = AudioBitmapLoader.loadAudioArtwork(context, Uri.parse(uri), edge) ?: return@withContext null
+        val scaled = fit(source, edge)
+        store(context, "thumb", uri, scaled, edge)
+        scaled
     }
 
-    private fun cached(context: Context, variant: String, uri: String, targetEdge: Int): Bitmap? {
+    private fun fit(source: Bitmap, edge: Int): Bitmap {
+        val longest = maxOf(source.width, source.height).coerceAtLeast(1)
+        if (longest <= edge) return source
+        val scale = edge.toFloat() / longest
+        return Bitmap.createScaledBitmap(
+            source,
+            (source.width * scale).toInt().coerceAtLeast(1),
+            (source.height * scale).toInt().coerceAtLeast(1),
+            true
+        )
+    }
+
+    private fun cached(
+        context: Context,
+        variant: String,
+        uri: String,
+        targetEdge: Int,
+        config: Bitmap.Config = Bitmap.Config.ARGB_8888
+    ): Bitmap? {
         val base = baseFile(context, variant, uri, targetEdge)
         val marker = File(base.parentFile, "${base.name}.uri")
         if (!base.isFile || !marker.isFile || marker.readText() != uri) return null
-        return BitmapFactory.decodeFile(base.absolutePath)
+        val options = BitmapFactory.Options().apply { inPreferredConfig = config }
+        return BitmapFactory.decodeFile(base.absolutePath, options)
     }
 
     private fun store(context: Context, variant: String, uri: String, bitmap: Bitmap, targetEdge: Int) {

@@ -50,7 +50,7 @@ class MusicWidgetStrip : GlanceAppWidget() {
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         val snapshot = MusicWidgetUpdater.snapshot(context)
-        val cover = WidgetArtworkCache.thumbnail(context, snapshot.track?.artworkUri)
+        val cover = WidgetArtworkCache.cover(context, snapshot.track?.artworkUri, 160)
         val isNight = context.resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK ==
             android.content.res.Configuration.UI_MODE_NIGHT_YES
         provideContent {
@@ -89,11 +89,7 @@ private fun StripWidgetContent(snapshot: MusicWidgetSnapshot, cover: Bitmap?, is
             )
             Spacer(modifier = GlanceModifier.width(4.dp))
             WidgetIconButton(
-                if (snapshot.isPlaying) {
-                    if (isNight) R.drawable.ic_widget_pause else R.drawable.ic_widget_pause_dark
-                } else {
-                    if (isNight) R.drawable.ic_widget_play else R.drawable.ic_widget_play_dark
-                },
+                if (snapshot.isPlaying) R.drawable.ic_widget_pause_ember else R.drawable.ic_widget_play_ember,
                 LocalString(if (snapshot.isPlaying) R.string.cd_pause else R.string.cd_play),
                 actionRunCallback<PlayPauseActionCallback>(), active = true, size = 38,
                 surface = WidgetControlSurface
