@@ -3,28 +3,24 @@ package com.yasinjahantigh.logarhythm.widget
 import android.appwidget.AppWidgetManager
 import android.content.Context
 import android.graphics.Bitmap
+import android.util.Log
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.glance.GlanceId
 import androidx.glance.GlanceModifier
 import androidx.glance.Image
 import androidx.glance.ImageProvider
-import androidx.glance.action.Action
 import androidx.glance.action.actionParametersOf
 import androidx.glance.action.actionStartActivity
 import androidx.glance.action.clickable
 import androidx.glance.appwidget.GlanceAppWidget
 import androidx.glance.appwidget.GlanceAppWidgetManager
-import androidx.glance.appwidget.LinearProgressIndicator
 import androidx.glance.appwidget.SizeMode
 import androidx.glance.appwidget.action.actionRunCallback
 import androidx.glance.appwidget.cornerRadius
 import androidx.glance.appwidget.provideContent
 import androidx.glance.background
-import androidx.glance.color.ColorProvider as dayNightColorProvider
-import androidx.glance.unit.ColorProvider
 import androidx.glance.layout.Alignment
 import androidx.glance.layout.Box
 import androidx.glance.layout.Column
@@ -44,6 +40,8 @@ import androidx.media3.common.Player
 import com.yasinjahantigh.logarhythm.MainActivity
 import com.yasinjahantigh.logarhythm.R
 import com.yasinjahantigh.logarhythm.core.utils.TimeUtils
+import com.yasinjahantigh.logarhythm.domain.model.Track
+import java.util.Locale
 
 class MusicWidgetLarge : GlanceAppWidget() {
     override val sizeMode = SizeMode.Single
@@ -57,7 +55,14 @@ class MusicWidgetLarge : GlanceAppWidget() {
             AppWidgetManager.getInstance(context).getAppWidgetOptions(appWidgetId)
                 .getInt(AppWidgetManager.OPTION_APPWIDGET_MAX_HEIGHT)
         }.getOrDefault(0)
-        val queueRows = if (maxHeight >= 290) 4 else 3
+        val queueRows = when {
+            maxHeight <= 0 -> 3
+            maxHeight >= 262 -> 4
+            maxHeight >= 232 -> 3
+            maxHeight >= 202 -> 2
+            else -> 1
+        }
+        Log.d("MusicWidgetLarge", "maxHeight=$maxHeight rows=$queueRows upcoming=${snapshot.upcoming.size}")
         provideContent {
             if (snapshot.track == null) {
                 WidgetEmptyState()
@@ -105,7 +110,7 @@ private fun LargeWidgetContent(
             modifier = GlanceModifier.fillMaxSize(),
             contentScale = ContentScale.Crop
         )
-        Column(modifier = GlanceModifier.fillMaxSize().padding(12.dp)) {
+        Column(modifier = GlanceModifier.fillMaxSize().padding(10.dp)) {
             Row(modifier = GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Column(modifier = GlanceModifier.defaultWeight()) {
                     Text(
@@ -126,46 +131,42 @@ private fun LargeWidgetContent(
                     description = LocalString(stringRes = if (snapshot.favorite) R.string.cd_unfavorite else R.string.cd_favorite),
                     action = actionRunCallback<FavoriteWidgetAction>(),
                     active = snapshot.favorite,
-                    size = 36
+                    size = 34
                 )
             }
-            Spacer(modifier = GlanceModifier.height(4.dp))
+            Spacer(modifier = GlanceModifier.height(3.dp))
             val progress = if (snapshot.duration > 0L) snapshot.position.toFloat() / snapshot.duration.toFloat() else 0f
-            LinearProgressIndicator(
-                progress = progress.coerceIn(0f, 1f),
-                modifier = GlanceModifier.fillMaxWidth().height(3.dp),
-                color = accentColor(),
-                backgroundColor = ArtProgressTrack
-            )
+            WaveformProgress(progress.coerceIn(0f, 1f))
             Row(modifier = GlanceModifier.fillMaxWidth()) {
                 Text(TimeUtils.formatDuration(snapshot.position), style = TextStyle(color = ArtSecondaryText, fontSize = 10.sp))
                 Spacer(modifier = GlanceModifier.defaultWeight())
                 Text(TimeUtils.formatDuration(snapshot.duration), style = TextStyle(color = ArtSecondaryText, fontSize = 10.sp))
             }
-            Spacer(modifier = GlanceModifier.height(4.dp))
+            Spacer(modifier = GlanceModifier.height(3.dp))
             Row(modifier = GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                WidgetIconButton(R.drawable.ic_widget_shuffle, LocalString(R.string.cd_shuffle), actionRunCallback<ShuffleWidgetAction>(), snapshot.shuffle)
+                WidgetIconButton(R.drawable.ic_widget_shuffle, LocalString(R.string.cd_shuffle), actionRunCallback<ShuffleWidgetAction>(), snapshot.shuffle, size = 34)
                 Spacer(modifier = GlanceModifier.width(4.dp))
-                WidgetIconButton(R.drawable.ic_widget_previous, LocalString(R.string.cd_skip_prev), actionRunCallback<PreviousActionCallback>())
+                WidgetIconButton(R.drawable.ic_widget_previous, LocalString(R.string.cd_skip_prev), actionRunCallback<PreviousActionCallback>(), size = 34)
                 Spacer(modifier = GlanceModifier.width(4.dp))
                 WidgetIconButton(
                     if (snapshot.isPlaying) R.drawable.ic_widget_pause else R.drawable.ic_widget_play,
                     LocalString(if (snapshot.isPlaying) R.string.cd_pause else R.string.cd_play),
                     actionRunCallback<PlayPauseActionCallback>(),
                     active = true,
-                    size = 42
+                    size = 40
                 )
                 Spacer(modifier = GlanceModifier.width(4.dp))
-                WidgetIconButton(R.drawable.ic_widget_next, LocalString(R.string.cd_skip_next), actionRunCallback<NextActionCallback>())
+                WidgetIconButton(R.drawable.ic_widget_next, LocalString(R.string.cd_skip_next), actionRunCallback<NextActionCallback>(), size = 34)
                 Spacer(modifier = GlanceModifier.width(4.dp))
                 WidgetIconButton(
                     if (snapshot.repeatMode == Player.REPEAT_MODE_ONE) R.drawable.ic_widget_repeat_one else R.drawable.ic_widget_repeat,
                     LocalString(if (snapshot.repeatMode == Player.REPEAT_MODE_ONE) R.string.cd_repeat_one else R.string.cd_repeat),
                     actionRunCallback<RepeatWidgetAction>(),
-                    active = snapshot.repeatMode != Player.REPEAT_MODE_OFF
+                    active = snapshot.repeatMode != Player.REPEAT_MODE_OFF,
+                    size = 34
                 )
             }
-            Spacer(modifier = GlanceModifier.height(6.dp))
+            Spacer(modifier = GlanceModifier.height(4.dp))
             Text(
                 text = LocalString(R.string.queue_up_next).uppercase(),
                 style = TextStyle(color = accentColor(), fontSize = 11.sp, fontWeight = FontWeight.Bold),
@@ -181,7 +182,7 @@ private fun LargeWidgetContent(
                     )
                 } else {
                     snapshot.upcoming.take(queueRows).forEachIndexed { position, indexedTrack ->
-                        QueueTrackRow(indexedTrack, thumbnails.getOrNull(position))
+                        QueueTrackRow(indexedTrack, thumbnails.getOrNull(position), position)
                     }
                 }
             }
@@ -191,11 +192,11 @@ private fun LargeWidgetContent(
 
 
 @Composable
-private fun QueueTrackRow(track: IndexedValue<com.yasinjahantigh.logarhythm.domain.model.Track>, thumbnail: Bitmap?) {
+private fun QueueTrackRow(track: IndexedValue<Track>, thumbnail: Bitmap?, position: Int) {
     Row(
         modifier = GlanceModifier
             .fillMaxWidth()
-            .height(34.dp)
+            .height(28.dp)
             .clickable(
                 actionRunCallback<PlayQueueWidgetAction>(
                     actionParametersOf(
@@ -206,11 +207,17 @@ private fun QueueTrackRow(track: IndexedValue<com.yasinjahantigh.logarhythm.doma
             ),
         verticalAlignment = Alignment.CenterVertically
     ) {
+        Text(
+            text = String.format(Locale.US, "%02d", position + 1),
+            style = TextStyle(color = accentColor(), fontSize = 10.sp, fontWeight = FontWeight.Bold),
+            maxLines = 1
+        )
+        Spacer(modifier = GlanceModifier.width(8.dp))
         val provider = thumbnail?.let { ImageProvider(it) } ?: ImageProvider(R.drawable.ic_music_placeholder)
         Image(
             provider = provider,
             contentDescription = null,
-            modifier = GlanceModifier.size(28.dp).cornerRadius(6.dp),
+            modifier = GlanceModifier.size(26.dp).cornerRadius(6.dp),
             contentScale = ContentScale.Crop
         )
         Spacer(modifier = GlanceModifier.width(8.dp))
@@ -220,4 +227,3 @@ private fun QueueTrackRow(track: IndexedValue<com.yasinjahantigh.logarhythm.doma
         }
     }
 }
-

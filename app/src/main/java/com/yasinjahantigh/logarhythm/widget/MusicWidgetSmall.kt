@@ -79,7 +79,7 @@ private fun SmallWidgetContent(snapshot: MusicWidgetSnapshot, cover: Bitmap?) {
             contentScale = ContentScale.Crop
         )
         WidgetIconButton(
-            icon = if (snapshot.isPlaying) R.drawable.ic_widget_pause else R.drawable.ic_widget_play,
+            icon = if (snapshot.isPlaying) R.drawable.ic_widget_pause_ember else R.drawable.ic_widget_play_ember,
             description = LocalString(if (snapshot.isPlaying) R.string.cd_pause else R.string.cd_play),
             action = actionRunCallback<PlayPauseActionCallback>(),
             active = true,
