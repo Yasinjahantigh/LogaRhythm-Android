@@ -12,6 +12,7 @@ interface PlayerController {
     val shuffle: StateFlow<Boolean>
     val repeatMode: StateFlow<Int>
     val queue: StateFlow<List<Track>>
+    val queueIndex: StateFlow<Int>
 
     val playbackSpeed: StateFlow<Float>
     val sleepTimerRemainingMs: StateFlow<Long?>
