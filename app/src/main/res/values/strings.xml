@@ -663,6 +663,10 @@
     <string name="download_album_none">No downloadable tracks found for this album</string>
     <string name="download_album_queued">%1$s: queued %2$d tracks</string>
     <string name="download_album_partial">%1$s: queued %2$d, failed %3$d</string>
+    <string name="album_select_all">Select all</string>
+    <string name="album_resolving">Finding album tracks…</string>
+    <string name="album_adding">Adding selected tracks to downloads…</string>
+    <string name="album_download_count">Download (%1$d)</string>
     <string name="download_album_notification_title">Album queued: %1$s</string>
     <string name="download_album_notification_text">%1$d tracks added to downloads</string>
     <string name="download_notification_done">%1$s saved</string>

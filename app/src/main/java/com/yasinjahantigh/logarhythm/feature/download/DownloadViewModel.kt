@@ -151,25 +151,50 @@ class DownloadViewModel @Inject constructor(
     }
 
     data class AlbumDownloadSummary(val album: String, val queued: Int, val failed: Int, val found: Boolean)
+    data class AlbumTrackItem(val title: String, val artist: String)
+    data class AlbumPreview(val name: String, val artist: String, val tracks: List<AlbumTrackItem>)
 
     private val _albumSummary = MutableStateFlow<AlbumDownloadSummary?>(null)
     val albumSummary: StateFlow<AlbumDownloadSummary?> = _albumSummary.asStateFlow()
+    private val _albumPreview = MutableStateFlow<AlbumPreview?>(null)
+    val albumPreview: StateFlow<AlbumPreview?> = _albumPreview.asStateFlow()
     private val _albumBusy = MutableStateFlow(false)
     val albumBusy: StateFlow<Boolean> = _albumBusy.asStateFlow()
 
-    fun downloadAlbum(result: DownloadSearchResult) {
+    /** Resolves the album first; nothing is queued until the user confirms the list. */
+    fun previewAlbum(result: DownloadSearchResult) {
         if (_albumBusy.value) return
         viewModelScope.launch {
             _albumBusy.value = true
+            _albumPreview.value = null
             val album = runCatching { itunesClient.albumForTrack(result.title, result.artist) }.getOrNull()
             if (album == null) {
                 _albumSummary.value = AlbumDownloadSummary("", 0, 0, found = false)
-                _albumBusy.value = false
-                return@launch
+            } else {
+                _albumPreview.value = AlbumPreview(
+                    name = album.name,
+                    artist = album.artist,
+                    tracks = album.tracks.map { AlbumTrackItem(it.title, it.artist) }
+                )
             }
+            _albumBusy.value = false
+        }
+    }
+
+    fun dismissAlbumPreview() {
+        if (_albumBusy.value) return
+        _albumPreview.value = null
+    }
+
+    fun confirmAlbumDownload(indices: Set<Int>) {
+        val preview = _albumPreview.value ?: return
+        if (_albumBusy.value || indices.isEmpty()) return
+        viewModelScope.launch {
+            _albumBusy.value = true
             var queued = 0
             var failed = 0
-            for (track in album.tracks) {
+            for (index in indices.sorted()) {
+                val track = preview.tracks.getOrNull(index) ?: continue
                 val outcome = runCatching {
                     searchService.search("${track.title} ${track.artist}".trim(), _sourceFilter.value)
                 }.getOrNull()
@@ -180,8 +205,9 @@ class DownloadViewModel @Inject constructor(
                     runCatching { repository.enqueue(best) }.onSuccess { queued++ }.onFailure { failed++ }
                 }
             }
-            if (queued > 0) notifications.notifyAlbumQueued(album.name, queued)
-            _albumSummary.value = AlbumDownloadSummary(album.name, queued, failed, found = true)
+            if (queued > 0) notifications.notifyAlbumQueued(preview.name, queued)
+            _albumSummary.value = AlbumDownloadSummary(preview.name, queued, failed, found = true)
+            _albumPreview.value = null
             _albumBusy.value = false
         }
     }

@@ -17,10 +17,15 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -71,6 +76,8 @@ fun DownloadScreen(
     val recentSearches by viewModel.recentSearches.collectAsStateWithLifecycle()
     val sourceFilter by viewModel.sourceFilter.collectAsStateWithLifecycle()
     val albumSummary by viewModel.albumSummary.collectAsStateWithLifecycle()
+    val albumPreview by viewModel.albumPreview.collectAsStateWithLifecycle()
+    val albumBusy by viewModel.albumBusy.collectAsStateWithLifecycle()
     val preparing by viewModel.preparing.collectAsStateWithLifecycle()
     val updateState by viewModel.updateState.collectAsStateWithLifecycle()
     val version by viewModel.ytdlpVersion.collectAsStateWithLifecycle()
@@ -80,6 +87,29 @@ fun DownloadScreen(
     val haptics = LocalHapticFeedback.current
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
+
+    albumPreview?.let { preview ->
+        AlbumDownloadDialog(
+            preview = preview,
+            busy = albumBusy,
+            onDismiss = viewModel::dismissAlbumPreview,
+            onConfirm = viewModel::confirmAlbumDownload
+        )
+    }
+    if (albumBusy && albumPreview == null) {
+        AlertDialog(
+            onDismissRequest = {},
+            title = { Text(stringResource(R.string.download_album)) },
+            text = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                    Spacer(Modifier.width(12.dp))
+                    Text(stringResource(R.string.album_resolving))
+                }
+            },
+            confirmButton = {}
+        )
+    }
 
     LaunchedEffect(albumSummary) {
         val summary = albumSummary ?: return@LaunchedEffect
@@ -249,7 +279,7 @@ fun DownloadScreen(
                             preparing = preparing,
                             bottomPadding = bottomPadding,
                             onResultClick = { startDownload(it) },
-                            onDownloadAlbum = viewModel::downloadAlbum,
+                            onDownloadAlbum = viewModel::previewAlbum,
                             onRetry = { viewModel.search() }
                         )
                     } else {
