@@ -44,6 +44,43 @@ class ItunesClient @Inject constructor(
             }.distinctBy { it.url }
         }
 
+    data class AlbumTrack(val title: String, val artist: String)
+    data class AlbumResolution(val name: String, val artist: String, val tracks: List<AlbumTrack>)
+
+    /** Resolves the album a track belongs to, then every song iTunes lists on it. */
+    suspend fun albumForTrack(title: String, artist: String): AlbumResolution? = withContext(Dispatchers.IO) {
+        val query = listOf(title, artist).filter { it.isNotBlank() }.joinToString(" ")
+        if (query.isBlank()) return@withContext null
+        val searchUrl = "https://itunes.apple.com/search?term=${URLEncoder.encode(query, "UTF-8")}&entity=song&limit=10"
+        val matches = HttpJson.get(client, searchUrl)?.optJSONArray("results") ?: return@withContext null
+        var best: JSONObject? = null
+        var bestScore = 0.0
+        for (i in 0 until matches.length()) {
+            val candidate = matches.optJSONObject(i) ?: continue
+            if (candidate.optLong("collectionId", 0L) <= 0L) continue
+            if (candidate.optString("collectionName").isBlank()) continue
+            val score = DownloadMetadataMerge.similarity(candidate.optString("trackName"), title) * 0.7 +
+                DownloadMetadataMerge.similarity(candidate.optString("artistName"), artist) * 0.3
+            if (score > bestScore) { best = candidate; bestScore = score }
+        }
+        val song = best ?: return@withContext null
+        val collectionId = song.optLong("collectionId")
+        val lookupUrl = "https://itunes.apple.com/lookup?id=$collectionId&entity=song&limit=200"
+        val results = HttpJson.get(client, lookupUrl)?.optJSONArray("results") ?: return@withContext null
+        val tracks = (0 until results.length()).mapNotNull { i ->
+            val item = results.optJSONObject(i) ?: return@mapNotNull null
+            if (item.optString("wrapperType") != "track" || item.optString("kind") != "song") return@mapNotNull null
+            val trackTitle = item.optString("trackName")
+            if (trackTitle.isBlank()) null else AlbumTrack(trackTitle, item.optString("artistName"))
+        }
+        if (tracks.isEmpty()) return@withContext null
+        AlbumResolution(
+            name = song.optString("collectionName"),
+            artist = song.optString("artistName"),
+            tracks = tracks
+        )
+    }
+
     suspend fun search(title: String, artist: String, durationMs: Long): Result? =
         withContext(Dispatchers.IO) {
             val query = listOf(title, artist).filter { it.isNotBlank() }.joinToString(" ")

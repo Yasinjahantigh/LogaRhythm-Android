@@ -36,6 +36,8 @@ import javax.inject.Inject
 class DownloadViewModel @Inject constructor(
     private val searchService: DownloadSearchService,
     private val repository: DownloadRepository,
+    private val itunesClient: com.yasinjahantigh.logarhythm.data.download.metadata.ItunesClient,
+    private val notifications: com.yasinjahantigh.logarhythm.data.download.DownloadNotifications,
     private val prefs: PreferencesManager,
     private val runtime: YtDlpRuntime,
     private val cookies: DownloadCookies,
@@ -146,6 +148,46 @@ class DownloadViewModel @Inject constructor(
 
     fun enqueue(result: DownloadSearchResult) {
         viewModelScope.launch { repository.enqueue(result) }
+    }
+
+    data class AlbumDownloadSummary(val album: String, val queued: Int, val failed: Int, val found: Boolean)
+
+    private val _albumSummary = MutableStateFlow<AlbumDownloadSummary?>(null)
+    val albumSummary: StateFlow<AlbumDownloadSummary?> = _albumSummary.asStateFlow()
+    private val _albumBusy = MutableStateFlow(false)
+    val albumBusy: StateFlow<Boolean> = _albumBusy.asStateFlow()
+
+    fun downloadAlbum(result: DownloadSearchResult) {
+        if (_albumBusy.value) return
+        viewModelScope.launch {
+            _albumBusy.value = true
+            val album = runCatching { itunesClient.albumForTrack(result.title, result.artist) }.getOrNull()
+            if (album == null) {
+                _albumSummary.value = AlbumDownloadSummary("", 0, 0, found = false)
+                _albumBusy.value = false
+                return@launch
+            }
+            var queued = 0
+            var failed = 0
+            for (track in album.tracks) {
+                val outcome = runCatching {
+                    searchService.search("${track.title} ${track.artist}".trim(), _sourceFilter.value)
+                }.getOrNull()
+                val best = outcome?.results?.firstOrNull()
+                if (best == null) {
+                    failed++
+                } else {
+                    runCatching { repository.enqueue(best) }.onSuccess { queued++ }.onFailure { failed++ }
+                }
+            }
+            if (queued > 0) notifications.notifyAlbumQueued(album.name, queued)
+            _albumSummary.value = AlbumDownloadSummary(album.name, queued, failed, found = true)
+            _albumBusy.value = false
+        }
+    }
+
+    fun clearAlbumSummary() {
+        _albumSummary.value = null
     }
 
     fun cancel(item: DownloadItem) {
