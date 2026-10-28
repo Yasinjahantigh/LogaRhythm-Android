@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="widget_open">Open LogaRhythm</string>
+    <string name="widget_small_label">LogaRhythm Cover</string>
+    <string name="widget_small_description">Album cover with play and pause</string>
+    <string name="widget_strip_label">LogaRhythm Compact</string>
+    <string name="widget_strip_description">Track details and compact playback controls</string>
+    <string name="widget_medium_label">LogaRhythm Progress</string>
+    <string name="widget_medium_description">Artwork, progress, and playback controls</string>
+    <string name="widget_large_label">LogaRhythm Complete</string>
+    <string name="widget_large_description">Full playback controls and your up-next queue</string>
+    <string name="widget_player_label">LogaRhythm Player</string>
+    <string name="widget_player_description">Large artwork with every playback control in the app theme</string>
+</resources>

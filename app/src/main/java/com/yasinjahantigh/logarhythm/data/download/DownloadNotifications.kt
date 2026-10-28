@@ -63,6 +63,21 @@ class DownloadNotifications @Inject constructor(
         }
     }
 
+    /** One summary for an album enqueue instead of a notification per resolved track. */
+    fun notifyAlbumQueued(album: String, trackCount: Int) {
+        if (!canPostNotifications()) return
+        val builder = NotificationCompat.Builder(context, CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_music_placeholder)
+            .setContentTitle(context.getString(R.string.download_album_notification_title, album))
+            .setContentText(context.getString(R.string.download_album_notification_text, trackCount))
+            .setAutoCancel(true)
+            .setContentIntent(openAppIntent())
+        try {
+            NotificationManagerCompat.from(context).notify(ALBUM_SUMMARY_ID, builder.build())
+        } catch (_: SecurityException) {
+        }
+    }
+
     private fun progressNotification(
         downloadId: String,
         title: String,
@@ -132,6 +147,7 @@ class DownloadNotifications @Inject constructor(
         const val CHANNEL_ID = "downloads"
         const val ACTION_CANCEL = "com.yasinjahantigh.logarhythm.action.CANCEL_DOWNLOAD"
         const val EXTRA_ID = "download_id"
+        private const val ALBUM_SUMMARY_ID = 7_401
 
         fun createChannel(context: Context) {
             val manager = context.getSystemService(NotificationManager::class.java) ?: return

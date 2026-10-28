@@ -6,6 +6,7 @@ import com.yasinjahantigh.logarhythm.data.ai.AiSettings
 import com.yasinjahantigh.logarhythm.domain.model.AiFailure
 import com.yasinjahantigh.logarhythm.domain.model.MagicPlaylist
 import com.yasinjahantigh.logarhythm.domain.model.MagicPlaylistResult
+import com.yasinjahantigh.logarhythm.domain.model.Track
 import com.yasinjahantigh.logarhythm.domain.repository.AiPlaylistRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
@@ -46,13 +47,23 @@ class MagicPlaylistViewModel @Inject constructor(
         _state.update { it.copy(trackCount = count.coerceIn(MIN_TRACKS, MAX_TRACKS)) }
     }
 
-    fun generate() {
+    fun generate(baseTracks: List<Track> = emptyList(), mixName: String = "") {
         val current = _state.value
         if (current.isGenerating || current.prompt.isBlank()) return
         viewModelScope.launch {
             _state.update { it.copy(isGenerating = true, failure = null, result = null) }
             try {
-                when (val result = repository.generatePlaylist(current.prompt, current.trackCount)) {
+                val generated = if (baseTracks.isEmpty()) {
+                    repository.generatePlaylist(current.prompt, current.trackCount)
+                } else {
+                    repository.generateMix(
+                        prompt = current.prompt,
+                        mixName = mixName,
+                        baseTracks = baseTracks,
+                        additions = current.trackCount
+                    )
+                }
+                when (val result = generated) {
                     is MagicPlaylistResult.Success -> _state.update {
                         it.copy(isGenerating = false, result = result.playlist)
                     }
@@ -87,5 +98,6 @@ class MagicPlaylistViewModel @Inject constructor(
     companion object {
         const val MIN_TRACKS = 5
         const val MAX_TRACKS = 50
+        const val DEFAULT_MIX_ADDITIONS = 10
     }
 }

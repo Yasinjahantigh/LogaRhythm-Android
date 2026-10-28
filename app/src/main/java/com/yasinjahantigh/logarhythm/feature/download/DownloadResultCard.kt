@@ -13,11 +13,13 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Album
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilledIconButton
+import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -42,6 +44,7 @@ fun DownloadResultCard(
     result: DownloadSearchResult,
     activeItem: DownloadItem?,
     onClick: () -> Unit,
+    onDownloadAlbum: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     Card(
@@ -120,6 +123,15 @@ fun DownloadResultCard(
                 }
             }
             Spacer(modifier = Modifier.width(8.dp))
+            if (onDownloadAlbum != null && activeItem?.isActive != true) {
+                FilledTonalIconButton(onClick = onDownloadAlbum) {
+                    Icon(
+                        imageVector = Icons.Filled.Album,
+                        contentDescription = stringResource(R.string.download_album)
+                    )
+                }
+                Spacer(modifier = Modifier.width(6.dp))
+            }
             when {
                 activeItem?.isActive == true -> CircularProgressIndicator(
                     modifier = Modifier.size(24.dp),

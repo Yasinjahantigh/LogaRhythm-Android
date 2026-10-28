@@ -33,15 +33,19 @@ class YtDlpSearchService @Inject constructor(
         val failure: DownloadErrorKind?
     )
 
-    suspend fun search(query: String): Outcome = coroutineScope {
-        val youtube = async(Dispatchers.IO) {
-            searchSource(DownloadSource.YOUTUBE, "ytsearch10:$query")
+    suspend fun search(query: String, sources: Set<DownloadSource>): Outcome = coroutineScope {
+        val youtube = if (DownloadSource.YOUTUBE in sources) {
+            async(Dispatchers.IO) { searchSource(DownloadSource.YOUTUBE, "ytsearch10:$query") }
+        } else {
+            null
         }
-        val soundcloud = async(Dispatchers.IO) {
-            searchSource(DownloadSource.SOUNDCLOUD, "scsearch10:$query")
+        val soundcloud = if (DownloadSource.SOUNDCLOUD in sources) {
+            async(Dispatchers.IO) { searchSource(DownloadSource.SOUNDCLOUD, "scsearch10:$query") }
+        } else {
+            null
         }
-        val yt = youtube.await()
-        val sc = soundcloud.await()
+        val yt = youtube?.await() ?: SourceOutcome(emptyList(), null)
+        val sc = soundcloud?.await() ?: SourceOutcome(emptyList(), null)
         val failures = listOfNotNull(yt.failure, sc.failure)
         Outcome(
             results = yt.results + sc.results,

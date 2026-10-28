@@ -34,6 +34,24 @@ class DownloadMetadataMergeTest {
     }
 
     @Test
+    fun keepsFeaturedArtistWhenProviderOnlyKnowsTheLead() {
+        val artist = DownloadMetadataMerge.preferSourceArtist(
+            "The Weeknd feat. Daft Punk",
+            "The Weeknd"
+        )
+        assertEquals("The Weeknd feat. Daft Punk", artist)
+    }
+
+    @Test
+    fun acceptsProviderThatKeepsEveryCollaborator() {
+        val artist = DownloadMetadataMerge.preferSourceArtist(
+            "The Weeknd feat. Daft Punk",
+            "The Weeknd ft. Daft Punk"
+        )
+        assertEquals("The Weeknd ft. Daft Punk", artist)
+    }
+
+    @Test
     fun losslessLabelSkipsBitrate() {
         val info = AudioFormatInfo(
             container = "FLAC",

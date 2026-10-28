@@ -7,6 +7,7 @@ import androidx.work.WorkerParameters
 import com.yasinjahantigh.logarhythm.R
 import com.yasinjahantigh.logarhythm.core.library.LibrarySync
 import com.yasinjahantigh.logarhythm.data.download.metadata.MetadataResolver
+import com.yasinjahantigh.logarhythm.data.download.musicman.MusicManDownloader
 import com.yasinjahantigh.logarhythm.data.room.DownloadDao
 import com.yasinjahantigh.logarhythm.data.download.TagEnrichStatus
 import com.yasinjahantigh.logarhythm.domain.download.DownloadErrorClassifier
@@ -45,6 +46,7 @@ class DownloadWorker @AssistedInject constructor(
     private val runtime: YtDlpRuntime,
     private val searchService: YtDlpSearchService,
     private val downloader: YtDlpDownloader,
+    private val musicManDownloader: MusicManDownloader,
     private val metadataResolver: MetadataResolver,
     private val artworkLoader: ArtworkLoader,
     private val mp4Remuxer: Mp4Remuxer,
@@ -73,6 +75,7 @@ class DownloadWorker @AssistedInject constructor(
             executePipeline(item)
         } catch (cancelled: CancellationException) {
             downloader.cancel(id)
+            musicManDownloader.cancel(id)
             markCancelled(id)
             throw cancelled
         } catch (_: YoutubeDL.CanceledException) {
@@ -95,17 +98,19 @@ class DownloadWorker @AssistedInject constructor(
         updateForeground(item.title, 0, 0, DownloadStatus.QUEUED)
         dao.updateProgress(id, DownloadStatus.QUEUED.raw, 0, 0, null, now())
 
-        val initError = try {
-            runtime.ensureReady()
-            null
-        } catch (cancelled: CancellationException) {
-            throw cancelled
-        } catch (error: Throwable) {
-            error
-        }
-        if (initError != null) {
-            val kind = (initError as? DownloadPipelineException)?.kind ?: DownloadErrorKind.RUNTIME
-            return fail(item, kind, initError.message)
+        if (item.source.usesYtDlp) {
+            val initError = try {
+                runtime.ensureReady()
+                null
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Throwable) {
+                error
+            }
+            if (initError != null) {
+                val kind = (initError as? DownloadPipelineException)?.kind ?: DownloadErrorKind.RUNTIME
+                return fail(item, kind, initError.message)
+            }
         }
 
         if (!workspace.hasRoom()) {
@@ -179,6 +184,18 @@ class DownloadWorker @AssistedInject constructor(
         channel: Channel<ProgressEvent>
     ): DownloadOutcome {
         val dir = workspace.dirFor(item.id)
+        if (item.source == DownloadSource.MUSICMAN) {
+            val trackId = item.videoId.ifBlank { item.sourceUrl.substringAfterLast('/') }
+            val file = musicManDownloader.download(
+                trackId = trackId,
+                downloadId = item.id,
+                workspace = dir
+            ) { progress, eta, line ->
+                channel.trySend(ProgressEvent(progress, eta, line))
+            }
+            return DownloadOutcome(file, false, title, artist, artwork)
+        }
+
         val firstError = try {
             return DownloadOutcome(
                 file = downloadOnce(item, item.sourceUrl, item.videoId, dir, channel),

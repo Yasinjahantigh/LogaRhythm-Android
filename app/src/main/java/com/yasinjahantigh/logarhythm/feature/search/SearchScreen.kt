@@ -55,7 +55,7 @@ import com.yasinjahantigh.logarhythm.feature.playlist.SongMenuBottomSheet
 fun SearchScreen(
     modifier: Modifier = Modifier,
     onNavigateBack: () -> Unit = {},
-    onNavigateToAlbum: (String) -> Unit = {},
+    onNavigateToAlbum: (String, String) -> Unit = { _, _ -> },
     onNavigateToArtist: (String) -> Unit = {},
     onNavigateToTagEditor: (String) -> Unit = {},
     viewModel: SearchViewModel = hiltViewModel(),
@@ -96,7 +96,7 @@ fun SearchScreen(
             },
             onEditTrack = { onNavigateToTagEditor(menuTrack.id) },
             onGoToAlbum = if (menuTrack.album.isNotBlank() && menuTrack.album != "Unknown Album") {
-                { onNavigateToAlbum(menuTrack.album) }
+                { onNavigateToAlbum(menuTrack.album, menuTrack.albumArtist.ifBlank { menuTrack.artist }) }
             } else null,
             onGoToArtist = if (menuTrack.artist.isNotBlank() && menuTrack.artist != "Unknown Artist") {
                 { artistName -> onNavigateToArtist(artistName) }
@@ -225,9 +225,9 @@ fun SearchScreen(
                     onTrackClick = { track ->
                         viewModel.playTrack(track, results.songs)
                     },
-                    onAlbumClick = { albumName ->
+                    onAlbumClick = { albumName, albumArtist ->
                         viewModel.saveRecentQuery(query)
-                        onNavigateToAlbum(albumName)
+                        onNavigateToAlbum(albumName, albumArtist)
                     },
                     onArtistClick = { artistName ->
                         viewModel.saveRecentQuery(query)
@@ -236,7 +236,8 @@ fun SearchScreen(
                     onClearQuery = viewModel::clearQuery,
                     onTrackMenuClick = { track ->
                         selectedTrackForMenu = track
-                    }
+                    },
+                    onTrackPlayNext = viewModel::playNext
                 )
             }
         }

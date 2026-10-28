@@ -39,7 +39,7 @@ import com.yasinjahantigh.logarhythm.domain.model.AlbumStat
 @Composable
 fun StatsAlbumsTab(
     albums: List<AlbumStat>,
-    onAlbumClick: (String) -> Unit,
+    onAlbumClick: (String, String) -> Unit,
     modifier: Modifier = Modifier
 ) {
     if (albums.isEmpty()) {
@@ -60,7 +60,7 @@ fun StatsAlbumsTab(
             AlbumStatRow(
                 rank = index + 1,
                 stat = stat,
-                onClick = { onAlbumClick(stat.album) }
+                onClick = { onAlbumClick(stat.album, stat.artist) }
             )
         }
     }

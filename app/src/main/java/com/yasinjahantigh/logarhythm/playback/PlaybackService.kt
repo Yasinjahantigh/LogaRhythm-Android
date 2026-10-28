@@ -25,20 +25,21 @@ import com.yasinjahantigh.logarhythm.R
 import com.yasinjahantigh.logarhythm.MainActivity
 import com.yasinjahantigh.logarhythm.data.datastore.PreferencesManager
 import com.yasinjahantigh.logarhythm.data.room.MusicDao
-import com.yasinjahantigh.logarhythm.widget.MusicWidgetUpdater
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 /**
  * Foreground MediaSessionService running ExoPlayer.
  * Manages audio focus, audio becoming noisy events, system notifications,
- * equalizer audio session attachment, background sleep timer, and widget sync.
+ * equalizer audio session attachment, and background sleep timer.
  */
 @AndroidEntryPoint
 class PlaybackService : MediaSessionService() {
@@ -49,6 +50,18 @@ class PlaybackService : MediaSessionService() {
         const val ACTION_PREVIOUS = "com.yasinjahantigh.logarhythm.action.PREVIOUS"
         private const val ACTION_TOGGLE_SHUFFLE = "com.yasinjahantigh.logarhythm.action.TOGGLE_SHUFFLE"
         private const val ACTION_CYCLE_REPEAT = "com.yasinjahantigh.logarhythm.action.CYCLE_REPEAT"
+
+        /**
+         * The player of the running service. The widget reads playback state from it because the
+         * app side controller keeps a stale session when the service is restarted by the system.
+         */
+        @Volatile
+        var livePlayer: Player? = null
+            private set
+
+        /** Set when a widget command had to start the service from the background. */
+        const val EXTRA_FORCE_FOREGROUND_ON_START =
+            "com.yasinjahantigh.logarhythm.extra.FORCE_FOREGROUND_ON_START"
     }
 
     @Inject
@@ -128,36 +141,33 @@ class PlaybackService : MediaSessionService() {
             // Keeps the CPU awake for local playback with the screen off (no stutter on idle devices).
             .setWakeMode(C.WAKE_MODE_LOCAL)
             .build()
+        livePlayer = player
 
         enhancer = PlaybackEnhancer(this, player, preferencesManager, musicDao, sleepTimerManager)
             .also { it.start() }
 
-        // Sync player events to Glance Home Screen Widget
+        // Attach Sleep Timer to player
+        sleepTimerManager.attachPlayer(player)
+
+        // The widget follows the service player, so it has to be told about every state change.
         player.addListener(object : Player.Listener {
             override fun onIsPlayingChanged(isPlaying: Boolean) {
-                val item = player.currentMediaItem
-                MusicWidgetUpdater.update(
-                    this@PlaybackService,
-                    item?.mediaMetadata?.title?.toString(),
-                    item?.mediaMetadata?.artist?.toString(),
-                    item?.mediaMetadata?.artworkUri?.toString(),
-                    isPlaying
-                )
+                com.yasinjahantigh.logarhythm.widget.MusicWidgetUpdater.requestUpdate(this@PlaybackService)
             }
 
             override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
-                MusicWidgetUpdater.update(
-                    this@PlaybackService,
-                    mediaItem?.mediaMetadata?.title?.toString(),
-                    mediaItem?.mediaMetadata?.artist?.toString(),
-                    mediaItem?.mediaMetadata?.artworkUri?.toString(),
-                    player.isPlaying
-                )
+                com.yasinjahantigh.logarhythm.widget.MusicWidgetUpdater.requestUpdate(this@PlaybackService)
             }
         })
 
-        // Attach Sleep Timer to player
-        sleepTimerManager.attachPlayer(player)
+        scope.launch {
+            while (isActive) {
+                delay(10_000L)
+                if (player.isPlaying) {
+                    com.yasinjahantigh.logarhythm.widget.MusicWidgetUpdater.requestProgressUpdate(this@PlaybackService)
+                }
+            }
+        }
 
         // Attach Equalizer to player audio session and observe changes
         player.addAnalyticsListener(object : AnalyticsListener {
@@ -197,6 +207,7 @@ class PlaybackService : MediaSessionService() {
         )
 
         updateNotificationButtons()
+        com.yasinjahantigh.logarhythm.widget.MusicWidgetUpdater.requestUpdate(this)
         scope.launch {
             combine(playerController.shuffle, playerController.repeatMode) { _, _ -> }
                 .collect { updateNotificationButtons() }
@@ -235,9 +246,19 @@ class PlaybackService : MediaSessionService() {
         )
     }
 
+    @OptIn(UnstableApi::class)
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val player = mediaSession?.player
-        when (intent?.action) {
+        val action = intent?.action
+        val widgetCommand = action == ACTION_PLAY_PAUSE || action == ACTION_NEXT ||
+            action == ACTION_PREVIOUS ||
+            intent?.getBooleanExtra(EXTRA_FORCE_FOREGROUND_ON_START, false) == true
+        if (widgetCommand) {
+            // The command may have started the service from the background, so the notification
+            // has to be posted before the foreground service start deadline runs out.
+            mediaSession?.let { onUpdateNotification(it, true) }
+        }
+        when (action) {
             ACTION_PLAY_PAUSE -> {
                 if (player != null) {
                     if (player.isPlaying) player.pause() else player.play()
@@ -274,6 +295,7 @@ class PlaybackService : MediaSessionService() {
 
     override fun onDestroy() {
         scope.cancel()
+        livePlayer = null
         enhancer?.release()
         enhancer = null
         sleepTimerManager.detachPlayer()

@@ -74,7 +74,9 @@ class ArtistIndex private constructor(
 
             val artistAccs = LinkedHashMap<String, ArtistAcc>()
             for (track in tracks) {
-                val names = config.namesOf(track.artist)
+                // A missing artist tag should still produce an artist page when album artist is known.
+                val names = config.namesOf(track.artist.ifBlank { track.albumArtist })
+                if (names.isEmpty()) continue
                 val albumArtist = track.albumArtist.ifBlank { track.artist }
                 val albumKey = "${track.album.lowercase()}|${albumArtist.lowercase()}"
                 names.forEachIndexed { index, name ->

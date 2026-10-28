@@ -46,11 +46,12 @@ fun SearchResultsView(
     query: String,
     results: SearchResults,
     onTrackClick: (Track) -> Unit,
-    onAlbumClick: (String) -> Unit,
+    onAlbumClick: (String, String) -> Unit,
     onArtistClick: (String) -> Unit,
     modifier: Modifier = Modifier,
     onClearQuery: () -> Unit = {},
-    onTrackMenuClick: ((Track) -> Unit)? = null
+    onTrackMenuClick: ((Track) -> Unit)? = null,
+    onTrackPlayNext: ((Track) -> Unit)? = null
 ) {
     if (results.isLoading) {
         Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -97,7 +98,8 @@ fun SearchResultsView(
                     TrackListItem(
                         track = track,
                         onClick = { onTrackClick(track) },
-                        onMenuClick = onTrackMenuClick?.let { { it(track) } }
+                        onMenuClick = onTrackMenuClick?.let { { it(track) } },
+                        onPlayNext = onTrackPlayNext?.let { { it(track) } }
                     )
                 }
             }
@@ -110,7 +112,7 @@ fun SearchResultsView(
                     )
                 }
                 items(items = results.albums, key = { "album_${it.id}" }) { album ->
-                    AlbumSearchItem(album = album, onClick = { onAlbumClick(album.name) })
+                    AlbumSearchItem(album = album, onClick = { onAlbumClick(album.name, album.artist) })
                 }
             }
 

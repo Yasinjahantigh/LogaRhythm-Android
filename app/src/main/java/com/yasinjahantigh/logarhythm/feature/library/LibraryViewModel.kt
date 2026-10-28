@@ -48,9 +48,14 @@ class LibraryViewModel @Inject constructor(
     @param:ApplicationContext private val context: Context
 ) : ViewModel() {
 
+    private val initialSort = preferencesManager
+        .librarySortOrderCached(LibraryTab.SONGS.name)
+        .toSortOption(LibraryTab.SONGS)
+
     private val _uiState = MutableStateFlow(
         LibraryUiState(
-            hasPermission = PermissionUtils.hasAudioPermission(context)
+            hasPermission = PermissionUtils.hasAudioPermission(context),
+            sortOption = initialSort
         )
     )
     val uiState: StateFlow<LibraryUiState> = _uiState.asStateFlow()
@@ -65,7 +70,7 @@ class LibraryViewModel @Inject constructor(
     val allPlaylists: StateFlow<List<Playlist>> = playlistRepository.getAllPlaylists()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    private val sortOptionFlow = MutableStateFlow(_uiState.value.sortOption)
+    private val sortOptionFlow = MutableStateFlow(initialSort)
     private val trackFilterFlow = MutableStateFlow(TrackFilter.ALL)
     private val selectedTabFlow = MutableStateFlow(LibraryTab.SONGS)
     private var randomSeed = System.nanoTime()
@@ -94,12 +99,7 @@ class LibraryViewModel @Inject constructor(
         viewModelScope.launch {
             selectedTabFlow.flatMapLatest { tab ->
                 preferencesManager.librarySortOrder(tab.name).map { (fieldName, directionName) ->
-                    val field = runCatching { SortField.valueOf(fieldName) }
-                        .getOrDefault(SortField.TITLE)
-                        .takeIf { it.appliesTo(tab) } ?: SortField.TITLE
-                    val direction = runCatching { SortDirection.valueOf(directionName) }
-                        .getOrDefault(SortDirection.ASCENDING)
-                    tab to SortOption(field, direction)
+                    tab to (fieldName to directionName).toSortOption(tab)
                 }
             }.collect { (tab, sort) ->
                 if (tab != selectedTabFlow.value) return@collect
@@ -107,6 +107,15 @@ class LibraryViewModel @Inject constructor(
                 _uiState.update { it.copy(sortOption = sort) }
             }
         }
+    }
+
+    private fun Pair<String, String>.toSortOption(tab: LibraryTab): SortOption {
+        val field = runCatching { SortField.valueOf(first) }
+            .getOrDefault(SortField.TITLE)
+            .takeIf { it.appliesTo(tab) } ?: SortField.TITLE
+        val direction = runCatching { SortDirection.valueOf(second) }
+            .getOrDefault(SortDirection.ASCENDING)
+        return SortOption(field, direction)
     }
 
     /**
@@ -242,7 +251,9 @@ class LibraryViewModel @Inject constructor(
     }
 
     fun selectTab(tab: LibraryTab) {
-        _uiState.update { it.copy(selectedTab = tab) }
+        val cached = preferencesManager.librarySortOrderCached(tab.name).toSortOption(tab)
+        _uiState.update { it.copy(selectedTab = tab, sortOption = cached) }
+        sortOptionFlow.value = cached
         selectedTabFlow.value = tab
     }
 

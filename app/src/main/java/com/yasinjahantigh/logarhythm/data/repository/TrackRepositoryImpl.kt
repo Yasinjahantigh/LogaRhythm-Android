@@ -118,12 +118,12 @@ class TrackRepositoryImpl @Inject constructor(
                 var artworkUri: String?,
                 var year: Int
             )
-            val map = linkedMapOf<String, AlbumAcc>()
+            val map = linkedMapOf<Pair<String, String>, AlbumAcc>()
             for (track in tracks) {
                 // The full album-artist string stays the grouping key: "A & B" is its own album
                 // artist and must not collapse into either solo artist's discography.
                 val artistKey = track.albumArtist.ifBlank { track.artist }
-                val key = "${track.album}|$artistKey"
+                val key = track.album to artistKey
                 val existing = map[key]
                 if (existing == null) {
                     map[key] = AlbumAcc(track.album, artistKey, 1, track.artworkUri, track.year)
@@ -236,9 +236,9 @@ class TrackRepositoryImpl @Inject constructor(
         }.flowOn(Dispatchers.Default)
     }
 
-    override fun getTracksByAlbum(album: String): Flow<List<Track>> {
+    override fun getTracksByAlbum(album: String, albumArtist: String): Flow<List<Track>> {
         return getAllTracks().map { tracks ->
-            tracks.filter { it.album.equals(album, ignoreCase = true) }
+            tracks.filter { it.album == album && it.albumArtist.ifBlank { it.artist } == albumArtist }
                 .sortedWith(
                     compareBy<Track> { it.discNumber.coerceAtLeast(0) }
                         .thenBy { if (it.trackNumber > 0) it.trackNumber else Int.MAX_VALUE }
@@ -262,8 +262,8 @@ class TrackRepositoryImpl @Inject constructor(
         }
     }
 
-    override fun getAlbumByName(album: String): Flow<Album?> {
-        return getAlbums().map { list -> list.firstOrNull { it.name.equals(album, ignoreCase = true) } }
+    override fun getAlbumByName(album: String, albumArtist: String): Flow<Album?> {
+        return getAlbums().map { list -> list.firstOrNull { it.name == album && it.artist == albumArtist } }
     }
 
     override fun getArtistByName(artist: String): Flow<Artist?> =

@@ -47,6 +47,7 @@ class PlayerViewModel @Inject constructor(
     val shuffle: StateFlow<Boolean> = playerController.shuffle
     val repeatMode: StateFlow<Int> = playerController.repeatMode
     val queue: StateFlow<List<Track>> = playerController.queue
+    val queueIndex: StateFlow<Int> = playerController.queueIndex
 
     val playbackSpeed: StateFlow<Float> = playerController.playbackSpeed
     val sleepTimerRemainingMs: StateFlow<Long?> = playerController.sleepTimerRemainingMs
@@ -102,6 +103,12 @@ class PlayerViewModel @Inject constructor(
     fun insertIntoQueue(index: Int, track: Track) = playerController.insertIntoQueue(index, track)
     fun moveQueueItem(fromIndex: Int, toIndex: Int) = playerController.moveQueueItem(fromIndex, toIndex)
     fun playQueueItem(index: Int) = playerController.playQueueItem(index)
+
+    fun commitCoverPeek(expectedIndex: Int, targetIndex: Int) {
+        if (playerController.currentQueueIndex() == expectedIndex && kotlin.math.abs(targetIndex - expectedIndex) == 1) {
+            playerController.playQueueItem(targetIndex)
+        }
+    }
     fun clearQueue() = playerController.clearQueue()
 
     fun setPlaybackSpeed(speed: Float) = playerController.setPlaybackSpeed(speed)

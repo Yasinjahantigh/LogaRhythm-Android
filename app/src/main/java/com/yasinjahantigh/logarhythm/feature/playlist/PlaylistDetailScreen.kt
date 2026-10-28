@@ -287,7 +287,8 @@ fun PlaylistDetailScreen(
                             isSelected = track.id in selectedTrackIds,
                             onLongClick = {
                                 if (selectionMode) toggleSelection(track) else startSelection(track)
-                            }
+                            },
+                            onPlayNext = { viewModel.playNext(track) }
                         )
                     }
                 }

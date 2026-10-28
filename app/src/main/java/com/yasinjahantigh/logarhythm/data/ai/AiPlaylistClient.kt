@@ -69,16 +69,66 @@ class AiPlaylistClient @Inject constructor(
     ): MagicPlaylistResult = withContext(Dispatchers.IO) {
         if (catalog.isEmpty()) return@withContext MagicPlaylistResult.Failure(AiFailure.NO_TRACKS)
         val count = trackCount.coerceIn(1, catalog.size)
-        val byId = catalog.associateBy { it.id }
-        val system = SYSTEM_PROMPT
-        val user = buildUserPrompt(prompt, count, catalog)
+        performGeneration(
+            settings = settings,
+            apiKey = apiKey,
+            system = SYSTEM_PROMPT,
+            user = buildUserPrompt(prompt, count, catalog),
+            byId = catalog.associateBy { it.id },
+            count = count
+        )
+    }
 
+    /** Asks the model for additions only; the existing mix itself is never re-picked. */
+    suspend fun generateMix(
+        settings: AiSettings,
+        apiKey: String,
+        prompt: String,
+        mixName: String,
+        baseTracks: List<Track>,
+        candidates: List<Track>,
+        additions: Int
+    ): MagicPlaylistResult = withContext(Dispatchers.IO) {
+        if (candidates.isEmpty()) return@withContext MagicPlaylistResult.Failure(AiFailure.NO_TRACKS)
+        val count = additions.coerceIn(1, candidates.size)
+        val result = performGeneration(
+            settings = settings,
+            apiKey = apiKey,
+            system = MIX_SYSTEM_PROMPT,
+            user = buildMixUserPrompt(prompt, baseTracks, candidates, count),
+            byId = candidates.associateBy { it.id },
+            count = count
+        )
+        if (result !is MagicPlaylistResult.Success) return@withContext result
+
+        val baseIds = baseTracks.mapTo(HashSet()) { it.id }
+        val additionsTracks = result.playlist.tracks.filter { it.id !in baseIds }
+        if (additionsTracks.isEmpty()) {
+            return@withContext MagicPlaylistResult.Failure(AiFailure.BAD_RESPONSE)
+        }
+        MagicPlaylistResult.Success(
+            MagicPlaylist(
+                name = result.playlist.name.ifBlank { mixName },
+                description = result.playlist.description,
+                tracks = (baseTracks + additionsTracks).distinctBy { it.id }
+            )
+        )
+    }
+
+    private suspend fun performGeneration(
+        settings: AiSettings,
+        apiKey: String,
+        system: String,
+        user: String,
+        byId: Map<String, Track>,
+        count: Int
+    ): MagicPlaylistResult {
         val first = when (settings.provider) {
             AiProvider.OPENAI_COMPATIBLE -> openAiRequest(settings, apiKey, system, user, jsonMode = true)
             AiProvider.GEMINI -> geminiRequest(settings, apiKey, system, user)
         }
 
-        try {
+        return try {
             client.newCall(first).execute().use { response ->
                 if (!response.isSuccessful) {
                     // Some OpenAI-compatible servers reject response_format; retry once without it.
@@ -86,11 +136,11 @@ class AiPlaylistClient @Inject constructor(
                         val retry = openAiRequest(settings, apiKey, system, user, jsonMode = false)
                         return@use executeGeneration(retry, byId, count)
                     }
-                    return@withContext MagicPlaylistResult.Failure(failureForCode(response.code))
+                    return MagicPlaylistResult.Failure(failureForCode(response.code))
                 }
                 val body = response.body?.string().orEmpty()
                 val text = extractText(settings.provider, body)
-                    ?: return@withContext MagicPlaylistResult.Failure(AiFailure.BAD_RESPONSE)
+                    ?: return MagicPlaylistResult.Failure(AiFailure.BAD_RESPONSE)
                 parsePlaylistJson(text, byId, count)
                     ?.let { MagicPlaylistResult.Success(it) }
                     ?: MagicPlaylistResult.Failure(AiFailure.BAD_RESPONSE)
@@ -185,22 +235,41 @@ class AiPlaylistClient @Inject constructor(
     internal fun buildUserPrompt(prompt: String, count: Int, catalog: List<Track>): String = buildString {
         appendLine("Create a playlist from this specific music library. Choose exactly $count songs if possible.")
         appendLine("Request: ${prompt.trim()}")
-        appendLine("Catalog format: id | title | artist | album | year | genre | seconds")
+        appendLine("Catalog format: id | title | artist | genre | year | seconds")
         catalog.forEach { track ->
-            append(track.id)
-            append(" | ")
-            append(track.title)
-            append(" | ")
-            append(track.artist)
-            append(" | ")
-            append(track.album)
-            append(" | ")
-            append(track.year)
-            append(" | ")
-            append(track.genre)
+            appendLine(compactLine(track, includeDuration = true))
+        }
+    }
+
+    internal fun buildMixUserPrompt(
+        prompt: String,
+        baseTracks: List<Track>,
+        candidates: List<Track>,
+        count: Int
+    ): String = buildString {
+        appendLine("Rebuild an existing playlist. Keep its direction and add exactly $count new songs if possible.")
+        appendLine("Request: ${prompt.trim()}")
+        appendLine("Existing playlist (never return these ids, they stay in the mix):")
+        appendLine("id | title | artist | genre | year")
+        baseTracks.take(MAX_PROMPT_BASE_TRACKS).forEach { appendLine(compactLine(it, includeDuration = false)) }
+        appendLine("Candidate additions (choose only from these ids):")
+        appendLine("id | title | artist | genre | year")
+        candidates.forEach { appendLine(compactLine(it, includeDuration = false)) }
+    }
+
+    private fun compactLine(track: Track, includeDuration: Boolean): String = buildString {
+        append(track.id)
+        append(" | ")
+        append(track.title.take(80))
+        append(" | ")
+        append(track.artist.take(60))
+        append(" | ")
+        append(track.genre.take(40))
+        append(" | ")
+        append(track.year)
+        if (includeDuration) {
             append(" | ")
             append(track.durationMs / 1000)
-            appendLine()
         }
     }
 
@@ -301,6 +370,8 @@ class AiPlaylistClient @Inject constructor(
         val JSON = "application/json; charset=utf-8".toMediaType()
         val FENCE = Regex("```(?:json)?\\s*([\\s\\S]*?)```")
 
+        const val MAX_PROMPT_BASE_TRACKS = 20
+
         const val SYSTEM_PROMPT =
             "You curate playlists for a personal music library. Pick songs only from the catalog " +
                 "provided by the user. Never invent ids. Reply with strict JSON only, no prose and " +
@@ -308,5 +379,14 @@ class AiPlaylistClient @Inject constructor(
                 "{\"name\": \"short playlist name\", \"description\": \"one sentence\", " +
                 "\"trackIds\": [\"exact ids from the catalog\"]}. " +
                 "Respect the requested mood and language whenever the catalog allows it."
+
+        const val MIX_SYSTEM_PROMPT =
+            "You rebuild an existing daily mix for a personal music library. The existing songs " +
+                "always stay; pick additional songs only from the candidate ids. Never invent ids " +
+                "and never return ids from the existing playlist. Reply with strict JSON only, no " +
+                "prose and no code fences, using this shape: " +
+                "{\"name\": \"short mix name\", \"description\": \"one sentence\", " +
+                "\"trackIds\": [\"candidate ids\"]}. Match the requested direction and keep the " +
+                "mix varied."
     }
 }

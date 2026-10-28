@@ -178,7 +178,8 @@ fun AlbumDetailScreen(
                         onClick = { viewModel.playTrack(track) },
                         isCurrentTrack = isCurrent,
                         isPlaying = isCurrent && isPlaying,
-                        onMenuClick = { selectedTrackForMenu = track }
+                        onMenuClick = { selectedTrackForMenu = track },
+                        onPlayNext = { viewModel.playNext(track) }
                     )
                 }
             }

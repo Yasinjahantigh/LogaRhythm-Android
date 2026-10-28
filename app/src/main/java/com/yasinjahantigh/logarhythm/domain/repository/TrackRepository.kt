@@ -22,11 +22,11 @@ interface TrackRepository {
     fun getArtists(): Flow<List<Artist>>
     fun getFolders(): Flow<List<Folder>>
     fun getGenres(): Flow<List<Genre>>
-    fun getTracksByAlbum(album: String): Flow<List<Track>>
+    fun getTracksByAlbum(album: String, albumArtist: String): Flow<List<Track>>
     fun getTracksByArtist(artist: String): Flow<List<Track>>
     fun getTracksByFolder(folder: String): Flow<List<Track>>
     fun getTracksByGenre(genre: String): Flow<List<Track>>
-    fun getAlbumByName(album: String): Flow<Album?>
+    fun getAlbumByName(album: String, albumArtist: String): Flow<Album?>
     fun getArtistByName(artist: String): Flow<Artist?>
     fun getArtistProfile(artist: String): Flow<ArtistProfile?>
     fun getGenreByName(genre: String): Flow<Genre?>

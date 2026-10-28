@@ -33,7 +33,7 @@ import com.yasinjahantigh.logarhythm.feature.playlist.SongMenuBottomSheet
 @Composable
 fun StatsScreen(
     onNavigateBack: () -> Unit,
-    onNavigateToAlbum: (String) -> Unit,
+    onNavigateToAlbum: (String, String) -> Unit,
     onNavigateToArtist: (String) -> Unit,
     modifier: Modifier = Modifier,
     viewModel: StatsViewModel = hiltViewModel()
