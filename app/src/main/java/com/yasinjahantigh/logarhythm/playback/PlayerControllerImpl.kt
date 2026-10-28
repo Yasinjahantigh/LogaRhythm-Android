@@ -62,6 +62,8 @@ class PlayerControllerImpl @Inject constructor(
 
     private val _queue = MutableStateFlow<List<Track>>(emptyList())
     override val queue: StateFlow<List<Track>> = _queue.asStateFlow()
+    private val _queueIndex = MutableStateFlow(-1)
+    override val queueIndex: StateFlow<Int> = _queueIndex.asStateFlow()
 
     private val _playbackSpeed = MutableStateFlow(1.0f)
     override val playbackSpeed: StateFlow<Float> = _playbackSpeed.asStateFlow()
@@ -115,7 +117,11 @@ class PlayerControllerImpl @Inject constructor(
                 com.yasinjahantigh.logarhythm.widget.MusicWidgetUpdater.requestUpdate(context)
                 if (!playing) saveQueueState()
             }
+            override fun onTimelineChanged(timeline: androidx.media3.common.Timeline, reason: Int) {
+                _queueIndex.value = controller.currentMediaItemIndex
+            }
             override fun onMediaItemTransition(item: MediaItem?, reason: Int) {
+                _queueIndex.value = controller.currentMediaItemIndex
                 onTrackChanged(item)
                 saveQueueState()
             }
@@ -129,6 +135,7 @@ class PlayerControllerImpl @Inject constructor(
             }
         })
         controller.shuffleModeEnabled = false
+        _queueIndex.value = controller.currentMediaItemIndex
         _repeatMode.value = controller.repeatMode
         _isPlaying.value = controller.isPlaying
         _playbackSpeed.value = controller.playbackParameters.speed
