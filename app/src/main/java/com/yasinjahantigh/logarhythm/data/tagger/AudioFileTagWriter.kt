@@ -47,7 +47,8 @@ sealed interface TagWriteOutcome {
  */
 @Singleton
 class AudioFileTagWriter @Inject constructor(
-    @param:ApplicationContext private val context: Context
+    @param:ApplicationContext private val context: Context,
+    private val mp4Remuxer: com.yasinjahantigh.logarhythm.data.download.Mp4Remuxer
 ) {
 
     /** Compatibility wrapper used by the repository: fields equal to [track]'s current values are left alone. */
@@ -106,6 +107,7 @@ class AudioFileTagWriter @Inject constructor(
         val stamp = System.nanoTime()
         val original = File(context.noBackupFilesDir, "tag_original_$stamp")
         val staged = File(context.cacheDir, "tag_stage_$stamp")
+        val normalized = File(context.cacheDir, "tag_normalized_$stamp.m4a")
         var outputAttempted = false
         var verified = false
         var keepBackup = false
@@ -123,10 +125,28 @@ class AudioFileTagWriter @Inject constructor(
 
             val engine = TagEngines.detect(original)
                 ?: return@withContext TagWriteOutcome.Unsupported("Unrecognised audio container")
-            engine.rewrite(original, staged, edit)
+            val fragmented = engine === com.yasinjahantigh.logarhythm.data.tagger.engine.Mp4Engine && mp4Remuxer.isFragmented(original)
+            val effectiveEdit = if (fragmented) {
+                if (available < 3 * original.length() + MIN_FREE_SPACE_BYTES) return@withContext TagWriteOutcome.NoSpace
+                val tags = engine.read(original)
+                original.copyTo(normalized)
+                mp4Remuxer.normalize(normalized)
+                if (mp4Remuxer.isFragmented(normalized)) {
+                    return@withContext TagWriteOutcome.Unsupported("Unable to normalize fragmented MP4")
+                }
+                edit.copy(
+                    title = edit.title ?: tags.title, artist = edit.artist ?: tags.artist,
+                    album = edit.album ?: tags.album, albumArtist = edit.albumArtist ?: tags.albumArtist,
+                    genre = edit.genre ?: tags.genre, lyrics = edit.lyrics ?: tags.lyrics,
+                    artwork = edit.artwork ?: tags.artwork, artworkMime = edit.artworkMime ?: tags.artworkMime,
+                    year = edit.year ?: tags.year, trackNumber = edit.trackNumber ?: tags.trackNumber,
+                    discNumber = edit.discNumber ?: tags.discNumber, composer = edit.composer ?: tags.composer
+                )
+            } else edit
+            engine.rewrite(if (fragmented) normalized else original, staged, effectiveEdit)
             if (!staged.isFile || staged.length() < 16L) return@withContext TagWriteOutcome.Failed
             val writtenTags = engine.read(staged)
-            if (TagEngines.detect(staged) !== engine || !TagEditVerifier.matches(edit, writtenTags)) {
+            if (TagEngines.detect(staged) !== engine || !TagEditVerifier.matches(effectiveEdit, writtenTags)) {
                 return@withContext TagWriteOutcome.Failed
             }
 
@@ -162,6 +182,7 @@ class AudioFileTagWriter @Inject constructor(
                 }
             }
             runCatching { staged.delete() }
+            runCatching { normalized.delete() }
             if (!keepBackup) runCatching { original.delete() }
         }
     }

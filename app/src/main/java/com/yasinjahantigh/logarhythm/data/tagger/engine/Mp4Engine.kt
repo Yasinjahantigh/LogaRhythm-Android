@@ -23,43 +23,61 @@ object Mp4Engine : TagEngine {
             var size = be32(h, 0)
             val type = String(h, 4, 4, Charsets.ISO_8859_1)
             var header = 8
-            if (size == 1L) { size = be64(raf.readAt(pos + 8, 8), 0); header = 16 }
-            else if (size == 0L) size = len - pos
-            if (size < header || pos + size > len) throw UnsupportedTagException("Corrupt MP4 box '$type'")
+            if (size == 1L) {
+                if (len - pos < 16) throw UnsupportedTagException("Truncated MP4 box '$type'")
+                size = be64(raf.readAt(pos + 8, 8), 0); header = 16
+            } else if (size == 0L) size = len - pos
+            if (size < header || size > len - pos) throw UnsupportedTagException("Corrupt MP4 box '$type'")
             boxes.add(Box(type, pos, size, header))
             pos += size
         }
         if (boxes.none { it.type == "ftyp" } || boxes.none { it.type == "moov" }) throw UnsupportedTagException("Not an MP4 audio file")
-        if (boxes.any { it.type == "moof" }) throw UnsupportedTagException("Fragmented MP4 is not supported")
         return boxes
     }
 
-    private class Child(val type: String, val bytes: ByteArray) // whole box incl. header
+    private class Child(val type: String, val bytes: ByteArray) {
+        val headerSize: Int get() = if (bytes.size >= 16 && be32(bytes, 0) == 1L) 16 else 8
+    }
+
+    private fun layout(bytes: ByteArray, offset: Int, end: Int): Pair<Int, Int> {
+        if (end - offset < 8) throw UnsupportedTagException("Truncated MP4 box")
+        val shortSize = be32(bytes, offset)
+        val header = if (shortSize == 1L) 16 else 8
+        if (end - offset < header) throw UnsupportedTagException("Truncated MP4 box")
+        val size = when (shortSize) {
+            0L -> (end - offset).toLong()
+            1L -> be64(bytes, offset + 8)
+            else -> shortSize
+        }
+        if (size < header || size > end - offset) throw UnsupportedTagException("Corrupt MP4 box size")
+        return size.toInt() to header
+    }
 
     private fun children(b: ByteArray, from: Int, to: Int): MutableList<Child> {
         val out = ArrayList<Child>()
         var p = from
         while (p + 8 <= to) {
-            var size = be32(b, p).toInt()
+            val (size, _) = layout(b, p, to)
             val type = String(b, p + 4, 4, Charsets.ISO_8859_1)
-            if (size == 0) size = to - p
-            if (size < 8 || p + size > to) throw UnsupportedTagException("Corrupt MP4 box '$type'")
-            out.add(Child(type, b.copyOfRange(p, p + size)))
+            val bytes = b.copyOfRange(p, p + size)
+            if (be32(bytes, 0) == 0L) System.arraycopy(putBe32(size.toLong()), 0, bytes, 0, 4)
+            out.add(Child(type, bytes))
             p += size
         }
+        if (p < to) out.add(Child("", b.copyOfRange(p, to)))
         return out
     }
 
     private fun box(type: String, payload: ByteArray): ByteArray =
         putBe32(payload.size + 8L) + type.toByteArray(Charsets.ISO_8859_1) + payload
 
-    private fun content(c: Child) = c.bytes.copyOfRange(8, c.bytes.size)
+    private fun content(c: Child) = c.bytes.copyOfRange(c.headerSize, c.bytes.size)
 
-    /** Splits a 'meta' payload into (versionAndFlags or null, children). */
     private fun metaChildren(payload: ByteArray): Pair<ByteArray?, MutableList<Child>> {
-        val quickTimeStyle = payload.size >= 8 && ascii(payload, 4, 4) == "hdlr"
-        return if (quickTimeStyle) null to children(payload, 0, payload.size)
-        else payload.copyOfRange(0, 4) to children(payload, 4, payload.size)
+        val quickTimeStyle = payload.size >= 8 && payload.sliceArray(4..7).all { it.toInt() in 32..126 }
+        if (quickTimeStyle) return null to children(payload, 0, payload.size)
+        if (payload.size < 4) throw UnsupportedTagException("Truncated meta flags")
+        return payload.copyOfRange(0, 4) to children(payload, 4, payload.size)
     }
 
     private val KEY_TITLE = "\u00A9nam"
@@ -91,10 +109,10 @@ object Mp4Engine : TagEngine {
     private class Cover(val mime: String, val data: ByteArray)
 
     private fun itemArtwork(item: Child): Cover? {
-        val inner = children(item.bytes, 8, item.bytes.size).firstOrNull { it.type == "data" } ?: return null
-        if (inner.bytes.size < 16) return null
-        val flags = be32(inner.bytes, 8).toInt() and 0xffffff
-        val payload = inner.bytes.copyOfRange(16, inner.bytes.size)
+        val inner = children(item.bytes, item.headerSize, item.bytes.size).firstOrNull { it.type == "data" } ?: return null
+        if (inner.bytes.size < inner.headerSize + 8) return null
+        val flags = be32(inner.bytes, inner.headerSize).toInt() and 0xffffff
+        val payload = inner.bytes.copyOfRange(inner.headerSize + 8, inner.bytes.size)
         if (payload.isEmpty()) return null
         val mime = when (flags) {
             12 -> "image/gif"
@@ -106,10 +124,10 @@ object Mp4Engine : TagEngine {
     }
 
     private fun itemText(item: Child): String? {
-        val inner = children(item.bytes, 8, item.bytes.size).firstOrNull { it.type == "data" } ?: return null
-        val flags = be32(inner.bytes, 8).toInt() and 0xffffff
-        if (inner.bytes.size < 16) return null
-        val payload = inner.bytes.copyOfRange(16, inner.bytes.size)
+        val inner = children(item.bytes, item.headerSize, item.bytes.size).firstOrNull { it.type == "data" } ?: return null
+        if (inner.bytes.size < inner.headerSize + 8) return null
+        val flags = be32(inner.bytes, inner.headerSize).toInt() and 0xffffff
+        val payload = inner.bytes.copyOfRange(inner.headerSize + 8, inner.bytes.size)
         return when (flags) {
             1 -> String(payload, Charsets.UTF_8)
             2 -> String(payload, Charsets.UTF_16BE)
@@ -119,9 +137,9 @@ object Mp4Engine : TagEngine {
 
     /** Reads the numeric value of a `trkn`/`disk` data atom. */
     private fun itemPair(item: Child): Int? {
-        val inner = children(item.bytes, 8, item.bytes.size).firstOrNull { it.type == "data" } ?: return null
-        if (inner.bytes.size < 20) return null
-        return be16(inner.bytes, 18).takeIf { it > 0 }
+        val inner = children(item.bytes, item.headerSize, item.bytes.size).firstOrNull { it.type == "data" } ?: return null
+        if (inner.bytes.size < inner.headerSize + 12) return null
+        return be16(inner.bytes, inner.headerSize + 10).takeIf { it > 0 }
     }
 
     private fun pairItem(key: String, value: Int): ByteArray {
@@ -142,9 +160,9 @@ object Mp4Engine : TagEngine {
         val moovBox = topLevel(raf).first { it.type == "moov" }
         val moov = readMoov(raf, moovBox)
         val udta = children(moov, moovBox.headerSize, moov.size).firstOrNull { it.type == "udta" } ?: return AudioTags()
-        val meta = children(udta.bytes, 8, udta.bytes.size).firstOrNull { it.type == "meta" } ?: return AudioTags()
+        val meta = children(udta.bytes, udta.headerSize, udta.bytes.size).firstOrNull { it.type == "meta" } ?: return AudioTags()
         val ilst = metaChildren(content(meta)).second.firstOrNull { it.type == "ilst" } ?: return AudioTags()
-        val items = children(ilst.bytes, 8, ilst.bytes.size)
+        val items = children(ilst.bytes, ilst.headerSize, ilst.bytes.size)
         fun get(key: String) = items.firstOrNull { it.type == latin1Key(key) }?.let { itemText(it) }
         fun pair(key: String) = items.firstOrNull { it.type == key }?.let { itemPair(it) }
         val cover = items.firstOrNull { it.type == "covr" }?.let { itemArtwork(it) }
@@ -167,13 +185,14 @@ object Mp4Engine : TagEngine {
     override fun rewrite(source: File, target: File, edit: TagEdit) {
         RandomAccessFile(source, "r").use { raf ->
             val boxes = topLevel(raf)
+            if (boxes.any { it.type == "moof" }) throw UnsupportedTagException("Fragmented MP4 requires remuxing")
             val moovBox = boxes.first { it.type == "moov" }
             val oldMoov = readMoov(raf, moovBox)
 
             val moovChildren = children(oldMoov, moovBox.headerSize, oldMoov.size)
             val udtaIndex = moovChildren.indexOfFirst { it.type == "udta" }
             val udtaChildren = if (udtaIndex >= 0)
-                children(moovChildren[udtaIndex].bytes, 8, moovChildren[udtaIndex].bytes.size) else ArrayList()
+                children(moovChildren[udtaIndex].bytes, moovChildren[udtaIndex].headerSize, moovChildren[udtaIndex].bytes.size) else ArrayList()
             val metaIndex = udtaChildren.indexOfFirst { it.type == "meta" }
             var versionFlags: ByteArray? = byteArrayOf(0, 0, 0, 0)
             var metaKids: MutableList<Child> = ArrayList()
@@ -187,7 +206,7 @@ object Mp4Engine : TagEngine {
             }
             val ilstIndex = metaKids.indexOfFirst { it.type == "ilst" }
             val items: MutableList<Child> = if (ilstIndex >= 0)
-                children(metaKids[ilstIndex].bytes, 8, metaKids[ilstIndex].bytes.size) else ArrayList()
+                children(metaKids[ilstIndex].bytes, metaKids[ilstIndex].headerSize, metaKids[ilstIndex].bytes.size) else ArrayList()
 
             fun setText(key: String, value: String?, also: List<String> = emptyList()) {
                 if (value == null) return
@@ -247,31 +266,26 @@ object Mp4Engine : TagEngine {
         fun walk(from: Int, to: Int) {
             var p = from
             while (p + 8 <= to) {
-                val size = be32(moov, p).toInt()
+                val (size, header) = layout(moov, p, to)
                 val type = String(moov, p + 4, 4, Charsets.ISO_8859_1)
-                if (size < 8 || p + size > to) throw UnsupportedTagException("Corrupt MP4 box '$type'")
                 when (type) {
-                    in CONTAINERS -> walk(p + 8, p + size)
-                    "stco" -> {
-                        val n = be32(moov, p + 12).toInt()
-                        if (16L + 4L * n > size) throw UnsupportedTagException("Corrupt stco")
-                        for (i in 0 until n) {
-                            val o = p + 16 + 4 * i
-                            val v = be32(moov, o)
+                    in CONTAINERS -> walk(p + header, p + size)
+                    "stco", "co64" -> {
+                        val width = if (type == "stco") 4 else 8
+                        if (size < header + 8) throw UnsupportedTagException("Truncated $type")
+                        val n = be32(moov, p + header + 4)
+                        if (header + 8L + width * n > size) throw UnsupportedTagException("Corrupt $type")
+                        for (i in 0 until n.toInt()) {
+                            val o = p + header + 8 + width * i
+                            val v = if (width == 4) be32(moov, o) else be64(moov, o)
                             if (v > moovStart) {
-                                val nv = v + delta
-                                if (nv < 0 || nv > 0xffffffffL) throw UnsupportedTagException("Chunk offset overflow")
-                                System.arraycopy(putBe32(nv), 0, moov, o, 4)
+                                val shifted = Math.addExact(v, delta)
+                                if (shifted < 0 || (width == 4 && shifted > 0xffffffffL)) {
+                                    throw UnsupportedTagException("Chunk offset overflow")
+                                }
+                                val bytes = if (width == 4) putBe32(shifted) else putBe64(shifted)
+                                System.arraycopy(bytes, 0, moov, o, width)
                             }
-                        }
-                    }
-                    "co64" -> {
-                        val n = be32(moov, p + 12).toInt()
-                        if (16L + 8L * n > size) throw UnsupportedTagException("Corrupt co64")
-                        for (i in 0 until n) {
-                            val o = p + 16 + 8 * i
-                            val v = be64(moov, o)
-                            if (v > moovStart) System.arraycopy(putBe64(v + delta), 0, moov, o, 8)
                         }
                     }
                 }
