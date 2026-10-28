@@ -11,7 +11,6 @@ import androidx.glance.ImageProvider
 import androidx.glance.action.actionStartActivity
 import androidx.glance.action.clickable
 import androidx.glance.appwidget.GlanceAppWidget
-import androidx.glance.appwidget.LinearProgressIndicator
 import androidx.glance.appwidget.SizeMode
 import androidx.glance.appwidget.action.actionRunCallback
 import androidx.glance.appwidget.cornerRadius
@@ -35,7 +34,6 @@ import androidx.glance.text.TextStyle
 import androidx.media3.common.Player
 import com.yasinjahantigh.logarhythm.MainActivity
 import com.yasinjahantigh.logarhythm.R
-import java.util.Locale
 
 /** Large artwork background with title, progress and the full transport row. */
 class MusicWidgetPlayer : GlanceAppWidget() {
@@ -66,52 +64,37 @@ private fun PlayerWidgetContent(state: MusicWidgetSnapshot) {
         )
         Image(ImageProvider(R.drawable.widget_scrim), null, GlanceModifier.fillMaxSize(), contentScale = ContentScale.Crop)
 
-        Column(modifier = GlanceModifier.fillMaxSize().padding(horizontal = 18.dp, vertical = 12.dp)) {
+        Column(modifier = GlanceModifier.fillMaxSize().padding(horizontal = 20.dp, vertical = 18.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Image(ImageProvider(R.drawable.ic_widget_note), null, GlanceModifier.size(13.dp))
-                Spacer(GlanceModifier.width(6.dp))
+                Image(ImageProvider(R.drawable.ic_widget_note), null, GlanceModifier.size(14.dp))
+                Spacer(GlanceModifier.width(7.dp))
                 Text(
                     text = LocalString(R.string.now_playing),
-                    style = TextStyle(color = ArtSecondaryText, fontSize = 11.sp),
+                    style = TextStyle(color = ArtSecondaryText, fontSize = 12.sp, fontWeight = FontWeight.Bold),
                     maxLines = 1
                 )
             }
-            Spacer(GlanceModifier.height(5.dp))
+            Spacer(GlanceModifier.defaultWeight())
             Text(
                 text = track.title,
-                style = TextStyle(color = ArtText, fontSize = 21.sp, fontWeight = FontWeight.Bold),
-                maxLines = 1
+                style = TextStyle(color = ArtText, fontSize = 25.sp, fontWeight = FontWeight.Bold),
+                maxLines = 2
             )
+            Spacer(GlanceModifier.height(4.dp))
             Text(
                 text = track.artist,
-                style = TextStyle(color = ArtSecondaryText, fontSize = 13.sp),
+                style = TextStyle(color = ArtSecondaryText, fontSize = 15.sp),
                 maxLines = 1
             )
-            Spacer(GlanceModifier.height(8.dp))
-            val progress = if (state.duration > 0L) {
-                (state.position.toFloat() / state.duration.toFloat()).coerceIn(0f, 1f)
-            } else 0f
-            LinearProgressIndicator(
-                progress = progress,
-                modifier = GlanceModifier.fillMaxWidth().height(3.dp).cornerRadius(2.dp),
-                color = ArtText,
-                backgroundColor = ArtProgressTrack
-            )
-            Spacer(GlanceModifier.height(2.dp))
-            Row(modifier = GlanceModifier.fillMaxWidth()) {
+            if (track.album.isNotBlank()) {
+                Spacer(GlanceModifier.height(2.dp))
                 Text(
-                    text = formatTime(state.position),
-                    style = TextStyle(color = ArtSecondaryText, fontSize = 10.sp),
-                    maxLines = 1
-                )
-                Spacer(GlanceModifier.defaultWeight())
-                Text(
-                    text = formatTime(state.duration),
-                    style = TextStyle(color = ArtSecondaryText, fontSize = 10.sp),
+                    text = track.album,
+                    style = TextStyle(color = ArtSecondaryText, fontSize = 12.sp),
                     maxLines = 1
                 )
             }
-            Spacer(GlanceModifier.height(4.dp))
+            Spacer(GlanceModifier.defaultWeight())
             Row(
                 modifier = GlanceModifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
@@ -122,32 +105,29 @@ private fun PlayerWidgetContent(state: MusicWidgetSnapshot) {
                     LocalString(R.string.cd_shuffle),
                     actionRunCallback<ShuffleWidgetAction>(),
                     active = state.shuffle,
-                    size = 30,
-                    surface = ArtTransparent
+                    size = 38
                 )
                 Spacer(GlanceModifier.width(10.dp))
                 WidgetIconButton(
                     R.drawable.ic_widget_previous,
                     LocalString(R.string.cd_skip_prev),
                     actionRunCallback<PreviousActionCallback>(),
-                    size = 34,
-                    surface = ArtTransparent
+                    size = 42
                 )
                 Spacer(GlanceModifier.width(12.dp))
                 WidgetIconButton(
-                    if (state.isPlaying) R.drawable.ic_widget_pause else R.drawable.ic_widget_play,
+                    if (state.isPlaying) R.drawable.ic_widget_pause_ember else R.drawable.ic_widget_play_ember,
                     LocalString(if (state.isPlaying) R.string.cd_pause else R.string.cd_play),
                     actionRunCallback<PlayPauseActionCallback>(),
-                    size = 42,
-                    surface = ArtTransparent
+                    active = true,
+                    size = 54
                 )
                 Spacer(GlanceModifier.width(12.dp))
                 WidgetIconButton(
                     R.drawable.ic_widget_next,
                     LocalString(R.string.cd_skip_next),
                     actionRunCallback<NextActionCallback>(),
-                    size = 34,
-                    surface = ArtTransparent
+                    size = 42
                 )
                 Spacer(GlanceModifier.width(10.dp))
                 WidgetIconButton(
@@ -155,15 +135,9 @@ private fun PlayerWidgetContent(state: MusicWidgetSnapshot) {
                     LocalString(if (state.repeatMode == Player.REPEAT_MODE_ONE) R.string.cd_repeat_one else R.string.cd_repeat),
                     actionRunCallback<RepeatWidgetAction>(),
                     active = state.repeatMode != Player.REPEAT_MODE_OFF,
-                    size = 30,
-                    surface = ArtTransparent
+                    size = 38
                 )
             }
         }
     }
-}
-
-private fun formatTime(ms: Long): String {
-    val total = (ms.coerceAtLeast(0L) / 1000L)
-    return String.format(Locale.US, "%d:%02d", total / 60, total % 60)
 }

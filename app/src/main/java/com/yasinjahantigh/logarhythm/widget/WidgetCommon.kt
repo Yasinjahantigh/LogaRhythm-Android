@@ -37,8 +37,6 @@ internal val ArtSecondaryText = dayNightColorProvider(day = Color(0xFFB8B2A8), n
 
 internal val ArtControlSurface = dayNightColorProvider(day = Color(0x26E8E4DC), night = Color(0x26E8E4DC))
 
-internal val ArtTransparent = dayNightColorProvider(day = Color(0x00000000), night = Color(0x00000000))
-
 internal val ArtProgressTrack = dayNightColorProvider(day = Color(0x40E8E4DC), night = Color(0x40E8E4DC))
 
 internal val ArtBackground = dayNightColorProvider(day = Color(0xFF15181C), night = Color(0xFF15181C))

@@ -10,5 +10,5 @@
     <string name="widget_large_label">LogaRhythm Complete</string>
     <string name="widget_large_description">Full playback controls and your up-next queue</string>
     <string name="widget_player_label">LogaRhythm Player</string>
-    <string name="widget_player_description">Large artwork, progress, and every playback control</string>
+    <string name="widget_player_description">Large artwork with every playback control in the app theme</string>
 </resources>
