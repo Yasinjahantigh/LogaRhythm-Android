@@ -30,7 +30,12 @@ class MetadataResolver @Inject constructor(
         val composer: String?
     )
 
-    suspend fun resolve(title: String, artist: String, durationMs: Long): Resolved {
+    suspend fun resolve(
+        title: String,
+        artist: String,
+        durationMs: Long,
+        replaceArtist: Boolean = false
+    ): Resolved {
         val deezerResult = bestEffort(DEEZER_TIMEOUT_MS) {
             deezer.search(title, artist, durationMs)
         }
@@ -57,11 +62,15 @@ class MetadataResolver @Inject constructor(
 
         return Resolved(
             title = DownloadMetadataMerge.pick(deezerResult?.title, itunesResult?.title, title),
-            artist = DownloadMetadataMerge.preferSourceArtist(
-                artist,
-                deezerResult?.artist,
-                itunesResult?.artist
-            ),
+            artist = if (replaceArtist) {
+                DownloadMetadataMerge.pick(deezerResult?.artist, itunesResult?.artist, artist)
+            } else {
+                DownloadMetadataMerge.preferSourceArtist(
+                    artist,
+                    deezerResult?.artist,
+                    itunesResult?.artist
+                )
+            },
             album = DownloadMetadataMerge.pick(album),
             genre = DownloadMetadataMerge.pick(genre),
             artworkUrl = artwork?.takeIf { it.startsWith("http") },

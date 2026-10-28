@@ -142,7 +142,8 @@ fun SmartMixDetailScreen(
                     itemsIndexed(tracks, key = { _, track -> track.id }) { index, track ->
                         TrackListItem(
                             track = track,
-                            onClick = { viewModel.playTrackAt(index) }
+                            onClick = { viewModel.playTrackAt(index) },
+                            onPlayNext = { viewModel.playNext(track) }
                         )
                     }
                 }

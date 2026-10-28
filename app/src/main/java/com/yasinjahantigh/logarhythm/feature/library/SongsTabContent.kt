@@ -53,6 +53,7 @@ fun SongsTabContent(
     selectedTrackIds: Set<String> = emptySet(),
     onTrackLongClick: ((Track) -> Unit)? = null,
     onToggleSelect: ((Track) -> Unit)? = null,
+    onPlayNext: ((Track) -> Unit)? = null,
     filter: TrackFilter = TrackFilter.ALL,
     onFilterChange: (TrackFilter) -> Unit = {}
 ) {
@@ -162,7 +163,8 @@ fun SongsTabContent(
                     onMenuClick = onTrackMenuClick?.let { { it(track) } },
                     selectionMode = selectionMode,
                     isSelected = track.id in selectedTrackIds,
-                    onLongClick = onTrackLongClick?.let { { it(track) } }
+                    onLongClick = onTrackLongClick?.let { { it(track) } },
+                    onPlayNext = onPlayNext?.let { { it(track) } }
                 )
             }
         }

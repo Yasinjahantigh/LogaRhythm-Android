@@ -84,6 +84,8 @@
     <string name="cd_drag_handle">تغییر ترتیب</string>
     <string name="cd_remove_from_queue">حذف از صف</string>
     <string name="action_play_next">پخش به عنوان بعدی</string>
+    <string name="swipe_play_next">بعدی</string>
+    <string name="swipe_play_next_action">پخش به‌عنوان آهنگ بعدی</string>
     <string name="action_add_to_queue">افزودن به صف</string>
     <string name="action_add_to_playlist">افزودن به لیست پخش</string>
     <string name="action_remove_from_playlist">حذف از لیست پخش</string>
@@ -273,7 +275,7 @@
     <string name="settings_excluded_folders_dialog_title">نادیده گرفتن پوشه‌ها</string>
     <string name="settings_no_folders_found">هیچ پوشه‌ای در کتابخانه یافت نشد</string>
 
-    <!-- Widget and onboarding -->
+    <!-- Onboarding -->
     <string name="no_track_playing">در حال پخش نیست</string>
 
     <string name="onboarding_welcome_title">به LogaRhythm خوش آمدید</string>
@@ -405,6 +407,9 @@
     <string name="edit_track_field_genre">سبک موسیقی</string>
     <string name="tag_editor_title">استودیوی برچسب و کاور</string>
     <string name="tag_editor_subtitle">تغییرات داخل فایل صوتی نوشته و با کتابخانهٔ سیستم همگام می‌شود.</string>
+    <string name="tag_editor_autofill">پرکردن خودکار از اینترنت</string>
+    <string name="tag_editor_autofill_done">هرچه پیدا شد پر شد. بررسی کن و ذخیره کن.</string>
+    <string name="tag_editor_autofill_empty">نسخهٔ منطبقی پیدا نشد.</string>
     <string name="tag_editor_cover">کاور آلبوم</string>
     <string name="tag_editor_change_cover">تغییر کاور</string>
     <string name="tag_editor_remove_cover">حذف کاور</string>
@@ -565,6 +570,9 @@
     <string name="home_download_card_title">دانلود موسیقی</string>
     <string name="home_download_card_desc">جست‌وجو در یوتیوب و ساندکلود و ذخیرهٔ صدا با کاور</string>
     <string name="home_download_card_action">باز کردن دانلود موسیقی</string>
+    <string name="home_ai_banner_title">لیست پخش جادویی با هوش مصنوعی</string>
+    <string name="home_ai_banner_desc">لیست پخش بساز یا میکس روزانه را با کلید API خودت بازسازی کن.</string>
+    <string name="home_ai_banner_action">باز کردن هوش مصنوعی</string>
     <string name="settings_download_title">دانلود موسیقی</string>
     <string name="cd_download_settings">تنظیمات دانلود</string>
     <string name="cd_download_more">کارهای بیشتر دانلود</string>
@@ -576,11 +584,14 @@
     <string name="download_search_recent">جست‌وجوهای اخیر</string>
     <string name="download_clear_recent">پاک کردن</string>
     <string name="download_search_intro_title">آهنگی برای دانلود پیدا کنید</string>
-    <string name="download_search_intro_desc">نتایج از یوتیوب و ساندکلود می‌آیند. صدای اصلی حفظ می‌شود و کاور و تگ اضافه می‌شود.</string>
+    <string name="download_search_intro_desc">نتایج از یوتیوب، ساندکلود و MusicMan می‌آیند. صدای اصلی حفظ می‌شود و کاور و تگ اضافه می‌شود.</string>
     <string name="download_search_no_results">نتیجه‌ای پیدا نشد</string>
     <string name="download_search_no_results_desc">املای دیگری را امتحان کنید یا نام خواننده را اضافه کنید.</string>
+    <string name="download_source_all">همهٔ منابع</string>
     <string name="download_source_youtube">یوتیوب</string>
     <string name="download_source_soundcloud">ساندکلود</string>
+    <string name="download_source_musicman">MusicMan</string>
+    <string name="download_musicman_ready_note">فقط آهنگ‌هایی که MusicMan همین حالا می‌تواند بدهد نمایش داده می‌شوند.</string>
     <string name="download_preparing">آماده‌سازی دانلودر…</string>
     <string name="download_status_queued">در صف</string>
     <string name="download_status_downloading">در حال دانلود… %1$d٪</string>
@@ -688,6 +699,17 @@
     <string name="magic_playlist_save">ذخیره لیست پخش</string>
     <string name="magic_playlist_regenerate">دوباره امتحان کنید</string>
     <string name="magic_playlist_more_tracks">+%1$d آهنگ دیگر</string>
+    <string name="ai_mix_action">بازسازی با هوش مصنوعی</string>
+    <string name="ai_mix_title">این میکس را با هوش مصنوعی بازسازی کنید</string>
+    <string name="ai_mix_subtitle">این آهنگ‌ها می‌مانند؛ آهنگ‌های تازه از کتابخانه‌تان بخواهید</string>
+    <string name="ai_mix_prompt_label">میکس چطور تغییر کند؟</string>
+    <string name="ai_mix_prompt_hint">مثلاً آرام‌تر، آکوستیک‌تر، کلاسیک‌های فارسی اضافه شود</string>
+    <string name="ai_mix_additions_count">آهنگ‌های تازه: %1$d</string>
+    <string name="ai_mix_generate">افزودن آهنگ با هوش مصنوعی</string>
+    <string name="ai_mix_preview">میکس بازسازی‌شده</string>
+    <string name="ai_mix_added_count">%1$d آهنگ تازه اضافه شد</string>
+    <string name="ai_mix_play">پخش میکس بازسازی‌شده</string>
+    <string name="ai_mix_default_name">میکس هوش مصنوعی</string>
     <string name="ai_error_not_configured">اول کلید API را در تنظیمات → هوش مصنوعی وارد کنید.</string>
     <string name="ai_error_invalid_key">سرویس کلید API را رد کرد.</string>
     <string name="ai_error_rate_limited">درخواست‌ها زیاد شده‌اند. یک دقیقه بعد دوباره امتحان کنید.</string>

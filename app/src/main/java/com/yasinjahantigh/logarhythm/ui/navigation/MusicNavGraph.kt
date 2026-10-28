@@ -48,6 +48,11 @@ fun MusicNavGraph(
                 onNavigateToDownload = {
                     navController.navigate(NavDestination.ROUTE_DOWNLOAD)
                 },
+                onNavigateToSettings = {
+                    navController.navigate(NavDestination.Settings.route) {
+                        launchSingleTop = true
+                    }
+                },
                 onNavigateToTagEditor = { trackId ->
                     navController.navigate(NavDestination.createTagEditorRoute(trackId))
                 }
@@ -131,7 +136,12 @@ fun MusicNavGraph(
             )
         }
         composable(NavDestination.ROUTE_LIBRARY_TOOLS) {
-            LibraryToolsScreen(onNavigateBack = { navController.popBackStack() })
+            LibraryToolsScreen(
+                onNavigateBack = { navController.popBackStack() },
+                onEditTrack = { trackId ->
+                    navController.navigate(NavDestination.createTagEditorRoute(trackId))
+                }
+            )
         }
         composable(NavDestination.ROUTE_EQUALIZER) {
             EqualizerScreen(

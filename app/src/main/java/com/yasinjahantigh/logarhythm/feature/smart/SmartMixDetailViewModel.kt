@@ -48,6 +48,8 @@ class SmartMixDetailViewModel @Inject constructor(
         if (index in list.indices) playerController.play(list, index)
     }
 
+    fun playNext(track: Track) = playerController.playNext(track)
+
     fun saveAsPlaylist(name: String, onSaved: (Long) -> Unit) {
         val ids = tracks.value.map { it.id }
         if (ids.isEmpty() || name.isBlank()) return

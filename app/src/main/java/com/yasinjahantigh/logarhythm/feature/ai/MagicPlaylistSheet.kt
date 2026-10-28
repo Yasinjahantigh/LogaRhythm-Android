@@ -14,6 +14,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -27,6 +28,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -41,6 +43,8 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.yasinjahantigh.logarhythm.R
+import com.yasinjahantigh.logarhythm.domain.model.DailyMix
+import com.yasinjahantigh.logarhythm.domain.model.Track
 import kotlin.math.roundToInt
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -48,21 +52,45 @@ import kotlin.math.roundToInt
 fun MagicPlaylistSheet(
     onDismiss: () -> Unit,
     onOpenSettings: () -> Unit,
+    baseMix: DailyMix? = null,
+    onPlayMix: ((List<Track>) -> Unit)? = null,
     viewModel: MagicPlaylistViewModel = hiltViewModel()
 ) {
     val settings by viewModel.settings.collectAsStateWithLifecycle()
     val state by viewModel.state.collectAsStateWithLifecycle()
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    val defaultPlaylistName = stringResource(R.string.magic_playlist_title)
-    var playlistName by remember(state.result, defaultPlaylistName) {
+    val isMix = baseMix != null
+    val fallbackName = stringResource(
+        if (isMix) R.string.ai_mix_default_name else R.string.magic_playlist_title
+    )
+    val mixName = when (baseMix?.id) {
+        "daily_mix_1" -> stringResource(R.string.daily_mix_title_rotation)
+        "daily_mix_2" -> stringResource(R.string.daily_mix_title_rediscover)
+        "daily_mix_3" -> stringResource(R.string.daily_mix_title_discovery)
+        else -> fallbackName
+    }
+    var playlistName by remember(state.result, fallbackName) {
         mutableStateOf(
-            state.result?.name?.takeIf { it.isNotBlank() } ?: defaultPlaylistName
+            state.result?.name?.takeIf { it.isNotBlank() } ?: fallbackName
         )
+    }
+
+    LaunchedEffect(baseMix?.id) {
+        viewModel.reset()
+        if (isMix) viewModel.setTrackCount(MagicPlaylistViewModel.DEFAULT_MIX_ADDITIONS)
     }
 
     fun close() {
         viewModel.reset()
         onDismiss()
+    }
+
+    val generate = {
+        if (baseMix == null) {
+            viewModel.generate()
+        } else {
+            viewModel.generate(baseTracks = baseMix.tracks, mixName = mixName)
+        }
     }
 
     ModalBottomSheet(
@@ -87,12 +115,16 @@ fun MagicPlaylistSheet(
                 )
                 Column(modifier = Modifier.padding(start = 12.dp)) {
                     Text(
-                        text = stringResource(R.string.magic_playlist_title),
+                        text = stringResource(
+                            if (isMix) R.string.ai_mix_title else R.string.magic_playlist_title
+                        ),
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        text = stringResource(R.string.magic_playlist_subtitle),
+                        text = stringResource(
+                            if (isMix) R.string.ai_mix_subtitle else R.string.magic_playlist_subtitle
+                        ),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -131,8 +163,20 @@ fun MagicPlaylistSheet(
             OutlinedTextField(
                 value = state.prompt,
                 onValueChange = viewModel::setPrompt,
-                label = { Text(stringResource(R.string.magic_playlist_prompt_label)) },
-                placeholder = { Text(stringResource(R.string.magic_playlist_prompt_hint)) },
+                label = {
+                    Text(
+                        stringResource(
+                            if (isMix) R.string.ai_mix_prompt_label else R.string.magic_playlist_prompt_label
+                        )
+                    )
+                },
+                placeholder = {
+                    Text(
+                        stringResource(
+                            if (isMix) R.string.ai_mix_prompt_hint else R.string.magic_playlist_prompt_hint
+                        )
+                    )
+                },
                 minLines = 3,
                 maxLines = 5,
                 enabled = !state.isGenerating,
@@ -149,7 +193,10 @@ fun MagicPlaylistSheet(
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Text(
-                    text = stringResource(R.string.magic_playlist_count, state.trackCount),
+                    text = stringResource(
+                        if (isMix) R.string.ai_mix_additions_count else R.string.magic_playlist_count,
+                        state.trackCount
+                    ),
                     style = MaterialTheme.typography.bodyMedium
                 )
             }
@@ -171,7 +218,7 @@ fun MagicPlaylistSheet(
             Spacer(modifier = Modifier.height(14.dp))
 
             Button(
-                onClick = viewModel::generate,
+                onClick = generate,
                 enabled = state.prompt.isNotBlank() && !state.isGenerating,
                 modifier = Modifier
                     .fillMaxWidth()
@@ -186,7 +233,11 @@ fun MagicPlaylistSheet(
                     Spacer(modifier = Modifier.size(10.dp))
                     Text(stringResource(R.string.magic_playlist_generating))
                 } else {
-                    Text(stringResource(R.string.magic_playlist_generate))
+                    Text(
+                        stringResource(
+                            if (isMix) R.string.ai_mix_generate else R.string.magic_playlist_generate
+                        )
+                    )
                 }
             }
 
@@ -205,10 +256,20 @@ fun MagicPlaylistSheet(
                 HorizontalDivider()
                 Spacer(modifier = Modifier.height(16.dp))
                 Text(
-                    text = stringResource(R.string.magic_playlist_preview),
+                    text = stringResource(
+                        if (isMix) R.string.ai_mix_preview else R.string.magic_playlist_preview
+                    ),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold
                 )
+                if (isMix) {
+                    val added = (result.tracks.size - (baseMix?.tracks?.size ?: 0)).coerceAtLeast(0)
+                    Text(
+                        text = stringResource(R.string.ai_mix_added_count, added),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
                 Spacer(modifier = Modifier.height(8.dp))
                 OutlinedTextField(
                     value = playlistName,
@@ -257,6 +318,26 @@ fun MagicPlaylistSheet(
                     )
                 }
                 Spacer(modifier = Modifier.height(14.dp))
+                if (isMix && onPlayMix != null) {
+                    Button(
+                        onClick = {
+                            onPlayMix(result.tracks)
+                            close()
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("magic_playlist_play")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.PlayArrow,
+                            contentDescription = null,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.size(6.dp))
+                        Text(stringResource(R.string.ai_mix_play))
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
                 Button(
                     onClick = { viewModel.save(playlistName) { close() } },
                     enabled = playlistName.isNotBlank() && !state.isSaving,
@@ -267,7 +348,7 @@ fun MagicPlaylistSheet(
                     Text(stringResource(R.string.magic_playlist_save))
                 }
                 TextButton(
-                    onClick = viewModel::generate,
+                    onClick = generate,
                     enabled = !state.isGenerating,
                     modifier = Modifier.fillMaxWidth()
                 ) {

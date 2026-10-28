@@ -75,6 +75,7 @@ import com.yasinjahantigh.logarhythm.domain.model.DailyMix
 import com.yasinjahantigh.logarhythm.domain.model.Track
 import com.yasinjahantigh.logarhythm.core.utils.rememberMediaStoreConsent
 import com.yasinjahantigh.logarhythm.feature.library.TrackListItem
+import com.yasinjahantigh.logarhythm.feature.ai.MagicPlaylistSheet
 import com.yasinjahantigh.logarhythm.feature.playlist.AddToPlaylistDialog
 import com.yasinjahantigh.logarhythm.feature.playlist.SongMenuBottomSheet
 import com.yasinjahantigh.logarhythm.ui.theme.DisplayFontFamily
@@ -89,6 +90,7 @@ fun HomeScreen(
     modifier: Modifier = Modifier,
     onNavigateToSearch: () -> Unit = {},
     onNavigateToDownload: () -> Unit = {},
+    onNavigateToSettings: () -> Unit = {},
     onNavigateToTagEditor: (String) -> Unit = {},
     viewModel: HomeViewModel = hiltViewModel()
 ) {
@@ -106,6 +108,8 @@ fun HomeScreen(
     var selectedTrackForMenu by remember { mutableStateOf<Track?>(null) }
     var trackForAddToPlaylist by remember { mutableStateOf<Track?>(null) }
     var selectedMixForDetail by remember { mutableStateOf<DailyMix?>(null) }
+    var showMagicPlaylist by remember { mutableStateOf(false) }
+    var aiMixBase by remember { mutableStateOf<DailyMix?>(null) }
     val snackbarHostState = remember { SnackbarHostState() }
     val coroutineScope = rememberCoroutineScope()
     val context = androidx.compose.ui.platform.LocalContext.current
@@ -269,6 +273,15 @@ fun HomeScreen(
 
                     item(key = "download_banner") {
                         HomeDownloadBanner(onClick = onNavigateToDownload)
+                    }
+
+                    item(key = "ai_banner") {
+                        HomeAiBanner(
+                            onClick = {
+                                aiMixBase = null
+                                showMagicPlaylist = true
+                            }
+                        )
                     }
 
                     // One shelf instead of three: recently played / new / on repeat share a row.
@@ -444,7 +457,27 @@ fun HomeScreen(
             onDismiss = { selectedMixForDetail = null },
             onPlayAll = { viewModel.playTracks(mix.tracks, 0) },
             onShufflePlay = { viewModel.playTracks(mix.tracks.shuffled(), 0) },
-            onTrackClick = { index -> viewModel.playTracks(mix.tracks, index) }
+            onTrackClick = { index -> viewModel.playTracks(mix.tracks, index) },
+            onRebuildWithAi = {
+                aiMixBase = mix
+                showMagicPlaylist = true
+            }
+        )
+    }
+
+    if (showMagicPlaylist) {
+        MagicPlaylistSheet(
+            baseMix = aiMixBase,
+            onPlayMix = { tracks -> viewModel.playTracks(tracks, 0) },
+            onDismiss = {
+                showMagicPlaylist = false
+                aiMixBase = null
+            },
+            onOpenSettings = {
+                showMagicPlaylist = false
+                aiMixBase = null
+                onNavigateToSettings()
+            }
         )
     }
 }

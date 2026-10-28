@@ -340,6 +340,7 @@ fun LibraryScreen(
                                         if (selectionMode) toggleSelection(track) else startSelection(track)
                                     },
                                     onToggleSelect = ::toggleSelection,
+                                    onPlayNext = { viewModel.playNext(it) },
                                     filter = uiState.trackFilter,
                                     onFilterChange = viewModel::setTrackFilter
                                 )

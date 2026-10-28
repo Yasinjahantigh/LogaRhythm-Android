@@ -14,8 +14,9 @@ object DownloadMetadataMerge {
         candidates.firstOrNull { !isPlaceholder(it) }?.trim()
 
     /**
-     * Keeps the artist that came from the video itself unless a provider gives a close match.
-     * A compilation or a same-title cover can otherwise replace the real artist.
+     * Keeps the artist that came from the video itself unless a close provider match exists.
+     * A compilation or a same-title cover can otherwise replace the real artist, and a provider
+     * that only knows the lead artist must not erase the featured artists from the source tag.
      */
     fun preferSourceArtist(sourceArtist: String?, vararg providerArtists: String?): String? {
         val source = sourceArtist?.trim()?.takeUnless { isPlaceholder(it) }
@@ -24,8 +25,27 @@ object DownloadMetadataMerge {
             .filter { !isPlaceholder(it) }
             .map { it!!.trim() }
             .maxByOrNull { similarity(it, source) }
-        return if (best != null && similarity(best, source) >= MIN_ARTIST_SIMILARITY) best else source
+            ?: return source
+
+        if (similarity(best, source) < MIN_ARTIST_SIMILARITY) return source
+
+        val sourceNames = namesIn(source)
+        val providerNames = namesIn(best)
+        if (sourceNames.isNotEmpty() && providerNames.isNotEmpty() &&
+            !providerNames.containsAll(sourceNames)
+        ) {
+            return source
+        }
+        return best
     }
+
+    /** Artist names without collaboration words, so "A feat. B" and "A" cannot look equal. */
+    private fun namesIn(value: String): Set<String> =
+        normalize(value).split(' ')
+            .filter { it.isNotBlank() && it !in COLLABORATION_WORDS }
+            .toSet()
+
+    private val COLLABORATION_WORDS = setOf("feat", "ft", "featuring", "and", "with", "x", "vs")
 
     fun normalize(value: String): String =
         value.lowercase()

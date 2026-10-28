@@ -276,6 +276,9 @@ interface MusicDao {
     @Query("SELECT * FROM tracks")
     suspend fun getAllTracksOnce(): List<TrackEntity>
 
+    @Query("SELECT * FROM tracks ORDER BY dateAdded DESC, title COLLATE NOCASE ASC LIMIT :limit")
+    suspend fun getNewestTracksOnce(limit: Int): List<TrackEntity>
+
     @Query("SELECT * FROM play_events")
     suspend fun getAllPlayEventsOnce(): List<PlayEventEntity>
 

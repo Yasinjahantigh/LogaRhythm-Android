@@ -36,7 +36,6 @@ LogaRhythm plays the music that is already on your phone. Playlists, history, ed
 - Playback resumes when headphones reconnect
 - Swipe the player to go to the next or previous track
 - ReplayGain (track and album modes), preamp, 5-band equalizer, bass boost
-- Home screen widget
 
 **Lyrics**
 - Reads lyrics embedded in the file, a `.lrc` file next to it, or fetches them online (LRCLIB, NetEase, Kugou, lyrics.ovh, Genius)
@@ -53,6 +52,7 @@ LogaRhythm plays the music that is already on your phone. Playlists, history, ed
 - Sort by title, artist, album, year, date added, duration, play count, last played, or random
 - Filter by favorites, downloaded, or recently added
 - Multi-select for queueing, playlists, favorites and hiding songs
+- Swipe a song to the right to play it next; it is queued after the current track without interrupting playback
 - Duplicate finder, songs with missing tags, hidden songs, excluded folders
 - Minimum track length, so voice notes and ringtones stay out
 - Artist pages with top songs, albums and appearances; collaborations are split correctly (`feat.`, `&`, commas), and names like *Tyler, The Creator* stay intact
@@ -64,7 +64,8 @@ LogaRhythm plays the music that is already on your phone. Playlists, history, ed
 - Save any mix or the current queue as a playlist
 
 **Download**
-- Search YouTube and SoundCloud and save songs with tags and cover art
+- Search YouTube, SoundCloud and MusicMan (a third-party music server) and save songs with tags and cover art. Choose one source or search all of them; the choice is remembered
+- Progress with remaining time, cancel at any time, and a check that the downloaded file is real audio
 - Download history with play, open and share
 
 **Backup**
@@ -76,7 +77,8 @@ LogaRhythm plays the music that is already on your phone. Playlists, history, ed
 
 **Optional AI playlist**
 - Disabled by default. With your own OpenAI-compatible or Gemini API key, describe a mood and get a playlist built from your own library
-- Only song metadata is sent, only when you tap Generate. The key is stored encrypted on the device
+- Regenerate a daily mix: the current songs stay and the AI adds new ones from your library
+- Only a limited sample of song metadata (title, artist, genre, year) is sent, only when you tap Generate. Album names and file paths are never sent. The key is stored encrypted on the device
 
 Technical details for each feature: [docs/FEATURES.md](docs/FEATURES.md)
 

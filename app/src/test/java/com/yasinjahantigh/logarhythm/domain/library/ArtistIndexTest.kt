@@ -67,4 +67,12 @@ class ArtistIndexTest {
         assertEquals(2, album.trackCount)
         assertEquals(1, index.artistOf("A")?.albumCount)
     }
+
+    @Test
+    fun missingArtistFallsBackToAlbumArtist() {
+        val tracks = listOf(track("1", "", "Album", albumArtist = "Real Artist"))
+        val index = ArtistIndex.build(tracks, ArtistSplitConfig())
+        assertEquals(listOf("Real Artist"), index.artists.map { it.name })
+        assertEquals(1, index.artistOf("Real Artist")?.trackCount)
+    }
 }

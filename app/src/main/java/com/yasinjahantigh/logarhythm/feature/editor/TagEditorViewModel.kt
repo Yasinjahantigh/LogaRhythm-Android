@@ -4,6 +4,7 @@ import android.net.Uri
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.yasinjahantigh.logarhythm.data.download.metadata.MetadataResolver
 import com.yasinjahantigh.logarhythm.domain.model.Track
 import com.yasinjahantigh.logarhythm.domain.model.TrackEdit
 import com.yasinjahantigh.logarhythm.domain.model.TrackEditFailure
@@ -26,7 +27,8 @@ import javax.inject.Inject
 class TagEditorViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val trackRepository: TrackRepository,
-    private val playerController: PlayerController
+    private val playerController: PlayerController,
+    private val metadataResolver: MetadataResolver
 ) : ViewModel() {
 
     val trackId: String = Uri.decode(savedStateHandle.get<String>("trackId").orEmpty())
@@ -46,6 +48,32 @@ class TagEditorViewModel @Inject constructor(
 
     private val savedChannel = Channel<Unit>(Channel.BUFFERED)
     val saved: Flow<Unit> = savedChannel.receiveAsFlow()
+
+    private val _isFilling = MutableStateFlow(false)
+    val isFilling: StateFlow<Boolean> = _isFilling.asStateFlow()
+
+    private val suggestionChannel = Channel<MetadataResolver.Resolved?>(Channel.BUFFERED)
+    val suggestions: Flow<MetadataResolver.Resolved?> = suggestionChannel.receiveAsFlow()
+
+    fun autoFill() {
+        val current = track.value ?: return
+        if (_isFilling.value || !current.id.startsWith("local:")) return
+        viewModelScope.launch {
+            _isFilling.value = true
+            val resolved = try {
+                metadataResolver.resolve(
+                    title = current.title,
+                    artist = current.artist,
+                    durationMs = current.durationMs,
+                    replaceArtist = true
+                )
+            } catch (_: Exception) {
+                null
+            }
+            suggestionChannel.trySend(resolved)
+            _isFilling.value = false
+        }
+    }
 
     fun save(edit: TrackEdit) {
         if (_isSaving.value) return
