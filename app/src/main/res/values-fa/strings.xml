@@ -659,6 +659,13 @@
     <string name="download_notification_channel">دانلودها</string>
     <string name="download_notification_channel_desc">پیشرفت دانلود موسیقی</string>
     <string name="download_notification_title">در حال دانلود %1$s</string>
+    <string name="download_album">دانلود آلبوم</string>
+    <string name="download_album_not_found">این آلبوم در کاتالوگ متادیتا پیدا نشد</string>
+    <string name="download_album_none">آهنگ قابل دانلودی برای این آلبوم پیدا نشد</string>
+    <string name="download_album_queued">%1$s: %2$d آهنگ در صف دانلود قرار گرفت</string>
+    <string name="download_album_partial">%1$s: %2$d در صف، %3$d ناموفق</string>
+    <string name="download_album_notification_title">آلبوم در صف: %1$s</string>
+    <string name="download_album_notification_text">%1$d آهنگ به دانلودها اضافه شد</string>
     <string name="download_notification_done">%1$s ذخیره شد</string>
     <string name="download_notification_failed">دانلود ناموفق: %1$s</string>
 

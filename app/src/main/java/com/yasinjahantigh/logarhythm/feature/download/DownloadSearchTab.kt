@@ -87,6 +87,7 @@ fun DownloadSearchTab(
     preparing: Boolean,
     bottomPadding: Dp,
     onResultClick: (DownloadSearchResult) -> Unit,
+    onDownloadAlbum: (DownloadSearchResult) -> Unit = {},
     onRetry: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -187,7 +188,8 @@ fun DownloadSearchTab(
                     DownloadResultCard(
                         result = result,
                         activeItem = history.firstOrNull { it.sourceUrl == result.url },
-                        onClick = { onResultClick(result) }
+                        onClick = { onResultClick(result) },
+                        onDownloadAlbum = { onDownloadAlbum(result) }
                     )
                 }
             }

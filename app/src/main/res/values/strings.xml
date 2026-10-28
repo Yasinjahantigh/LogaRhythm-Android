@@ -658,6 +658,13 @@
     <string name="download_notification_channel">Downloads</string>
     <string name="download_notification_channel_desc">Progress for music downloads</string>
     <string name="download_notification_title">Downloading %1$s</string>
+    <string name="download_album">Download album</string>
+    <string name="download_album_not_found">Could not find this album in the metadata catalog</string>
+    <string name="download_album_none">No downloadable tracks found for this album</string>
+    <string name="download_album_queued">%1$s: queued %2$d tracks</string>
+    <string name="download_album_partial">%1$s: queued %2$d, failed %3$d</string>
+    <string name="download_album_notification_title">Album queued: %1$s</string>
+    <string name="download_album_notification_text">%1$d tracks added to downloads</string>
     <string name="download_notification_done">%1$s saved</string>
     <string name="download_notification_failed">Download failed: %1$s</string>
 

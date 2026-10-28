@@ -70,6 +70,7 @@ fun DownloadScreen(
     val history by viewModel.history.collectAsStateWithLifecycle()
     val recentSearches by viewModel.recentSearches.collectAsStateWithLifecycle()
     val sourceFilter by viewModel.sourceFilter.collectAsStateWithLifecycle()
+    val albumSummary by viewModel.albumSummary.collectAsStateWithLifecycle()
     val preparing by viewModel.preparing.collectAsStateWithLifecycle()
     val updateState by viewModel.updateState.collectAsStateWithLifecycle()
     val version by viewModel.ytdlpVersion.collectAsStateWithLifecycle()
@@ -79,6 +80,21 @@ fun DownloadScreen(
     val haptics = LocalHapticFeedback.current
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
+
+    LaunchedEffect(albumSummary) {
+        val summary = albumSummary ?: return@LaunchedEffect
+        Toast.makeText(
+            context,
+            when {
+                !summary.found -> context.getString(R.string.download_album_not_found)
+                summary.queued == 0 -> context.getString(R.string.download_album_none)
+                summary.failed > 0 -> context.getString(R.string.download_album_partial, summary.album, summary.queued, summary.failed)
+                else -> context.getString(R.string.download_album_queued, summary.album, summary.queued)
+            },
+            Toast.LENGTH_LONG
+        ).show()
+        viewModel.clearAlbumSummary()
+    }
 
     var selectedTab by rememberSaveable { mutableIntStateOf(0) }
     var showSettings by rememberSaveable { mutableStateOf(false) }
@@ -233,6 +249,7 @@ fun DownloadScreen(
                             preparing = preparing,
                             bottomPadding = bottomPadding,
                             onResultClick = { startDownload(it) },
+                            onDownloadAlbum = viewModel::downloadAlbum,
                             onRetry = { viewModel.search() }
                         )
                     } else {
