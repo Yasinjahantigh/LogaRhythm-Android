@@ -110,6 +110,34 @@ class MusicDaoTest {
         assertEquals(2, folders[0].trackCount)
     }
 
+    private suspend fun insertSameNamedAlbums() {
+        val base = TrackEntity("local:21", "One", "Guest A", "Same", 1000, null, SourceType.LOCAL.prefix, "content://media/21", albumArtist = "Group")
+        dao.insertTracks(listOf(base, base.copy(id = "local:22", title = "Two", artist = "Guest B"), base.copy(id = "local:23", artist = "Other", albumArtist = "")))
+    }
+
+    @Test
+    fun albumsGroupByAlbumArtistAndFallbackArtist() = runBlocking {
+        insertSameNamedAlbums()
+        assertEquals(mapOf("Group" to 2, "Other" to 1), dao.getAllAlbums().first().associate { it.artist to it.trackCount })
+    }
+
+    @Test
+    fun albumPageUsesBothKeys() = runBlocking {
+        insertSameNamedAlbums()
+        assertEquals(listOf("local:21", "local:22"), dao.getTracksByAlbum("Same", "Group").first().map { it.id })
+        assertEquals(1, dao.getAlbumByName("Same", "Other").first()?.trackCount)
+        assertEquals(null, dao.getAlbumByName("Same", "Missing").first())
+    }
+
+    @Test
+    fun albumSearchMatchesGroupingAndAlbumArtist() = runBlocking {
+        insertSameNamedAlbums()
+        assertEquals(dao.getAllAlbums().first(), dao.searchAlbums("Same", "Same").first())
+        val group = dao.searchAlbums("Group", "Group").first().single()
+        assertEquals("Group", group.artist)
+        assertEquals(2, group.trackCount)
+    }
+
     @Test
     fun searchTracks_matchesPersianTextWithNormalization() = runBlocking {
         // Track stored with Persian Yeh
