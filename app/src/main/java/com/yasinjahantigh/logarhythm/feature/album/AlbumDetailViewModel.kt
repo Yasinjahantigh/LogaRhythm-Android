@@ -1,6 +1,5 @@
 package com.yasinjahantigh.logarhythm.feature.album
 
-import android.net.Uri
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -22,17 +21,17 @@ class AlbumDetailViewModel @Inject constructor(
     private val playerController: PlayerController
 ) : ViewModel() {
 
-    private val rawAlbumName: String = savedStateHandle.get<String>("albumName").orEmpty()
-    val albumName: String = Uri.decode(rawAlbumName)
+    val albumName: String = savedStateHandle.get<String>("albumName").orEmpty()
+    private val albumArtist: String = savedStateHandle.get<String>("albumArtist").orEmpty()
 
-    val album: StateFlow<Album?> = trackRepository.getAlbumByName(albumName)
+    val album: StateFlow<Album?> = trackRepository.getAlbumByName(albumName, albumArtist)
         .stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5000),
             initialValue = null
         )
 
-    val tracks: StateFlow<List<Track>> = trackRepository.getTracksByAlbum(albumName)
+    val tracks: StateFlow<List<Track>> = trackRepository.getTracksByAlbum(albumName, albumArtist)
         .stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5000),

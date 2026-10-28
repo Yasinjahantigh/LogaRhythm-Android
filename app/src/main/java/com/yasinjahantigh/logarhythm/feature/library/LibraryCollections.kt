@@ -100,7 +100,7 @@ fun LibraryEmptyHint(
 @Composable
 fun AlbumsTabContent(
     albums: List<Album>,
-    onAlbumClick: (String) -> Unit,
+    onAlbumClick: (String, String) -> Unit,
     modifier: Modifier = Modifier
 ) {
     if (albums.isEmpty()) {
@@ -126,7 +126,7 @@ fun AlbumsTabContent(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(24.dp))
-                    .clickable { onAlbumClick(album.name) }
+                    .clickable { onAlbumClick(album.name, album.artist) }
             ) {
                 Box(modifier = Modifier.fillMaxWidth().aspectRatio(1f)) {
                     ArtworkImage(
