@@ -30,6 +30,9 @@ import com.yasinjahantigh.logarhythm.R
 import java.util.Locale
 import kotlin.math.roundToInt
 
+internal fun roundedPlaybackSpeed(speed: Float): Float =
+    (speed.coerceIn(0.5f, 2f) * 20f).roundToInt() / 20f
+
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun PlaybackSpeedDialog(
@@ -38,6 +41,7 @@ fun PlaybackSpeedDialog(
     onDismiss: () -> Unit
 ) {
     val presetSpeeds = listOf(0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 1.75f, 2.0f)
+    val selectedSpeed = roundedPlaybackSpeed(currentSpeed)
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -63,7 +67,7 @@ fun PlaybackSpeedDialog(
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Text(
-                    text = String.format(Locale.US, "%.2fx", currentSpeed),
+                    text = stringResource(R.string.speed_multiplier, String.format(Locale.US, "%.2f", selectedSpeed)),
                     style = MaterialTheme.typography.headlineMedium,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.primary,
@@ -71,11 +75,8 @@ fun PlaybackSpeedDialog(
                 )
 
                 Slider(
-                    value = currentSpeed,
-                    onValueChange = { newSpeed ->
-                        val rounded = (newSpeed * 20f).roundToInt() / 20f
-                        onSpeedSelected(rounded.coerceIn(0.5f, 2.0f))
-                    },
+                    value = selectedSpeed,
+                    onValueChange = { onSpeedSelected(roundedPlaybackSpeed(it)) },
                     valueRange = 0.5f..2.0f,
                     steps = 29,
                     modifier = Modifier
@@ -88,7 +89,6 @@ fun PlaybackSpeedDialog(
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Text(text = stringResource(R.string.speed_multiplier, "0.5"), style = MaterialTheme.typography.labelSmall)
-                    Text(text = stringResource(R.string.speed_multiplier, "1.0"), style = MaterialTheme.typography.labelSmall)
                     Text(text = stringResource(R.string.speed_multiplier, "2.0"), style = MaterialTheme.typography.labelSmall)
                 }
 
@@ -100,11 +100,11 @@ fun PlaybackSpeedDialog(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     presetSpeeds.forEach { speed ->
-                        val isSelected = kotlin.math.abs(currentSpeed - speed) < 0.03f
+                        val isSelected = selectedSpeed == speed
                         FilterChip(
                             selected = isSelected,
                             onClick = { onSpeedSelected(speed) },
-                            label = { Text(text = "${speed}x") },
+                            label = { Text(text = stringResource(R.string.speed_multiplier, speed.toString())) },
                             modifier = Modifier.testTag("speed_chip_$speed")
                         )
                     }
