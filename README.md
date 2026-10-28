@@ -34,18 +34,23 @@ LogaRhythm plays the music that is already on your phone. Playlists, history, ed
 - Sleep timer by minutes or by number of tracks
 - Resume position saved for long tracks (over 20 minutes), such as podcasts and mixes
 - Playback resumes when headphones reconnect
-- Swipe the player to go to the next or previous track
+- Swipe the cover to preview the next or previous track; the song changes only when you swipe far enough and release
+- Shuffle can be turned on or off without interrupting the current song
 - ReplayGain (track and album modes), preamp, 5-band equalizer, bass boost
+- Home screen widgets in five sizes: 2×2 cover, 4×1 compact, 4×2 with progress, 4×4 with an up-next queue, and a 4×4 artwork player with theme-matched controls
 
 **Lyrics**
 - Reads lyrics embedded in the file, a `.lrc` file next to it, or fetches them online (LRCLIB, NetEase, Kugou, lyrics.ovh, Genius)
 - Synced scrolling, timing adjustment, manual editing, import and export
 - Wrong match? Search with your own title and artist and pick the right result
 - Each online source can be turned off, and you can use your own lyrics server
+- If Genius blocks a request, the lyrics are taken from lyrics.ovh and labeled as a fallback
 
 **Tag and cover editor**
 - Edit title, artist, album, album artist, genre, year, track and disc number, composer
 - Change, crop or remove the cover art
+- Fill title, artist, album, year and track number automatically from online metadata
+- Find cover art online (iTunes, Deezer), then crop it
 - Supports MP3, FLAC, Ogg and M4A; changes are verified before the original file is replaced
 
 **Library**
@@ -54,6 +59,8 @@ LogaRhythm plays the music that is already on your phone. Playlists, history, ed
 - Multi-select for queueing, playlists, favorites and hiding songs
 - Swipe a song to the right to play it next; it is queued after the current track without interrupting playback
 - Duplicate finder, songs with missing tags, hidden songs, excluded folders
+- Fix names: review suggested before/after corrections for titles and artists, and apply them per track
+- Albums with the same name by different artists stay separate
 - Minimum track length, so voice notes and ringtones stay out
 - Artist pages with top songs, albums and appearances; collaborations are split correctly (`feat.`, `&`, commas), and names like *Tyler, The Creator* stay intact
 
@@ -65,6 +72,7 @@ LogaRhythm plays the music that is already on your phone. Playlists, history, ed
 
 **Download**
 - Search YouTube, SoundCloud and MusicMan (a third-party music server) and save songs with tags and cover art. Choose one source or search all of them; the choice is remembered
+- Download a whole album from a search result: review the track list, pick which songs to keep (all selected by default), then queue them with duplicate detection and a summary notification
 - Progress with remaining time, cancel at any time, and a check that the downloaded file is real audio
 - Download history with play, open and share
 

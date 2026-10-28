@@ -73,7 +73,7 @@ import kotlinx.coroutines.launch
 @Composable
 fun LibraryScreen(
     modifier: Modifier = Modifier,
-    onNavigateToAlbum: (String) -> Unit = {},
+    onNavigateToAlbum: (String, String) -> Unit = { _, _ -> },
     onNavigateToArtist: (String) -> Unit = {},
     onNavigateToFolder: (String) -> Unit = {},
     onNavigateToGenre: (String) -> Unit = {},
@@ -224,7 +224,7 @@ fun LibraryScreen(
             },
             onEditTrack = { onNavigateToTagEditor(track.id) },
             onGoToAlbum = if (track.album.isNotBlank() && track.album != "Unknown Album") {
-                { onNavigateToAlbum(track.album) }
+                { onNavigateToAlbum(track.album, track.albumArtist.ifBlank { track.artist }) }
             } else null,
             onGoToArtist = if (track.artist.isNotBlank() && track.artist != "Unknown Artist") {
                 { artistName -> onNavigateToArtist(artistName) }

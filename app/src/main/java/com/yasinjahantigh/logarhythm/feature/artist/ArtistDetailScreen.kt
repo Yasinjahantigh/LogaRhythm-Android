@@ -52,7 +52,7 @@ import com.yasinjahantigh.logarhythm.ui.components.cleanMetaOrNull
 fun ArtistDetailScreen(
     onNavigateBack: () -> Unit,
     modifier: Modifier = Modifier,
-    onNavigateToAlbum: ((String) -> Unit)? = null,
+    onNavigateToAlbum: ((String, String) -> Unit)? = null,
     onNavigateToArtist: ((String) -> Unit)? = null,
     viewModel: ArtistDetailViewModel = hiltViewModel(),
     playlistViewModel: PlaylistViewModel = hiltViewModel()
@@ -80,7 +80,7 @@ fun ArtistDetailScreen(
             onAddToQueue = { viewModel.addToQueue(menuTrack) },
             onAddToPlaylist = { showAddToPlaylistDialog = true },
             onGoToAlbum = if (onNavigateToAlbum != null && menuTrack.album.isNotBlank() && menuTrack.album != "Unknown Album") {
-                { onNavigateToAlbum(menuTrack.album) }
+                { onNavigateToAlbum(menuTrack.album, menuTrack.albumArtist.ifBlank { menuTrack.artist }) }
             } else null,
             onGoToArtist = if (onNavigateToArtist != null && menuTrack.artist.isNotBlank() && menuTrack.artist != "Unknown Artist") {
                 { artistName -> onNavigateToArtist(artistName) }
@@ -238,13 +238,13 @@ private fun ArtistSectionHeader(title: String) {
 }
 
 @Composable
-private fun ArtistAlbumCard(album: Album, onNavigateToAlbum: ((String) -> Unit)?) {
+private fun ArtistAlbumCard(album: Album, onNavigateToAlbum: ((String, String) -> Unit)?) {
     val name = album.name.cleanMetaOrNull() ?: stringResource(R.string.unknown_album)
     Column(
         modifier = Modifier
             .width(138.dp)
             .clip(RoundedCornerShape(18.dp))
-            .clickable(enabled = onNavigateToAlbum != null) { onNavigateToAlbum?.invoke(album.name) }
+            .clickable(enabled = onNavigateToAlbum != null) { onNavigateToAlbum?.invoke(album.name, album.artist) }
     ) {
         ArtworkImage(
             uri = album.artworkUri,

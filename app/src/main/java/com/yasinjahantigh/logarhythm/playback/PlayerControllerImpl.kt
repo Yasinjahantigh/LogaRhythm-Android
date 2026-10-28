@@ -62,6 +62,8 @@ class PlayerControllerImpl @Inject constructor(
 
     private val _queue = MutableStateFlow<List<Track>>(emptyList())
     override val queue: StateFlow<List<Track>> = _queue.asStateFlow()
+    private val _queueIndex = MutableStateFlow(-1)
+    override val queueIndex: StateFlow<Int> = _queueIndex.asStateFlow()
 
     private val _playbackSpeed = MutableStateFlow(1.0f)
     override val playbackSpeed: StateFlow<Float> = _playbackSpeed.asStateFlow()
@@ -115,7 +117,11 @@ class PlayerControllerImpl @Inject constructor(
                 com.yasinjahantigh.logarhythm.widget.MusicWidgetUpdater.requestUpdate(context)
                 if (!playing) saveQueueState()
             }
+            override fun onTimelineChanged(timeline: androidx.media3.common.Timeline, reason: Int) {
+                _queueIndex.value = controller.currentMediaItemIndex
+            }
             override fun onMediaItemTransition(item: MediaItem?, reason: Int) {
+                _queueIndex.value = controller.currentMediaItemIndex
                 onTrackChanged(item)
                 saveQueueState()
             }
@@ -123,13 +129,13 @@ class PlayerControllerImpl @Inject constructor(
                 _isPlaying.value = controller.isPlaying
                 if (controller.duration > 0L) _duration.value = controller.duration
             }
-            override fun onShuffleModeEnabledChanged(enabled: Boolean) { _shuffle.value = enabled }
             override fun onRepeatModeChanged(mode: Int) { _repeatMode.value = mode }
             override fun onPlaybackParametersChanged(parameters: PlaybackParameters) {
                 _playbackSpeed.value = parameters.speed
             }
         })
-        _shuffle.value = controller.shuffleModeEnabled
+        controller.shuffleModeEnabled = false
+        _queueIndex.value = controller.currentMediaItemIndex
         _repeatMode.value = controller.repeatMode
         _isPlaying.value = controller.isPlaying
         _playbackSpeed.value = controller.playbackParameters.speed
@@ -145,8 +151,10 @@ class PlayerControllerImpl @Inject constructor(
     private fun restoreSavedQueue(controller: MediaController) {
         scope.launch {
             val restored = queuePersistenceManager.restoreQueue() ?: return@launch
+            if (controller.mediaItemCount != 0 || _queue.value.isNotEmpty()) return@launch
             _queue.value = restored.tracks
-            originalQueue = restored.tracks
+            _shuffle.value = restored.shuffle
+            originalQueue = restored.originalTracks
             restored.tracks.forEach { trackMap[it.id] = it }
             val track = restored.tracks.getOrNull(restored.currentIndex)
             _currentTrack.value = track
@@ -193,7 +201,9 @@ class PlayerControllerImpl @Inject constructor(
         val q = _queue.value
         val idx = mediaController?.currentMediaItemIndex ?: 0
         val pos = _position.value
-        scope.launch { queuePersistenceManager.saveQueue(q, idx, pos) }
+        val shuffled = _shuffle.value
+        val original = originalQueue
+        scope.launch { queuePersistenceManager.saveQueue(q, idx, pos, shuffled, original) }
         com.yasinjahantigh.logarhythm.widget.MusicWidgetUpdater.requestUpdate(context)
     }
 
@@ -291,11 +301,10 @@ class PlayerControllerImpl @Inject constructor(
         applyShuffleMode(newMode, controller)
     }
 
-    override fun setShuffleEnabled(enabled: Boolean) = execute { controller ->
-        if (_shuffle.value != enabled) {
-            _shuffle.value = enabled
-            applyShuffleMode(enabled, controller)
-        }
+    override fun setShuffleEnabled(enabled: Boolean) {
+        if (_shuffle.value == enabled) return
+        _shuffle.value = enabled
+        execute { applyShuffleMode(enabled, it) }
     }
 
     override fun reshuffleQueue() = execute { controller ->
@@ -306,36 +315,32 @@ class PlayerControllerImpl @Inject constructor(
     private fun applyShuffleMode(enabled: Boolean, controller: MediaController) {
         val current = _currentTrack.value
         val pos = _position.value
-
-        if (enabled) {
-            if (originalQueue.isEmpty() && _queue.value.isNotEmpty()) {
-                originalQueue = _queue.value
-            }
-            val sourceList = if (originalQueue.isNotEmpty()) originalQueue else _queue.value
-            if (sourceList.isEmpty()) return
-
-            val otherTracks = sourceList.filter { it.id != current?.id }.shuffled()
-            val newQueue = if (current != null) listOf(current) + otherTracks else otherTracks
-
-            _queue.value = newQueue
-            newQueue.forEach { trackMap[it.id] = it }
-            val mediaItems = newQueue.map { MediaItemMapper.toMediaItem(it) }
-            controller.shuffleModeEnabled = false
-            controller.setMediaItems(mediaItems, 0, pos)
-            saveQueueState()
-        } else {
-            if (originalQueue.isNotEmpty()) {
-                val origIndex = if (current != null) {
-                    originalQueue.indexOfFirst { it.id == current.id }.coerceAtLeast(0)
-                } else 0
-                _queue.value = originalQueue
-                originalQueue.forEach { trackMap[it.id] = it }
-                val mediaItems = originalQueue.map { MediaItemMapper.toMediaItem(it) }
-                controller.shuffleModeEnabled = false
-                controller.setMediaItems(mediaItems, origIndex, pos)
-                saveQueueState()
-            }
+        if (originalQueue.isEmpty() && _queue.value.isNotEmpty()) originalQueue = _queue.value
+        val source = when {
+            originalQueue.isEmpty() -> return
+            enabled -> originalQueue.shuffled()
+            else -> originalQueue
         }
+        val index = controller.currentMediaItemIndex
+        val newQueue = if (current != null && index in source.indices) {
+            pinQueueItem(source, current, index)
+        } else {
+            source
+        }
+        _queue.value = newQueue
+        newQueue.forEach { trackMap[it.id] = it }
+        controller.shuffleModeEnabled = false
+        val canSplice = controller.mediaItemCount == _queue.value.size &&
+            index in newQueue.indices && controller.currentMediaItem?.mediaId == current?.id
+        if (canSplice) {
+            controller.removeMediaItems(index + 1, controller.mediaItemCount)
+            controller.addMediaItems(index + 1, newQueue.drop(index + 1).map(MediaItemMapper::toMediaItem))
+            controller.addMediaItems(0, newQueue.take(index).map(MediaItemMapper::toMediaItem))
+            controller.removeMediaItems(index, index * 2)
+        } else {
+            controller.setMediaItems(newQueue.map(MediaItemMapper::toMediaItem), 0, pos)
+        }
+        saveQueueState()
     }
 
     override fun cycleRepeat() = execute {
@@ -361,7 +366,8 @@ class PlayerControllerImpl @Inject constructor(
         if (_queue.value.isEmpty()) { play(listOf(track), 0); return }
         val currentQueue = _queue.value.toMutableList()
         val currentIndex = mediaController?.currentMediaItemIndex ?: 0
-        val nextIndex = (currentIndex + 1).coerceAtMost(currentQueue.size)
+        val nextIndex = (currentIndex + 1).coerceIn(0, currentQueue.size)
+        originalQueue = insertOriginal(originalQueue, currentQueue, nextIndex, track)
         currentQueue.add(nextIndex, track)
         _queue.value = currentQueue
         trackMap[track.id] = track
@@ -372,6 +378,7 @@ class PlayerControllerImpl @Inject constructor(
         if (_queue.value.isEmpty()) { play(listOf(track), 0); return }
         val currentQueue = _queue.value.toMutableList()
         currentQueue.add(track)
+        originalQueue = originalQueue + track
         _queue.value = currentQueue
         trackMap[track.id] = track
         execute { it.addMediaItem(MediaItemMapper.toMediaItem(track)); saveQueueState() }
@@ -380,6 +387,8 @@ class PlayerControllerImpl @Inject constructor(
     override fun removeFromQueue(index: Int): Track? {
         val currentQueue = _queue.value.toMutableList()
         if (index !in currentQueue.indices) return null
+        val originalIndex = originalOccurrence(originalQueue, currentQueue, index)
+        originalQueue = originalQueue.filterIndexed { i, _ -> i != originalIndex }
         val removed = currentQueue.removeAt(index)
         _queue.value = currentQueue
         execute { if (index < it.mediaItemCount) it.removeMediaItem(index); saveQueueState() }
@@ -389,6 +398,7 @@ class PlayerControllerImpl @Inject constructor(
     override fun insertIntoQueue(index: Int, track: Track) {
         val currentQueue = _queue.value.toMutableList()
         val safeIndex = index.coerceIn(0, currentQueue.size)
+        originalQueue = insertOriginal(originalQueue, currentQueue, safeIndex, track)
         currentQueue.add(safeIndex, track)
         _queue.value = currentQueue
         trackMap[track.id] = track
@@ -398,7 +408,10 @@ class PlayerControllerImpl @Inject constructor(
     override fun moveQueueItem(fromIndex: Int, toIndex: Int) {
         val currentQueue = _queue.value.toMutableList()
         if (fromIndex !in currentQueue.indices || toIndex !in currentQueue.indices || fromIndex == toIndex) return
+        val originalIndex = originalOccurrence(originalQueue, currentQueue, fromIndex)
+        originalQueue = originalQueue.filterIndexed { i, _ -> i != originalIndex }
         val item = currentQueue.removeAt(fromIndex)
+        originalQueue = insertOriginal(originalQueue, currentQueue, toIndex, item)
         currentQueue.add(toIndex, item)
         _queue.value = currentQueue
         execute { it.moveMediaItem(fromIndex, toIndex); saveQueueState() }

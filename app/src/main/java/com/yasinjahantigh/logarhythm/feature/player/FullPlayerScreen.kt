@@ -76,6 +76,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
@@ -156,6 +157,8 @@ fun FullPlayerScreen(
     }
 
     val currentTrack by viewModel.currentTrack.collectAsStateWithLifecycle()
+    val queue by viewModel.queue.collectAsStateWithLifecycle()
+    val queueIndex by viewModel.queueIndex.collectAsStateWithLifecycle()
     val isPlaying by viewModel.isPlaying.collectAsStateWithLifecycle()
     // Deliberately NOT read here: position ticks twice a second and would recompose this whole screen.
     val positionState = viewModel.position.collectAsStateWithLifecycle()
@@ -329,8 +332,9 @@ fun FullPlayerScreen(
                             isVinylMode = isVinylMode,
                             glowColor = animatedBgColor,
                             swipeRightForNext = swipeRightForNext,
-                            onSwipeNext = viewModel::next,
-                            onSwipePrevious = viewModel::previous,
+                            queue = queue,
+                            currentIndex = queueIndex,
+                            onCommit = viewModel::commitCoverPeek,
                             onArtworkClick = { showFullArtworkDialog = true },
                             modifier = Modifier.size(artworkSize)
                         )
@@ -574,14 +578,16 @@ private fun PlayerArtwork(
     isVinylMode: Boolean,
     glowColor: Color,
     swipeRightForNext: Boolean,
-    onSwipeNext: () -> Unit,
-    onSwipePrevious: () -> Unit,
+    queue: List<Track>,
+    currentIndex: Int,
+    onCommit: (Int, Int) -> Unit,
     onArtworkClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val scope = rememberCoroutineScope()
     val haptic = LocalHapticFeedback.current
-    val dragX = remember { Animatable(0f) }
+    val isRtl = LocalLayoutDirection.current == LayoutDirection.Rtl
+    val dragX = remember(currentIndex, queue) { Animatable(0f) }
+    var coverWidth by remember { mutableFloatStateOf(0f) }
     val scale by animateFloatAsState(
         targetValue = if (isPlaying) 1f else 0.9f,
         animationSpec = spring(dampingRatio = 0.72f, stiffness = 180f),
@@ -590,35 +596,69 @@ private fun PlayerArtwork(
     val shape = RoundedCornerShape(36.dp)
     val title = track?.title.cleanMetaOrNull() ?: stringResource(R.string.unknown_title)
 
-    Box(modifier = modifier, contentAlignment = Alignment.Center) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .offset { IntOffset(dragX.value.roundToInt(), 0) }
-                .graphicsLayer {
-                    scaleX = scale
-                    scaleY = scale
-                }
-                .pointerInput(Unit) {
+    Box(
+        modifier = modifier
+            .clip(androidx.compose.ui.graphics.RectangleShape)
+            .onSizeChanged { coverWidth = it.width.toFloat() }
+            .pointerInput(currentIndex, queue, swipeRightForNext, isRtl) {
+                kotlinx.coroutines.coroutineScope {
+                    var distance = 0f
+                    var motion: kotlinx.coroutines.Job? = null
                     detectHorizontalDragGestures(
+                        onDragStart = { motion?.cancel(); distance = dragX.value },
                         onDragEnd = {
-                            scope.launch {
-                                val dx = dragX.value
-                                if (abs(dx) > 120f) {
+                            motion = launch {
+                                val target = coverPeekTarget(distance, coverWidth, currentIndex, queue.size, swipeRightForNext, isRtl, true)
+                                if (target != null) {
+                                    dragX.animateTo(if (distance > 0) coverWidth else -coverWidth, tween(160))
                                     haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                    val forward = if (swipeRightForNext) dx > 0 else dx < 0
-                                    if (forward) onSwipeNext() else onSwipePrevious()
-                                }
-                                dragX.animateTo(0f, spring())
+                                    onCommit(currentIndex, target)
+                                    dragX.snapTo(0f)
+                                } else dragX.animateTo(0f, spring())
                             }
                         },
-                        onDragCancel = { scope.launch { dragX.animateTo(0f, spring()) } },
+                        onDragCancel = { motion = launch { dragX.animateTo(0f, spring()) } },
                         onHorizontalDrag = { change, amount ->
                             change.consume()
-                            scope.launch { dragX.snapTo((dragX.value + amount).coerceIn(-200f, 200f)) }
+                            val proposed = (distance + amount).coerceIn(-coverWidth, coverWidth)
+                            distance = if (coverPeekTarget(proposed, coverWidth, currentIndex, queue.size, swipeRightForNext, isRtl, false) != null) proposed else 0f
+                            launch { dragX.snapTo(distance) }
                         }
                     )
-                },
+                }
+            },
+        contentAlignment = Alignment.Center
+    ) {
+        val peekIndex = coverPeekTarget(dragX.value, coverWidth, currentIndex, queue.size, swipeRightForNext, isRtl, false)
+        if (peekIndex != null) {
+            val neighbour = queue[peekIndex]
+            Box(Modifier.fillMaxSize().graphicsLayer {
+                translationX = dragX.value + if (dragX.value > 0) -coverWidth else coverWidth
+                scaleX = scale
+                scaleY = scale
+            }) {
+                ArtworkImage(
+                    uri = neighbour.artworkUri, fallbackKey = neighbour.title, shape = shape,
+                    glyphSize = 96.sp, contentDescription = stringResource(R.string.cd_artwork, neighbour.title),
+                    modifier = Modifier.fillMaxSize()
+                )
+                Text(
+                    text = neighbour.title,
+                    color = Color.White,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth()
+                        .background(Color.Black.copy(alpha = 0.65f)).padding(16.dp)
+                )
+            }
+        }
+        Box(
+            modifier = Modifier.fillMaxSize().graphicsLayer {
+                translationX = dragX.value
+                scaleX = scale
+                scaleY = scale
+            },
             contentAlignment = Alignment.Center
         ) {
             if (isVinylMode) {

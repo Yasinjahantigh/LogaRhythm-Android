@@ -22,13 +22,26 @@ import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import com.yasinjahantigh.logarhythm.data.download.metadata.DeezerClient
+import com.yasinjahantigh.logarhythm.data.download.metadata.ItunesClient
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import okhttp3.OkHttpClient
+import okhttp3.Request
+
+data class CoverCandidate(val url: String, val title: String, val artist: String)
 
 @HiltViewModel
 class TagEditorViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val trackRepository: TrackRepository,
     private val playerController: PlayerController,
-    private val metadataResolver: MetadataResolver
+    private val metadataResolver: MetadataResolver,
+    private val itunesClient: ItunesClient,
+    private val deezerClient: DeezerClient,
+    private val httpClient: OkHttpClient
 ) : ViewModel() {
 
     val trackId: String = Uri.decode(savedStateHandle.get<String>("trackId").orEmpty())
@@ -96,6 +109,59 @@ class TagEditorViewModel @Inject constructor(
                 _isSaving.value = false
             }
         }
+    }
+
+    private val _coverCandidates = MutableStateFlow<List<CoverCandidate>?>(null)
+    val coverCandidates: StateFlow<List<CoverCandidate>?> = _coverCandidates.asStateFlow()
+    private val _findingCovers = MutableStateFlow(false)
+    val findingCovers: StateFlow<Boolean> = _findingCovers.asStateFlow()
+    private val _selectedCover = MutableStateFlow<Bitmap?>(null)
+    val selectedCover: StateFlow<Bitmap?> = _selectedCover.asStateFlow()
+
+    fun findCovers() {
+        val current = track.value ?: return
+        if (_findingCovers.value) return
+        viewModelScope.launch {
+            _findingCovers.value = true
+            _coverCandidates.value = emptyList()
+            val title = current.title
+            val artist = current.artist
+            val itunes = runCatching { itunesClient.searchCandidates(title, artist) }.getOrDefault(emptyList())
+                .map { CoverCandidate(it.url, it.title, it.artist) }
+            val deezer = runCatching { deezerClient.searchCandidates(title, artist) }.getOrDefault(emptyList())
+                .map { CoverCandidate(it.url, it.title, it.artist) }
+            _coverCandidates.value = (itunes + deezer)
+                .distinctBy { it.url }
+                .take(10)
+            _findingCovers.value = false
+        }
+    }
+
+    fun dismissCovers() {
+        _coverCandidates.value = null
+    }
+
+    fun chooseCover(url: String) {
+        if (_selectedCover.value != null) return
+        viewModelScope.launch {
+            val bitmap = withContext(Dispatchers.IO) {
+                runCatching {
+                    httpClient.newCall(Request.Builder().url(url).build()).execute().use { response ->
+                        if (!response.isSuccessful) return@use null
+                        val bytes = response.body?.bytes() ?: return@use null
+                        BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                    }
+                }.getOrNull()
+            }
+            if (bitmap != null) {
+                _selectedCover.value = bitmap
+                _coverCandidates.value = null
+            }
+        }
+    }
+
+    fun clearSelectedCover() {
+        _selectedCover.value = null
     }
 
     fun onConsentDenied() {
