@@ -123,13 +123,12 @@ class PlayerControllerImpl @Inject constructor(
                 _isPlaying.value = controller.isPlaying
                 if (controller.duration > 0L) _duration.value = controller.duration
             }
-            override fun onShuffleModeEnabledChanged(enabled: Boolean) { _shuffle.value = enabled }
             override fun onRepeatModeChanged(mode: Int) { _repeatMode.value = mode }
             override fun onPlaybackParametersChanged(parameters: PlaybackParameters) {
                 _playbackSpeed.value = parameters.speed
             }
         })
-        _shuffle.value = controller.shuffleModeEnabled
+        controller.shuffleModeEnabled = false
         _repeatMode.value = controller.repeatMode
         _isPlaying.value = controller.isPlaying
         _playbackSpeed.value = controller.playbackParameters.speed
@@ -145,8 +144,10 @@ class PlayerControllerImpl @Inject constructor(
     private fun restoreSavedQueue(controller: MediaController) {
         scope.launch {
             val restored = queuePersistenceManager.restoreQueue() ?: return@launch
+            if (controller.mediaItemCount != 0 || _queue.value.isNotEmpty()) return@launch
             _queue.value = restored.tracks
-            originalQueue = restored.tracks
+            _shuffle.value = restored.shuffle
+            originalQueue = restored.originalTracks
             restored.tracks.forEach { trackMap[it.id] = it }
             val track = restored.tracks.getOrNull(restored.currentIndex)
             _currentTrack.value = track
@@ -193,7 +194,9 @@ class PlayerControllerImpl @Inject constructor(
         val q = _queue.value
         val idx = mediaController?.currentMediaItemIndex ?: 0
         val pos = _position.value
-        scope.launch { queuePersistenceManager.saveQueue(q, idx, pos) }
+        val shuffled = _shuffle.value
+        val original = originalQueue
+        scope.launch { queuePersistenceManager.saveQueue(q, idx, pos, shuffled, original) }
         com.yasinjahantigh.logarhythm.widget.MusicWidgetUpdater.requestUpdate(context)
     }
 

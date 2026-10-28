@@ -25,7 +25,9 @@ import javax.inject.Singleton
 data class SavedQueueState(
     val trackIds: List<String>,
     val currentIndex: Int,
-    val positionMs: Long
+    val positionMs: Long,
+    val shuffle: Boolean,
+    val originalTrackIds: List<String>
 )
 
 /** Raw AI settings; the API key is kept separately in the encrypted [com.yasinjahantigh.logarhythm.data.ai.AiKeyStore]. */
@@ -74,6 +76,8 @@ class PreferencesManager @Inject constructor(
     private val keyQueueTrackIds = stringPreferencesKey("key_queue_track_ids")
     private val keyQueueCurrentIndex = intPreferencesKey("key_queue_current_index")
     private val keyQueuePositionMs = longPreferencesKey("key_queue_position_ms")
+    private val keyQueueShuffle = booleanPreferencesKey("key_queue_shuffle")
+    private val keyQueueOriginalIds = stringPreferencesKey("key_queue_original_ids")
     private val keyLrclibEnabled = booleanPreferencesKey("key_lrclib_enabled")
     private val keyGeniusEnabled = booleanPreferencesKey("key_genius_enabled")
     private val keyNeteaseEnabled = booleanPreferencesKey("key_netease_enabled")
@@ -439,14 +443,20 @@ class PreferencesManager @Inject constructor(
         val ids = if (raw.isBlank()) emptyList() else raw.split("\n").filter { it.isNotBlank() }
         val index = preferences[keyQueueCurrentIndex] ?: 0
         val pos = preferences[keyQueuePositionMs] ?: 0L
-        SavedQueueState(ids, index, pos)
+        val originalIds = preferences[keyQueueOriginalIds]?.split("\n")?.filter { it.isNotBlank() } ?: ids
+        SavedQueueState(ids, index, pos, preferences[keyQueueShuffle] ?: false, originalIds)
     }
 
-    suspend fun saveQueue(trackIds: List<String>, currentIndex: Int, positionMs: Long) {
+    suspend fun saveQueue(
+        trackIds: List<String>, currentIndex: Int, positionMs: Long,
+        shuffle: Boolean, originalTrackIds: List<String>
+    ) {
         dataStore.edit { preferences ->
             preferences[keyQueueTrackIds] = trackIds.joinToString("\n")
             preferences[keyQueueCurrentIndex] = currentIndex
             preferences[keyQueuePositionMs] = positionMs
+            preferences[keyQueueShuffle] = shuffle
+            preferences[keyQueueOriginalIds] = originalTrackIds.joinToString("\n")
         }
     }
 
