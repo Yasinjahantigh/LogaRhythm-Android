@@ -24,6 +24,24 @@ class DeezerClient @Inject constructor(
         val artworkUrl: String?
     )
 
+    data class ArtworkCandidate(val url: String, val title: String, val artist: String, val album: String?)
+
+    suspend fun searchCandidates(title: String, artist: String): List<ArtworkCandidate> =
+        withContext(Dispatchers.IO) {
+            val query = listOf(title, artist).filter { it.isNotBlank() }.joinToString(" ")
+            if (query.isBlank()) return@withContext emptyList()
+            val url = "https://api.deezer.com/search?q=${URLEncoder.encode(query, "UTF-8")}&limit=12"
+            val data = HttpJson.get(client, url)?.optJSONArray("data") ?: return@withContext emptyList()
+            (0 until data.length()).mapNotNull { index ->
+                val item = data.optJSONObject(index) ?: return@mapNotNull null
+                val album = item.optJSONObject("album")
+                val art = listOf("cover_xl", "cover_big", "cover_medium")
+                    .map { album?.optString(it).orEmpty() }.firstOrNull { it.startsWith("http") }
+                    ?: return@mapNotNull null
+                ArtworkCandidate(art, item.optString("title"), item.optJSONObject("artist")?.optString("name").orEmpty(), album.optString("title").takeIf { it.isNotBlank() })
+            }.distinctBy { it.url }
+        }
+
     suspend fun search(title: String, artist: String, durationMs: Long): Result? =
         withContext(Dispatchers.IO) {
             val query = listOf(title, artist).filter { it.isNotBlank() }.joinToString(" ")

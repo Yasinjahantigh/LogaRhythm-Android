@@ -6,6 +6,8 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import coil.compose.AsyncImage
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -96,6 +98,56 @@ fun TagEditorScreen(
     var showCropDialog by remember { mutableStateOf(false) }
     var isLoadingCover by remember { mutableStateOf(false) }
     var coverError by remember { mutableStateOf(false) }
+    val coverCandidates by viewModel.coverCandidates.collectAsStateWithLifecycle()
+    val findingCovers by viewModel.findingCovers.collectAsStateWithLifecycle()
+    val selectedCover by viewModel.selectedCover.collectAsStateWithLifecycle()
+
+    androidx.compose.runtime.LaunchedEffect(selectedCover) {
+        val bitmap = selectedCover ?: return@LaunchedEffect
+        pickedBitmap = bitmap
+        removeArtwork = false
+        showCropDialog = true
+        viewModel.clearSelectedCover()
+    }
+
+    coverCandidates?.let { candidates ->
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = viewModel::dismissCovers,
+            title = { Text(stringResource(R.string.tag_editor_find_cover)) },
+            text = {
+                if (findingCovers) {
+                    androidx.compose.material3.CircularProgressIndicator()
+                } else if (candidates.isEmpty()) {
+                    Text(stringResource(R.string.tag_editor_no_covers))
+                } else {
+                    androidx.compose.foundation.lazy.grid.LazyVerticalGrid(
+                        columns = androidx.compose.foundation.lazy.grid.GridCells.Fixed(3),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                        modifier = Modifier.height(300.dp)
+                    ) {
+                        items(candidates.size) { index ->
+                            val candidate = candidates[index]
+                            AsyncImage(
+                                model = candidate.url,
+                                contentDescription = candidate.title,
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier
+                                    .size(88.dp)
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .clickable { viewModel.chooseCover(candidate.url) }
+                            )
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                androidx.compose.material3.TextButton(onClick = viewModel::dismissCovers) {
+                    Text(stringResource(R.string.btn_cancel))
+                }
+            }
+        )
+    }
 
     LaunchedEffect(track) {
         val current = track
@@ -346,6 +398,13 @@ fun TagEditorScreen(
                         modifier = Modifier.testTag("tag_editor_pick_cover")
                     ) {
                         Text(stringResource(R.string.tag_editor_change_cover))
+                    }
+                    OutlinedButton(
+                        enabled = !isSaving && !findingCovers,
+                        onClick = viewModel::findCovers,
+                        modifier = Modifier.testTag("tag_editor_find_cover")
+                    ) {
+                        Text(stringResource(R.string.tag_editor_find_cover))
                     }
                     if (pickedBitmap != null || (track?.artworkUri != null && !removeArtwork)) {
                         TextButton(

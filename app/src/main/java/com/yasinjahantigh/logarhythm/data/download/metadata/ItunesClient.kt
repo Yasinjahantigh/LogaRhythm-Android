@@ -29,6 +29,21 @@ class ItunesClient @Inject constructor(
         val composer: String?
     )
 
+    data class ArtworkCandidate(val url: String, val title: String, val artist: String, val album: String?)
+
+    suspend fun searchCandidates(title: String, artist: String): List<ArtworkCandidate> =
+        withContext(Dispatchers.IO) {
+            val query = listOf(title, artist).filter { it.isNotBlank() }.joinToString(" ")
+            if (query.isBlank()) return@withContext emptyList()
+            val url = "https://itunes.apple.com/search?term=${URLEncoder.encode(query, "UTF-8")}&entity=song&limit=12"
+            val results = HttpJson.get(client, url)?.optJSONArray("results") ?: return@withContext emptyList()
+            (0 until results.length()).mapNotNull { index ->
+                val item = results.optJSONObject(index) ?: return@mapNotNull null
+                val art = highResArtwork(item.optString("artworkUrl100")) ?: return@mapNotNull null
+                ArtworkCandidate(art, item.optString("trackName"), item.optString("artistName"), item.optString("collectionName").takeIf { it.isNotBlank() })
+            }.distinctBy { it.url }
+        }
+
     suspend fun search(title: String, artist: String, durationMs: Long): Result? =
         withContext(Dispatchers.IO) {
             val query = listOf(title, artist).filter { it.isNotBlank() }.joinToString(" ")
