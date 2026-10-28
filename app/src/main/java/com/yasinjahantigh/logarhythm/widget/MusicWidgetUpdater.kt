@@ -83,8 +83,7 @@ object MusicWidgetUpdater {
 
     private val progressWidgets: List<Pair<Class<out BroadcastReceiver>, GlanceAppWidget>> = listOf(
         MusicWidgetMediumReceiver::class.java to MusicWidgetMedium(),
-        MusicWidgetLargeReceiver::class.java to MusicWidgetLarge(),
-        MusicWidgetPlayerReceiver::class.java to MusicWidgetPlayer()
+        MusicWidgetLargeReceiver::class.java to MusicWidgetLarge()
     )
 
     fun requestUpdate(context: Context) {
