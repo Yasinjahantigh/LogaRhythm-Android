@@ -45,7 +45,7 @@ class GeniusLyricsSource @Inject constructor(
 
         for (searchQuery in queries) {
             val search = http.get(
-                "https://genius.com/api/search/multi?per_page=6&q=${encode(searchQuery)}",
+                "https://genius.com/api/search/multi?per_page=5&q=${encode(searchQuery)}",
                 mapOf("Referer" to "https://genius.com/", "Accept" to "application/json")
             )
             when {
