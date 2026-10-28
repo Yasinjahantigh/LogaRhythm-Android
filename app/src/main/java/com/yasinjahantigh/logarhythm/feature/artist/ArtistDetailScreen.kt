@@ -222,7 +222,8 @@ private fun ArtistTrackRow(
         onClick = { viewModel.playTrack(track) },
         isCurrentTrack = isCurrent,
         isPlaying = isCurrent && isPlaying,
-        onMenuClick = onMenu
+        onMenuClick = onMenu,
+        onPlayNext = { viewModel.playNext(track) }
     )
 }
 

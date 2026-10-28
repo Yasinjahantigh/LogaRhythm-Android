@@ -50,7 +50,8 @@ fun SearchResultsView(
     onArtistClick: (String) -> Unit,
     modifier: Modifier = Modifier,
     onClearQuery: () -> Unit = {},
-    onTrackMenuClick: ((Track) -> Unit)? = null
+    onTrackMenuClick: ((Track) -> Unit)? = null,
+    onTrackPlayNext: ((Track) -> Unit)? = null
 ) {
     if (results.isLoading) {
         Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -97,7 +98,8 @@ fun SearchResultsView(
                     TrackListItem(
                         track = track,
                         onClick = { onTrackClick(track) },
-                        onMenuClick = onTrackMenuClick?.let { { it(track) } }
+                        onMenuClick = onTrackMenuClick?.let { { it(track) } },
+                        onPlayNext = onTrackPlayNext?.let { { it(track) } }
                     )
                 }
             }

@@ -236,7 +236,8 @@ fun SearchScreen(
                     onClearQuery = viewModel::clearQuery,
                     onTrackMenuClick = { track ->
                         selectedTrackForMenu = track
-                    }
+                    },
+                    onTrackPlayNext = viewModel::playNext
                 )
             }
         }

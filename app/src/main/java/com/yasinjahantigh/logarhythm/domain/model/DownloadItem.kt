@@ -12,9 +12,12 @@ const val DOWNLOAD_TAG_WRITE_FAILED_DETAIL = "tag_write_failed"
 /** Where a downloadable search result comes from. */
 enum class DownloadSource(val raw: String) {
     YOUTUBE("youtube"),
-    SOUNDCLOUD("soundcloud");
+    SOUNDCLOUD("soundcloud"),
+    MUSICMAN("musicman");
 
     val isYouTube: Boolean get() = this == YOUTUBE
+
+    val usesYtDlp: Boolean get() = this != MUSICMAN
 
     companion object {
         fun fromRaw(value: String?): DownloadSource =

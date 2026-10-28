@@ -7,12 +7,13 @@ import com.yasinjahantigh.logarhythm.data.datastore.PreferencesManager
 import com.yasinjahantigh.logarhythm.data.download.DownloadCookies
 import com.yasinjahantigh.logarhythm.data.download.DownloadEvents
 import com.yasinjahantigh.logarhythm.data.download.DownloadSavedEvent
+import com.yasinjahantigh.logarhythm.data.download.DownloadSearchService
 import com.yasinjahantigh.logarhythm.data.download.YtDlpRuntime
-import com.yasinjahantigh.logarhythm.data.download.YtDlpSearchService
 import com.yasinjahantigh.logarhythm.data.download.YtdlpUpdateState
 import com.yasinjahantigh.logarhythm.domain.model.DownloadErrorKind
 import com.yasinjahantigh.logarhythm.domain.model.DownloadItem
 import com.yasinjahantigh.logarhythm.domain.model.DownloadSearchResult
+import com.yasinjahantigh.logarhythm.domain.model.DownloadSource
 import com.yasinjahantigh.logarhythm.domain.model.SourceType
 import com.yasinjahantigh.logarhythm.domain.model.Track
 import com.yasinjahantigh.logarhythm.domain.repository.DownloadRepository
@@ -26,13 +27,14 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 @HiltViewModel
 class DownloadViewModel @Inject constructor(
-    private val searchService: YtDlpSearchService,
+    private val searchService: DownloadSearchService,
     private val repository: DownloadRepository,
     private val prefs: PreferencesManager,
     private val runtime: YtDlpRuntime,
@@ -49,6 +51,9 @@ class DownloadViewModel @Inject constructor(
 
     private val _preparing = MutableStateFlow(true)
     val preparing: StateFlow<Boolean> = _preparing.asStateFlow()
+
+    private val _sourceFilter = MutableStateFlow<DownloadSource?>(null)
+    val sourceFilter: StateFlow<DownloadSource?> = _sourceFilter.asStateFlow()
 
     val history: StateFlow<List<DownloadItem>> = repository.observeHistory()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
@@ -68,6 +73,9 @@ class DownloadViewModel @Inject constructor(
 
     init {
         viewModelScope.launch {
+            _sourceFilter.value = prefs.downloadSourceFilter.first()
+        }
+        viewModelScope.launch {
             try {
                 runtime.ensureReady()
                 runtime.currentVersion()
@@ -85,6 +93,13 @@ class DownloadViewModel @Inject constructor(
         _query.value = value
     }
 
+    fun setSourceFilter(source: DownloadSource?) {
+        if (_sourceFilter.value == source) return
+        _sourceFilter.value = source
+        viewModelScope.launch { prefs.setDownloadSourceFilter(source) }
+        if (_searchState.value.hasSearched && _query.value.isNotBlank()) search(_query.value)
+    }
+
     fun search(term: String = _query.value) {
         val trimmed = term.trim()
         if (trimmed.isBlank()) return
@@ -95,7 +110,7 @@ class DownloadViewModel @Inject constructor(
             _searchState.value = DownloadSearchUiState(searching = true, hasSearched = true)
 
             val outcome = try {
-                searchService.search(trimmed)
+                searchService.search(trimmed, _sourceFilter.value)
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (_: Exception) {

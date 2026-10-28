@@ -23,6 +23,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -73,6 +74,7 @@ fun TagEditorScreen(
 ) {
     val track by viewModel.track.collectAsStateWithLifecycle()
     val isSaving by viewModel.isSaving.collectAsStateWithLifecycle()
+    val isFilling by viewModel.isFilling.collectAsStateWithLifecycle()
     val failure by viewModel.failure.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -115,6 +117,55 @@ fun TagEditorScreen(
         viewModel.saved.collect {
             Toast.makeText(context, context.getString(R.string.tag_editor_saved), Toast.LENGTH_SHORT).show()
             onNavigateBack()
+        }
+    }
+
+    LaunchedEffect(viewModel) {
+        viewModel.suggestions.collect { resolved ->
+            val emptyMessage = {
+                Toast.makeText(
+                    context,
+                    context.getString(R.string.tag_editor_autofill_empty),
+                    Toast.LENGTH_SHORT
+                ).show()
+            }
+            if (resolved == null) {
+                emptyMessage()
+                return@collect
+            }
+            val nextTitle = resolved.title ?: title
+            val nextArtist = resolved.artist ?: artist
+            val nextAlbum = resolved.album ?: album
+            val nextGenre = resolved.genre ?: genre
+            val nextYear = resolved.year?.toString() ?: year
+            val nextTrack = resolved.trackNumber?.toString() ?: trackNumber
+            val nextDisc = resolved.discNumber?.toString() ?: discNumber
+            val nextComposer = resolved.composer ?: composer
+            val changed = nextTitle != title ||
+                nextArtist != artist ||
+                nextAlbum != album ||
+                nextGenre != genre ||
+                nextYear != year ||
+                nextTrack != trackNumber ||
+                nextDisc != discNumber ||
+                nextComposer != composer
+            if (!changed) {
+                emptyMessage()
+                return@collect
+            }
+            title = nextTitle
+            artist = nextArtist
+            album = nextAlbum
+            genre = nextGenre
+            year = nextYear
+            trackNumber = nextTrack
+            discNumber = nextDisc
+            composer = nextComposer
+            Toast.makeText(
+                context,
+                context.getString(R.string.tag_editor_autofill_done),
+                Toast.LENGTH_SHORT
+            ).show()
         }
     }
 
@@ -222,6 +273,31 @@ fun TagEditorScreen(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             Spacer(modifier = Modifier.height(12.dp))
+
+            OutlinedButton(
+                onClick = viewModel::autoFill,
+                enabled = isLocal && !isSaving && !isFilling,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("tag_editor_autofill")
+            ) {
+                if (isFilling) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(16.dp),
+                        strokeWidth = 2.dp
+                    )
+                } else {
+                    Icon(
+                        imageVector = Icons.Filled.AutoAwesome,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(stringResource(R.string.tag_editor_autofill))
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
 
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(

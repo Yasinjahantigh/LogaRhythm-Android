@@ -5,8 +5,10 @@ import com.yasinjahantigh.logarhythm.data.ai.AiPlaylistClient
 import com.yasinjahantigh.logarhythm.data.ai.AiProvider
 import com.yasinjahantigh.logarhythm.data.ai.AiSettings
 import com.yasinjahantigh.logarhythm.data.datastore.PreferencesManager
+import com.yasinjahantigh.logarhythm.domain.ai.CatalogSelector
 import com.yasinjahantigh.logarhythm.domain.model.AiFailure
 import com.yasinjahantigh.logarhythm.domain.model.MagicPlaylistResult
+import com.yasinjahantigh.logarhythm.domain.model.Track
 import com.yasinjahantigh.logarhythm.domain.repository.AiPlaylistRepository
 import com.yasinjahantigh.logarhythm.domain.repository.PlaylistRepository
 import com.yasinjahantigh.logarhythm.domain.repository.TrackRepository
@@ -95,8 +97,8 @@ class AiPlaylistRepositoryImpl @Inject constructor(
             }
             val apiKey = keyStore.load()
                 ?: return@withContext MagicPlaylistResult.Failure(AiFailure.NOT_CONFIGURED)
-            val catalog = trackRepository.getAllTracks().first().take(MAX_CATALOG_TRACKS)
-            if (catalog.isEmpty()) {
+            val library = trackRepository.getAllTracks().first()
+            if (library.isEmpty()) {
                 return@withContext MagicPlaylistResult.Failure(AiFailure.NO_TRACKS)
             }
             client.generate(
@@ -104,9 +106,40 @@ class AiPlaylistRepositoryImpl @Inject constructor(
                 apiKey = apiKey,
                 prompt = prompt,
                 trackCount = trackCount,
-                catalog = catalog
+                catalog = CatalogSelector.forPlaylist(library, prompt)
             )
         }
+
+    override suspend fun generateMix(
+        prompt: String,
+        mixName: String,
+        baseTracks: List<Track>,
+        additions: Int
+    ): MagicPlaylistResult = withContext(Dispatchers.IO) {
+        if (prompt.isBlank() || baseTracks.isEmpty()) {
+            return@withContext MagicPlaylistResult.Failure(AiFailure.BAD_RESPONSE)
+        }
+        val settings = observeSettings().first()
+        if (!settings.isConfigured) {
+            return@withContext MagicPlaylistResult.Failure(AiFailure.NOT_CONFIGURED)
+        }
+        val apiKey = keyStore.load()
+            ?: return@withContext MagicPlaylistResult.Failure(AiFailure.NOT_CONFIGURED)
+        val library = trackRepository.getAllTracks().first()
+        val candidates = CatalogSelector.forMix(library, baseTracks)
+        if (candidates.isEmpty()) {
+            return@withContext MagicPlaylistResult.Failure(AiFailure.NO_TRACKS)
+        }
+        client.generateMix(
+            settings = settings,
+            apiKey = apiKey,
+            prompt = prompt,
+            mixName = mixName,
+            baseTracks = baseTracks,
+            candidates = candidates,
+            additions = additions
+        )
+    }
 
     override suspend fun savePlaylist(name: String, trackIds: List<String>): Long =
         withContext(Dispatchers.IO) {
@@ -118,8 +151,4 @@ class AiPlaylistRepositoryImpl @Inject constructor(
             playlistId
         }
 
-    private companion object {
-        /** Keeps the prompt inside common context windows even for big libraries. */
-        const val MAX_CATALOG_TRACKS = 400
-    }
 }

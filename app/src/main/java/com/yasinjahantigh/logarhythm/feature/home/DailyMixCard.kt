@@ -195,7 +195,8 @@ fun DailyMixDetailBottomSheet(
     onDismiss: () -> Unit,
     onPlayAll: () -> Unit,
     onShufflePlay: () -> Unit,
-    onTrackClick: (Int) -> Unit
+    onTrackClick: (Int) -> Unit,
+    onRebuildWithAi: () -> Unit = {}
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val titleRes = when (mix.id) {
@@ -286,6 +287,22 @@ fun DailyMixDetailBottomSheet(
                     Spacer(modifier = Modifier.width(6.dp))
                     Text(stringResource(R.string.btn_shuffle))
                 }
+            }
+
+            FilledTonalButton(
+                onClick = {
+                    onRebuildWithAi()
+                    onDismiss()
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp)
+                    .padding(bottom = 8.dp)
+                    .testTag("daily_mix_ai_rebuild")
+            ) {
+                Icon(Icons.Filled.AutoAwesome, contentDescription = null, modifier = Modifier.size(20.dp))
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(stringResource(R.string.ai_mix_action))
             }
 
             HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))

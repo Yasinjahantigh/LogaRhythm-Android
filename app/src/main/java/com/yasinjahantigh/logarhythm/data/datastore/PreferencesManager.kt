@@ -10,6 +10,7 @@ import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
+import com.yasinjahantigh.logarhythm.domain.model.DownloadSource
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -599,23 +600,49 @@ class PreferencesManager @Inject constructor(
     // ---- Library sorting --------------------------------------------------------------------
 
     private fun librarySortKey(tab: String) = stringPreferencesKey("key_library_sort_${tab.lowercase()}")
+    private fun librarySortMirrorKey(tab: String) = "library_sort_${tab.lowercase()}"
+
+    /**
+     * Synchronous copy of the last chosen sort. DataStore writes are asynchronous and can be lost
+     * when the process is killed right after the user taps a sort option, which made the library
+     * reopen on Title/Ascending.
+     */
+    fun librarySortOrderCached(tab: String): Pair<String, String> =
+        librarySortRawCached(tab).toSortPair()
+
+    private fun librarySortRawCached(tab: String): String? = runCatching {
+        context.getSharedPreferences(BOOTSTRAP_PREFS, Context.MODE_PRIVATE)
+            .getString(librarySortMirrorKey(tab), null)
+    }.getOrNull()
 
     /** Persisted field/direction pair for one library tab, e.g. ("YEAR", "DESCENDING"). */
     fun librarySortOrder(tab: String): Flow<Pair<String, String>> = dataStore.data.map { preferences ->
-        val raw = preferences[librarySortKey(tab)]
-        val field = raw?.substringBefore('|')?.takeIf { it.isNotBlank() } ?: "TITLE"
-        val direction = raw?.substringAfter('|', "")?.takeIf { it.isNotBlank() } ?: "ASCENDING"
-        field to direction
+        (librarySortRawCached(tab) ?: preferences[librarySortKey(tab)]).toSortPair()
     }
 
+    @android.annotation.SuppressLint("ApplySharedPref")
     suspend fun setLibrarySortOrder(tab: String, field: String, direction: String) {
-        dataStore.edit { it[librarySortKey(tab)] = "$field|$direction" }
+        val value = "$field|$direction"
+        withContext(NonCancellable + Dispatchers.IO) {
+            context.getSharedPreferences(BOOTSTRAP_PREFS, Context.MODE_PRIVATE)
+                .edit()
+                .putString(librarySortMirrorKey(tab), value)
+                .commit()
+            dataStore.edit { it[librarySortKey(tab)] = value }
+        }
+    }
+
+    private fun String?.toSortPair(): Pair<String, String> {
+        val field = this?.substringBefore('|')?.takeIf { it.isNotBlank() } ?: "TITLE"
+        val direction = this?.substringAfter('|', "")?.takeIf { it.isNotBlank() } ?: "ASCENDING"
+        return field to direction
     }
 
     // ---- Music download ---------------------------------------------------------------------
 
     private val keyDownloadRecentSearches = stringPreferencesKey("key_download_recent_searches")
     private val keyYtdlpFirstUpdateDone = booleanPreferencesKey("key_ytdlp_first_update_done")
+    private val keyDownloadSource = stringPreferencesKey("key_download_source")
 
     val downloadRecentSearches: Flow<List<String>> = dataStore.data.map { preferences ->
         val raw = preferences[keyDownloadRecentSearches].orEmpty()
@@ -652,6 +679,20 @@ class PreferencesManager @Inject constructor(
 
     suspend fun setYtdlpFirstUpdateDone(done: Boolean) {
         dataStore.edit { it[keyYtdlpFirstUpdateDone] = done }
+    }
+
+    /** null means search every source. */
+    val downloadSourceFilter: Flow<DownloadSource?> = dataStore.data.map { preferences ->
+        preferences[keyDownloadSource]?.let { raw ->
+            DownloadSource.entries.firstOrNull { it.raw == raw }
+        }
+    }
+
+    suspend fun setDownloadSourceFilter(source: DownloadSource?) {
+        dataStore.edit { preferences ->
+            if (source == null) preferences.remove(keyDownloadSource)
+            else preferences[keyDownloadSource] = source.raw
+        }
     }
 
     // ---- Optional bring-your-own-key AI -----------------------------------------------------
