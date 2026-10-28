@@ -31,7 +31,7 @@ fun getVersionInfo(): Pair<Int, String> {
     val name = "$major.$minor.$patch"
     Pair(code, name)
   } else {
-    Pair(10301, "1.3.1")
+    Pair(10700, "1.7.0")
   }
 }
 
