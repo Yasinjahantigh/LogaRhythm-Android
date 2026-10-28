@@ -415,6 +415,8 @@
     <string name="tag_editor_remove_cover">حذف کاور</string>
     <string name="tag_editor_cover_removed">کاور حذف خواهد شد</string>
     <string name="tag_editor_cover_load_failed">خواندن این تصویر ممکن نشد</string>
+    <string name="tag_editor_find_cover">جست‌وجوی کاور در اینترنت</string>
+    <string name="tag_editor_no_covers">کاوری پیدا نشد</string>
     <string name="tag_editor_crop_title">برش کاور</string>
     <string name="tag_editor_crop_hint">با دو انگشت بزرگ‌نمایی و با کشیدن جابه‌جا کنید. فقط بخش مربعی ذخیره می‌شود.</string>
     <string name="tag_editor_field_title">عنوان</string>
@@ -739,4 +741,9 @@
     <string name="settings_ai_test_ok">اتصال برقرار است</string>
     <string name="settings_ai_remove_key">حذف کلید</string>
     <string name="settings_ai_save">ذخیره</string>
+    <string name="tools_suggest_fixes">اصلاح نام‌ها</string>
+    <string name="tools_finding_fixes">در حال جست‌وجوی نام‌های نامرتب…</string>
+    <string name="tools_no_fixes">پیشنهادی برای اصلاح نیست</string>
+    <string name="tools_fix_failed">این فایل به‌روزرسانی نشد</string>
+    <string name="btn_apply">اعمال</string>
 </resources>
