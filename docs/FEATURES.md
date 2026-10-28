@@ -8,7 +8,9 @@ Technical details for each feature. Back to the [README](../README.md) · [فا�
 - Playback resumes if headphones reconnect within 10 minutes
 - Per-song playback speed
 - Sleep timer by minutes or by track count
-- Swipe right for next, left for previous, with haptics (direction is switchable in Settings)
+- Swipe the cover horizontally to preview the next or previous track (its cover and title appear). The song changes only if you pass 35% of the way and release; it respects RTL and the swipe-direction setting, and does nothing at the end of the queue
+- Shuffle can be switched on or off without interrupting the current song: only the items before and after it are replaced and the position is kept. Queue edits (play next, add, remove, insert, move) also update the original order, so a song added while shuffled is not lost when shuffle is turned off. The shuffle state and original order are restored after reopening the app
+- The speed dialog shows one shared value for the label, slider and chips
 - Resume position for anything longer than 20 minutes: saved every 10 seconds, restored on reopen
 
 ## Audio
@@ -24,7 +26,7 @@ Sources: embedded in the file, a `.lrc` beside it, or fetched from LRCLIB, NetEa
 - Blocked providers cool down instead of slowing every song
 - Results are scored against title, artist, album and duration before they are accepted
 - If the best match is not convincing, a candidate picker lets you search with your own title and artist (Latin or Persian), preview the first line, and lock the result as manual
-- Genius is fetched directly, without a VPN. If a network challenges the request, the app reports it and uses the other sources
+- Genius is queried directly, without a VPN. If its page is blocked by Cloudflare or returns nothing, the lyrics come from lyrics.ovh and are labeled "Genius (fallback)"
 - Per-source switches, a test screen, and a custom HTTPS endpoint for your own lyrics server
 - Synced scrolling, per-song timing offset, manual editing, import and export
 
@@ -34,7 +36,10 @@ Sources: embedded in the file, a `.lrc` beside it, or fetched from LRCLIB, NetEa
 - Editable fields: title, artist, album, album artist, genre, year, track and disc number, composer
 - Cover art: choose a new image (square crop and zoom), replace it, or remove it
 - Writes go to a staged copy, are read back and verified (including a SHA-256 check of the cover), mirrored into MediaStore, and only then replace the original
-- Notification and lock screen refresh immediately
+- Notification, lock screen and widget refresh immediately
+- M4A support covers 64-bit and size-0 boxes, QuickTime metadata, `moov` at the end of the file and trailing bytes. Fragmented files are normalized on the staged copy; the original file is untouched if anything fails
+- Auto-fill: title, artist, album, year and track number from online metadata
+- Find cover online: a grid of iTunes and Deezer candidates, then the usual crop dialog and save path
 
 ## Library
 
@@ -43,6 +48,8 @@ Sources: embedded in the file, a `.lrc` beside it, or fetched from LRCLIB, NetEa
 - Sorting: title, artist, album, year, date added or modified, duration, play count, last played, random. The choice is remembered per tab
 - Filters: favorites, downloaded, recently added
 - Tools: duplicate finder, missing tags view, hidden songs, excluded folders, minimum track length
+- Fix names (Library Tools): titles are cleaned with the same rules used for downloads and matched against online metadata only when the match is confident. You see before and after, and nothing is written until you approve; each track is applied separately
+- Albums are identified by name plus album artist, so same-named albums by different artists are no longer merged (grouping, search and navigation)
 - Artists: collaborations are split on commas, `&`, `feat.` and the Persian comma `،`, while names like *Tyler, The Creator* or *Earth, Wind & Fire* stay whole. You can add your own never-split names. Each artist has a page with top songs, albums and "Appears on"
 - Ringtones and voice recordings are excluded by default (Settings → Library)
 
@@ -75,6 +82,10 @@ Sources: YouTube, SoundCloud and MusicMan. The download screen has source chips 
 - Preparing a file: lookup, status check, queueing on the server if needed, then polling every 2.5 seconds for up to 60 seconds. Failed, cancelled, or completed-without-file states show a specific error
 - Telegram audio links that carry a masked token are opened through a proxy; direct links are used as they are. If a direct download fails with a network error, it is retried once through the proxy
 - No yt-dlp preparation is needed for this source
+
+### Download an album
+
+Use the album button on a search result. The album is resolved through iTunes and shown as a track list with everything selected; deselect what you do not want and confirm. Only the selected songs are found and queued through the normal search path, duplicates are detected, and you get one summary notification plus a message with the number of successes and failures.
 
 ## Optional AI playlist
 
@@ -109,8 +120,25 @@ The key is encrypted with an Android Keystore key on the device and can be remov
 - Backup and restore of playlists, favorites, history and lyrics in one file (**Settings → Backup**)
 - The library database migrates to v10 on first launch of 1.6.0 and existing data is preserved. Making a backup before a major update is still recommended
 
+## Widgets
+
+Five home screen widgets:
+
+| Widget | Size | Content |
+| :--- | :--- | :--- |
+| Small | 2×2 | Cover, play/pause |
+| Strip | 4×1 | Compact info and controls |
+| Medium | 4×2 | Cover, progress bar, controls |
+| Large | 4×4 | Full controls and an "Up next" queue |
+| Player | 4×4 | Full-bleed cover, title, artist and album, five controls in the app theme, no progress bar or time |
+
+- Buttons act on the running playback service, and the playing state comes from the live player
+- Medium and Large refresh every 10 seconds to keep the progress bar current; the Player widget does not
+- Widgets do not support seeking
+
 ## Appearance
 
 - Default palette **Ink & Ember**: warm near-black (`#0E1013`) with an amber accent (`#F4B266`)
 - Theme Studio: true-black OLED, colors from the artwork, the wallpaper's Material You palette, or a custom theme (accent hue, saturation, dark, light or OLED base)
+- Home screen widgets: see [Widgets](#widgets)
 - Persian and English, full RTL, switchable inside the app
