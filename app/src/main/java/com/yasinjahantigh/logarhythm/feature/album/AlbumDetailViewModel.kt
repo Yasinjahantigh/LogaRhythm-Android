@@ -55,7 +55,8 @@ class AlbumDetailViewModel @Inject constructor(
     fun shuffleAll() {
         val list = tracks.value
         if (list.isNotEmpty()) {
-            playerController.play(list.shuffled(), 0)
+            playerController.setShuffleEnabled(true)
+            playerController.play(list, list.indices.random())
         }
     }
 
