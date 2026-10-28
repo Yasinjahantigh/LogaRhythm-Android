@@ -41,13 +41,13 @@ interface MusicDao {
     fun searchTracks(query: String, normalizedQuery: String): Flow<List<TrackEntity>>
 
     @Query("""
-        SELECT album, artist, COUNT(*) AS trackCount, MIN(artworkUri) AS artworkUri 
-        FROM tracks 
-        WHERE album LIKE '%' || :query || '%' 
-           OR artist LIKE '%' || :query || '%'
+        SELECT album, COALESCE(NULLIF(albumArtist, ''), artist) AS artist, COUNT(*) AS trackCount, MIN(artworkUri) AS artworkUri
+        FROM tracks
+        GROUP BY album, COALESCE(NULLIF(albumArtist, ''), artist)
+        HAVING album LIKE '%' || :query || '%'
+           OR COALESCE(NULLIF(albumArtist, ''), artist) LIKE '%' || :query || '%'
            OR REPLACE(REPLACE(album, 'ي', 'ی'), 'ك', 'ک') LIKE '%' || :normalizedQuery || '%'
-           OR REPLACE(REPLACE(artist, 'ي', 'ی'), 'ك', 'ک') LIKE '%' || :normalizedQuery || '%'
-        GROUP BY album, artist 
+           OR REPLACE(REPLACE(COALESCE(NULLIF(albumArtist, ''), artist), 'ي', 'ی'), 'ك', 'ک') LIKE '%' || :normalizedQuery || '%'
         ORDER BY album COLLATE NOCASE ASC
     """)
     fun searchAlbums(query: String, normalizedQuery: String): Flow<List<AlbumQueryResult>>
@@ -99,8 +99,8 @@ interface MusicDao {
     """)
     fun getAllFolders(): Flow<List<FolderQueryResult>>
 
-    @Query("SELECT * FROM tracks WHERE album = :album ORDER BY title COLLATE NOCASE ASC")
-    fun getTracksByAlbum(album: String): Flow<List<TrackEntity>>
+    @Query("SELECT * FROM tracks WHERE album = :album AND COALESCE(NULLIF(albumArtist, ''), artist) = :albumArtist ORDER BY discNumber, CASE WHEN trackNumber > 0 THEN trackNumber ELSE 2147483647 END, title COLLATE NOCASE ASC")
+    fun getTracksByAlbum(album: String, albumArtist: String): Flow<List<TrackEntity>>
 
     @Query("SELECT * FROM tracks WHERE artist = :artist ORDER BY title COLLATE NOCASE ASC")
     fun getTracksByArtist(artist: String): Flow<List<TrackEntity>>
@@ -114,11 +114,11 @@ interface MusicDao {
     @Query("""
         SELECT album, COALESCE(NULLIF(albumArtist, ''), artist) AS artist, COUNT(*) AS trackCount, MIN(artworkUri) AS artworkUri 
         FROM tracks 
-        WHERE album = :album
+        WHERE album = :album AND COALESCE(NULLIF(albumArtist, ''), artist) = :albumArtist
         GROUP BY album, COALESCE(NULLIF(albumArtist, ''), artist) 
         LIMIT 1
     """)
-    fun getAlbumByName(album: String): Flow<AlbumQueryResult?>
+    fun getAlbumByName(album: String, albumArtist: String): Flow<AlbumQueryResult?>
 
     @Query("""
         SELECT artist, COUNT(*) AS trackCount, COUNT(DISTINCT album) AS albumCount 
@@ -235,7 +235,7 @@ interface MusicDao {
 
     @Query("""
         SELECT t.album,
-               t.artist,
+               COALESCE(NULLIF(t.albumArtist, ''), t.artist) AS artist,
                MIN(t.artworkUri) AS artworkUri,
                COUNT(pe.id) AS playCount,
                COALESCE(SUM(pe.listenedMs), 0) AS totalListenedMs,
@@ -243,7 +243,7 @@ interface MusicDao {
         FROM play_events pe
         INNER JOIN tracks t ON pe.trackId = t.id
         WHERE pe.timestamp >= :sinceTimestamp AND pe.skipped = 0 AND t.album != ''
-        GROUP BY t.album, t.artist
+        GROUP BY t.album, COALESCE(NULLIF(t.albumArtist, ''), t.artist)
         ORDER BY playCount DESC, totalListenedMs DESC
         LIMIT :limit
     """)
@@ -275,6 +275,9 @@ interface MusicDao {
 
     @Query("SELECT * FROM tracks")
     suspend fun getAllTracksOnce(): List<TrackEntity>
+
+    @Query("SELECT * FROM tracks ORDER BY dateAdded DESC, title COLLATE NOCASE ASC LIMIT :limit")
+    suspend fun getNewestTracksOnce(limit: Int): List<TrackEntity>
 
     @Query("SELECT * FROM play_events")
     suspend fun getAllPlayEventsOnce(): List<PlayEventEntity>

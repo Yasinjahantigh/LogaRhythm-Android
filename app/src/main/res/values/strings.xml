@@ -84,6 +84,8 @@
     <string name="cd_drag_handle">Drag to reorder</string>
     <string name="cd_remove_from_queue">Remove from queue</string>
     <string name="action_play_next">Play next</string>
+    <string name="swipe_play_next">Next</string>
+    <string name="swipe_play_next_action">Play next</string>
     <string name="action_add_to_queue">Add to queue</string>
     <string name="action_add_to_playlist">Add to playlist</string>
     <string name="action_remove_from_playlist">Remove from playlist</string>
@@ -272,12 +274,8 @@
     <string name="settings_excluded_folders_dialog_title">Exclude Folders</string>
     <string name="settings_no_folders_found">No folders found in library</string>
 
-    <!-- Widget and onboarding -->
-    <string name="widget_description">Quick controls and your currently playing track</string>
+    <!-- Onboarding -->
     <string name="no_track_playing">Not Playing</string>
-    <string name="cd_widget_play_pause">Play or pause</string>
-    <string name="cd_widget_next">Next track</string>
-    <string name="cd_widget_prev">Previous track</string>
 
     <string name="onboarding_welcome_title">Welcome to LogaRhythm</string>
     <string name="onboarding_welcome_subtitle">A modern, offline music experience designed for your personal collection.</string>
@@ -408,11 +406,16 @@
     <string name="edit_track_field_genre">Genre</string>
     <string name="tag_editor_title">Tag &amp; Cover Studio</string>
     <string name="tag_editor_subtitle">Changes are written into the audio file and mirrored to the system library.</string>
+    <string name="tag_editor_autofill">Auto-fill from online</string>
+    <string name="tag_editor_autofill_done">Filled the fields it could find. Review and save.</string>
+    <string name="tag_editor_autofill_empty">No matching release was found.</string>
     <string name="tag_editor_cover">Cover art</string>
     <string name="tag_editor_change_cover">Change cover</string>
     <string name="tag_editor_remove_cover">Remove cover</string>
     <string name="tag_editor_cover_removed">Cover will be removed</string>
     <string name="tag_editor_cover_load_failed">Could not read that image</string>
+    <string name="tag_editor_find_cover">Find cover online</string>
+    <string name="tag_editor_no_covers">No covers found</string>
     <string name="tag_editor_crop_title">Crop cover</string>
     <string name="tag_editor_crop_hint">Pinch to zoom and drag to move. Only the square is saved.</string>
     <string name="tag_editor_field_title">Title</string>
@@ -568,6 +571,9 @@
     <string name="home_download_card_title">Download music</string>
     <string name="home_download_card_desc">Search YouTube and SoundCloud, then save audio with cover art</string>
     <string name="home_download_card_action">Open music download</string>
+    <string name="home_ai_banner_title">Magic playlist with AI</string>
+    <string name="home_ai_banner_desc">Build a playlist or rebuild a daily mix with your own API key.</string>
+    <string name="home_ai_banner_action">Open AI</string>
     <string name="settings_download_title">Music Download</string>
     <string name="cd_download_settings">Download settings</string>
     <string name="cd_download_more">More download actions</string>
@@ -579,11 +585,14 @@
     <string name="download_search_recent">Recent searches</string>
     <string name="download_clear_recent">Clear</string>
     <string name="download_search_intro_title">Find a song to download</string>
-    <string name="download_search_intro_desc">Results come from YouTube and SoundCloud. Songs keep the source audio and get cover art and tags.</string>
+    <string name="download_search_intro_desc">Results come from YouTube, SoundCloud, and MusicMan. Songs keep the source audio and get cover art and tags.</string>
     <string name="download_search_no_results">No results found</string>
     <string name="download_search_no_results_desc">Try another spelling or add the artist name.</string>
+    <string name="download_source_all">All sources</string>
     <string name="download_source_youtube">YouTube</string>
     <string name="download_source_soundcloud">SoundCloud</string>
+    <string name="download_source_musicman">MusicMan</string>
+    <string name="download_musicman_ready_note">Only tracks MusicMan can serve right now are listed.</string>
     <string name="download_preparing">Preparing downloader…</string>
     <string name="download_status_queued">Queued</string>
     <string name="download_status_downloading">Downloading… %1$d%%</string>
@@ -649,6 +658,17 @@
     <string name="download_notification_channel">Downloads</string>
     <string name="download_notification_channel_desc">Progress for music downloads</string>
     <string name="download_notification_title">Downloading %1$s</string>
+    <string name="download_album">Download album</string>
+    <string name="download_album_not_found">Could not find this album in the metadata catalog</string>
+    <string name="download_album_none">No downloadable tracks found for this album</string>
+    <string name="download_album_queued">%1$s: queued %2$d tracks</string>
+    <string name="download_album_partial">%1$s: queued %2$d, failed %3$d</string>
+    <string name="album_select_all">Select all</string>
+    <string name="album_resolving">Finding album tracks…</string>
+    <string name="album_adding">Adding selected tracks to downloads…</string>
+    <string name="album_download_count">Download (%1$d)</string>
+    <string name="download_album_notification_title">Album queued: %1$s</string>
+    <string name="download_album_notification_text">%1$d tracks added to downloads</string>
     <string name="download_notification_done">%1$s saved</string>
     <string name="download_notification_failed">Download failed: %1$s</string>
 
@@ -691,6 +711,17 @@
     <string name="magic_playlist_save">Save playlist</string>
     <string name="magic_playlist_regenerate">Try again</string>
     <string name="magic_playlist_more_tracks">+%1$d more songs</string>
+    <string name="ai_mix_action">Rebuild with AI</string>
+    <string name="ai_mix_title">Rebuild this mix with AI</string>
+    <string name="ai_mix_subtitle">These songs stay; ask for new ones from your library</string>
+    <string name="ai_mix_prompt_label">How should the mix change?</string>
+    <string name="ai_mix_prompt_hint">e.g. calmer, more acoustic, add Persian classics</string>
+    <string name="ai_mix_additions_count">New songs: %1$d</string>
+    <string name="ai_mix_generate">Add songs with AI</string>
+    <string name="ai_mix_preview">Rebuilt mix</string>
+    <string name="ai_mix_added_count">%1$d new songs added</string>
+    <string name="ai_mix_play">Play rebuilt mix</string>
+    <string name="ai_mix_default_name">AI mix</string>
     <string name="ai_error_not_configured">Add your API key in Settings → AI first.</string>
     <string name="ai_error_invalid_key">The provider rejected the API key.</string>
     <string name="ai_error_rate_limited">Too many requests. Try again in a minute.</string>
@@ -720,4 +751,9 @@
     <string name="settings_ai_test_ok">Connection works</string>
     <string name="settings_ai_remove_key">Remove key</string>
     <string name="settings_ai_save">Save</string>
+    <string name="tools_suggest_fixes">Fix names</string>
+    <string name="tools_finding_fixes">Looking for messy names…</string>
+    <string name="tools_no_fixes">No cleanup suggestions</string>
+    <string name="tools_fix_failed">Could not update this file</string>
+    <string name="btn_apply">Apply</string>
 </resources>

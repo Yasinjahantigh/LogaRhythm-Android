@@ -10,6 +10,7 @@ import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -223,5 +224,46 @@ class AiPlaylistClientTest {
         assertTrue(prompt.contains("rainy night"))
         assertTrue(prompt.contains("local:1 | First"))
         assertTrue(prompt.contains("exactly 2 songs"))
+    }
+
+    @Test
+    fun mix_generation_keepsEveryBaseTrackAndOnlyAddsCandidates() = runBlocking {
+        server.enqueue(
+            MockResponse().setBody(
+                """{"choices":[{"message":{"content":"{\"name\":\"Calm Nights\",\"description\":\"softer\",\"trackIds\":[\"base:1\",\"cand:1\",\"ghost\"]}"}}]}"""
+            )
+        )
+        val result = client.generateMix(
+            settings = openAiSettings(),
+            apiKey = "secret",
+            prompt = "make it calmer",
+            mixName = "Daily Mix 1",
+            baseTracks = listOf(track("base:1"), track("base:2")),
+            candidates = listOf(track("cand:1"), track("cand:2")),
+            additions = 2
+        )
+
+        assertTrue(result is MagicPlaylistResult.Success)
+        val playlist = (result as MagicPlaylistResult.Success).playlist
+        assertEquals(listOf("base:1", "base:2", "cand:1"), playlist.tracks.map { it.id })
+        assertEquals("Calm Nights", playlist.name)
+
+        val body = server.takeRequest().body.readUtf8()
+        assertTrue(body.contains("Existing playlist"))
+        assertTrue(body.contains("base:1"))
+        assertTrue(body.contains("cand:1"))
+        assertTrue(body.contains("never return these ids"))
+    }
+
+    @Test
+    fun mix_prompt_skips_baseTracksBeyondTheSampleCap() {
+        val base = (0 until 30).map { track("base:$it") }
+        val candidates = (0 until 5).map { track("cand:$it") }
+        val prompt = client.buildMixUserPrompt("softer", base, candidates, 3)
+
+        assertTrue(prompt.contains("base:19"))
+        assertFalse(prompt.contains("base:20"))
+        assertTrue(prompt.contains("cand:4"))
+        assertTrue(prompt.contains("exactly 3 new songs"))
     }
 }

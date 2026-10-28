@@ -58,7 +58,7 @@ sealed class NavDestination(
         val bottomNavDestinations: List<NavDestination>
             get() = listOf(Home, Library, Settings)
 
-        const val ROUTE_ALBUM_DETAIL = "album_detail/{albumName}"
+        const val ROUTE_ALBUM_DETAIL = "album_detail/{albumName}?albumArtist={albumArtist}"
         const val ROUTE_ARTIST_DETAIL = "artist_detail/{artistName}"
         const val ROUTE_FOLDER_DETAIL = "folder_detail/{folderName}"
         const val ROUTE_GENRE_DETAIL = "genre_detail/{genreName}"
@@ -71,8 +71,8 @@ sealed class NavDestination(
         const val ROUTE_THEME = "theme_studio"
         const val ROUTE_DOWNLOAD = "download"
 
-        fun createAlbumDetailRoute(albumName: String): String =
-            "album_detail/${Uri.encode(albumName)}"
+        fun createAlbumDetailRoute(albumName: String, albumArtist: String): String =
+            "album_detail/${Uri.encode(albumName)}?albumArtist=${Uri.encode(albumArtist)}"
 
         fun createArtistDetailRoute(artistName: String): String =
             "artist_detail/${Uri.encode(artistName)}"

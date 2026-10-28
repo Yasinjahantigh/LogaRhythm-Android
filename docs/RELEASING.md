@@ -16,8 +16,8 @@ Encode the keystore on Linux with `base64 -w 0 logarhythm-release.keystore`.
 ## Publish
 
 ```bash
-git tag v1.6.0
-git push origin v1.6.0
+git tag v1.7.0
+git push origin v1.7.0
 ```
 
 Or run **Build and release APK** from the Actions tab with an empty version input to bump the patch version.
@@ -27,7 +27,7 @@ The workflow runs tests, builds a signed APK and attaches it to a GitHub release
 ## Verify
 
 ```bash
-apksigner verify --verbose --print-certs LogaRhythm-v1.6.0.apk
+apksigner verify --verbose --print-certs LogaRhythm-v1.7.0.apk
 ```
 
 The certificate must match the one from your keystore.

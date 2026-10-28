@@ -45,7 +45,7 @@ class GeniusLyricsSource @Inject constructor(
 
         for (searchQuery in queries) {
             val search = http.get(
-                "https://genius.com/api/search/multi?per_page=6&q=${encode(searchQuery)}",
+                "https://genius.com/api/search/multi?per_page=5&q=${encode(searchQuery)}",
                 mapOf("Referer" to "https://genius.com/", "Accept" to "application/json")
             )
             when {
@@ -80,6 +80,12 @@ class GeniusLyricsSource @Inject constructor(
             if (candidates.isNotEmpty() || blocked || timedOut) break
         }
 
+        if (candidates.isEmpty()) {
+            fallbackLyrics(title, artist)?.let { candidate ->
+                return@withContext LyricsSearchResult(listOf(candidate), LyricsSourceStatus.OK)
+            }
+        }
+
         when {
             candidates.isNotEmpty() -> LyricsSearchResult(candidates, LyricsSourceStatus.OK)
             blocked -> LyricsSearchResult(
@@ -90,6 +96,33 @@ class GeniusLyricsSource @Inject constructor(
             lastError != null -> LyricsSearchResult(status = LyricsSourceStatus.ERROR, detail = lastError)
             else -> LyricsSearchResult(status = LyricsSourceStatus.EMPTY)
         }
+    }
+
+    /**
+     * Genius pages are frequently behind a Cloudflare challenge on mobile networks. lyrics.ovh
+     * needs no key and stays reachable, so the provider still returns text instead of "Error".
+     */
+    private suspend fun fallbackLyrics(title: String, artist: String): LyricsCandidate? {
+        if (title.isBlank() || artist.isBlank()) return null
+        val response = http.get(
+            "https://api.lyrics.ovh/v1/${encode(artist)}/${encode(title)}",
+            mapOf("Accept" to "application/json")
+        )
+        if (!response.ok) return null
+        val text = runCatching {
+            LyricsResponseFields.text(JSONObject(response.body), "lyrics")
+        }.getOrNull() ?: return null
+        val parsed = com.yasinjahantigh.logarhythm.domain.lyrics.LrcParser.parse(text)
+        if (parsed.isEmpty) return null
+        return LyricsCandidate(
+            id = "genius_fallback_${title}_$artist",
+            trackName = title,
+            artistName = artist,
+            isSynced = parsed.isSynced,
+            sourceName = "Genius (fallback)",
+            providerId = id,
+            lyrics = parsed
+        )
     }
 
     private data class SongHit(

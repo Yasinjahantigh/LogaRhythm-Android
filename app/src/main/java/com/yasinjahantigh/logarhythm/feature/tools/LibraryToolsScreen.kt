@@ -1,5 +1,6 @@
 package com.yasinjahantigh.logarhythm.feature.tools
 
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -13,6 +14,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.Card
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -47,6 +49,7 @@ import com.yasinjahantigh.logarhythm.ui.designsystem.LocalPlaybackBottomPadding
 fun LibraryToolsScreen(
     onNavigateBack: () -> Unit,
     modifier: Modifier = Modifier,
+    onEditTrack: (String) -> Unit = {},
     viewModel: LibraryToolsViewModel = hiltViewModel(),
     playlistViewModel: PlaylistViewModel = hiltViewModel()
 ) {
@@ -56,6 +59,15 @@ fun LibraryToolsScreen(
     val currentTrack by viewModel.currentTrack.collectAsStateWithLifecycle()
     val isPlaying by viewModel.isPlaying.collectAsStateWithLifecycle()
     val playlists by playlistViewModel.playlists.collectAsStateWithLifecycle()
+    val suggestions by viewModel.suggestions.collectAsStateWithLifecycle()
+    val findingFixes by viewModel.findingFixes.collectAsStateWithLifecycle()
+    val savingFix by viewModel.savingFix.collectAsStateWithLifecycle()
+    val fixFailed by viewModel.fixFailed.collectAsStateWithLifecycle()
+    val mediaStoreConsent = com.yasinjahantigh.logarhythm.core.utils.rememberMediaStoreConsent()
+    val context = androidx.compose.ui.platform.LocalContext.current
+    androidx.compose.runtime.LaunchedEffect(fixFailed) {
+        if (fixFailed) android.widget.Toast.makeText(context, R.string.tools_fix_failed, android.widget.Toast.LENGTH_SHORT).show()
+    }
 
     var tab by rememberSaveable { mutableIntStateOf(0) }
     var menuTrack by remember { mutableStateOf<Track?>(null) }
@@ -68,6 +80,7 @@ fun LibraryToolsScreen(
             onPlayNext = { viewModel.playNext(track) },
             onAddToQueue = { viewModel.addToQueue(track) },
             onAddToPlaylist = { showAddToPlaylist = true },
+            onEditTrack = { onEditTrack(track.id) },
             onHideTrack = { viewModel.hideTrack(track) }
         )
         if (showAddToPlaylist) {
@@ -100,6 +113,7 @@ fun LibraryToolsScreen(
         Row(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             modifier = Modifier.padding(horizontal = 16.dp)
+                .horizontalScroll(androidx.compose.foundation.rememberScrollState())
         ) {
             FilterChip(
                 selected = tab == 0,
@@ -115,6 +129,11 @@ fun LibraryToolsScreen(
                 selected = tab == 2,
                 onClick = { tab = 2 },
                 label = { Text(stringResource(R.string.tools_hidden_tracks) + (hiddenTracks?.let { " (${it.size})" } ?: "")) }
+            )
+            FilterChip(
+                selected = tab == 3,
+                onClick = { tab = 3; viewModel.suggestFixes() },
+                label = { Text(stringResource(R.string.tools_suggest_fixes) + (suggestions?.let { " (${it.size})" } ?: "")) }
             )
         }
 
@@ -137,7 +156,14 @@ fun LibraryToolsScreen(
                     }
                     items(group.tracks, key = { "d_" + group.key + it.id }) { track ->
                         Column {
-                            TrackRow(track, currentTrack, isPlaying, viewModel::play) { menuTrack = it }
+                            TrackRow(
+                                track = track,
+                                current = currentTrack,
+                                isPlaying = isPlaying,
+                                onPlay = viewModel::play,
+                                onMenu = { menuTrack = it },
+                                onPlayNext = viewModel::playNext
+                            )
                             Text(
                                 text = track.filePath.ifBlank { track.folder },
                                 style = MaterialTheme.typography.bodySmall,
@@ -154,9 +180,40 @@ fun LibraryToolsScreen(
                 if (tracks != null && tracks.isEmpty()) item { EmptyNote(stringResource(R.string.tools_no_missing)) }
                 tracks?.let { list ->
                     items(list, key = { "m_" + it.id }) { track ->
-                        TrackRow(track, currentTrack, isPlaying, viewModel::play) { menuTrack = it }
+                        TrackRow(
+                            track = track,
+                            current = currentTrack,
+                            isPlaying = isPlaying,
+                            onPlay = viewModel::play,
+                            onMenu = { menuTrack = it },
+                            onPlayNext = viewModel::playNext
+                        )
                     }
                 }
+            } else if (tab == 3) {
+                if (findingFixes) item { EmptyNote(stringResource(R.string.tools_finding_fixes)) }
+                val list = suggestions
+                if (!findingFixes && list != null && list.isEmpty()) item { EmptyNote(stringResource(R.string.tools_no_fixes)) }
+                list?.let { items(it, key = { s -> "fix_" + s.track.id }) { suggestion ->
+                    Card(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp)) {
+                        Column(Modifier.padding(12.dp)) {
+                            Text(suggestion.track.title, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            FixDiff(stringResource(R.string.tag_editor_field_title), suggestion.track.title, suggestion.tags.title)
+                            FixDiff(stringResource(R.string.tag_editor_field_artist), suggestion.track.artist, suggestion.tags.artist)
+                            FixDiff(stringResource(R.string.tag_editor_field_album), suggestion.track.album, suggestion.tags.album)
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                                TextButton(
+                                    enabled = savingFix == null,
+                                    onClick = {
+                                        mediaStoreConsent.write(suggestion.track, onApproved = {
+                                            viewModel.applySuggestion(suggestion.track.id)
+                                        })
+                                    }
+                                ) { Text(stringResource(R.string.btn_apply)) }
+                            }
+                        }
+                    }
+                } }
             } else {
                 val hidden = hiddenTracks
                 if (hidden != null && hidden.isEmpty()) {
@@ -183,7 +240,14 @@ fun LibraryToolsScreen(
                                 .padding(end = 12.dp)
                         ) {
                             Box(modifier = Modifier.weight(1f)) {
-                                TrackRow(track, currentTrack, isPlaying, viewModel::play) { menuTrack = it }
+                                TrackRow(
+                                    track = track,
+                                    current = currentTrack,
+                                    isPlaying = isPlaying,
+                                    onPlay = viewModel::play,
+                                    onMenu = { menuTrack = it },
+                                    onPlayNext = viewModel::playNext
+                                )
                             }
                             TextButton(onClick = { viewModel.unhideTrack(track.id) }) {
                                 Text(stringResource(R.string.btn_restore))
@@ -202,7 +266,8 @@ private fun TrackRow(
     current: Track?,
     isPlaying: Boolean,
     onPlay: (Track) -> Unit,
-    onMenu: (Track) -> Unit
+    onMenu: (Track) -> Unit,
+    onPlayNext: (Track) -> Unit
 ) {
     val isCurrent = current?.id == track.id
     TrackListItem(
@@ -210,7 +275,21 @@ private fun TrackRow(
         onClick = { onPlay(track) },
         isCurrentTrack = isCurrent,
         isPlaying = isCurrent && isPlaying,
-        onMenuClick = { onMenu(track) }
+        onMenuClick = { onMenu(track) },
+        onPlayNext = { onPlayNext(track) }
+    )
+}
+
+@Composable
+private fun FixDiff(label: String, before: String, after: String) {
+    if (before == after) return
+    Text(
+        text = "$label: $before → $after",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        maxLines = 2,
+        overflow = TextOverflow.Ellipsis,
+        modifier = Modifier.padding(top = 2.dp)
     )
 }
 

@@ -48,6 +48,11 @@ fun MusicNavGraph(
                 onNavigateToDownload = {
                     navController.navigate(NavDestination.ROUTE_DOWNLOAD)
                 },
+                onNavigateToSettings = {
+                    navController.navigate(NavDestination.Settings.route) {
+                        launchSingleTop = true
+                    }
+                },
                 onNavigateToTagEditor = { trackId ->
                     navController.navigate(NavDestination.createTagEditorRoute(trackId))
                 }
@@ -56,8 +61,8 @@ fun MusicNavGraph(
         composable(NavDestination.Search.route) {
             SearchScreen(
                 onNavigateBack = { navController.popBackStack() },
-                onNavigateToAlbum = { albumName ->
-                    navController.navigate(NavDestination.createAlbumDetailRoute(albumName))
+                onNavigateToAlbum = { albumName, albumArtist ->
+                    navController.navigate(NavDestination.createAlbumDetailRoute(albumName, albumArtist))
                 },
                 onNavigateToArtist = { artistName ->
                     navController.navigate(NavDestination.createArtistDetailRoute(artistName))
@@ -69,8 +74,8 @@ fun MusicNavGraph(
         }
         composable(NavDestination.Library.route) {
             LibraryScreen(
-                onNavigateToAlbum = { albumName ->
-                    navController.navigate(NavDestination.createAlbumDetailRoute(albumName))
+                onNavigateToAlbum = { albumName, albumArtist ->
+                    navController.navigate(NavDestination.createAlbumDetailRoute(albumName, albumArtist))
                 },
                 onNavigateToArtist = { artistName ->
                     navController.navigate(NavDestination.createArtistDetailRoute(artistName))
@@ -131,7 +136,12 @@ fun MusicNavGraph(
             )
         }
         composable(NavDestination.ROUTE_LIBRARY_TOOLS) {
-            LibraryToolsScreen(onNavigateBack = { navController.popBackStack() })
+            LibraryToolsScreen(
+                onNavigateBack = { navController.popBackStack() },
+                onEditTrack = { trackId ->
+                    navController.navigate(NavDestination.createTagEditorRoute(trackId))
+                }
+            )
         }
         composable(NavDestination.ROUTE_EQUALIZER) {
             EqualizerScreen(
@@ -141,8 +151,8 @@ fun MusicNavGraph(
         composable(NavDestination.ROUTE_STATS) {
             StatsScreen(
                 onNavigateBack = { navController.popBackStack() },
-                onNavigateToAlbum = { albumName ->
-                    navController.navigate(NavDestination.createAlbumDetailRoute(albumName))
+                onNavigateToAlbum = { albumName, albumArtist ->
+                    navController.navigate(NavDestination.createAlbumDetailRoute(albumName, albumArtist))
                 },
                 onNavigateToArtist = { artistName ->
                     navController.navigate(NavDestination.createArtistDetailRoute(artistName))
@@ -151,7 +161,10 @@ fun MusicNavGraph(
         }
         composable(
             route = NavDestination.ROUTE_ALBUM_DETAIL,
-            arguments = listOf(navArgument("albumName") { type = NavType.StringType })
+            arguments = listOf(
+                navArgument("albumName") { type = NavType.StringType },
+                navArgument("albumArtist") { type = NavType.StringType }
+            )
         ) {
             AlbumDetailScreen(
                 onNavigateBack = { navController.popBackStack() },
@@ -166,8 +179,8 @@ fun MusicNavGraph(
         ) {
             ArtistDetailScreen(
                 onNavigateBack = { navController.popBackStack() },
-                onNavigateToAlbum = { albumName ->
-                    navController.navigate(NavDestination.createAlbumDetailRoute(albumName))
+                onNavigateToAlbum = { albumName, albumArtist ->
+                    navController.navigate(NavDestination.createAlbumDetailRoute(albumName, albumArtist))
                 },
                 onNavigateToArtist = { artistName ->
                     navController.navigate(NavDestination.createArtistDetailRoute(artistName))

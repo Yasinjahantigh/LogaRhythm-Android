@@ -7,6 +7,7 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -21,6 +22,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
@@ -38,6 +40,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -65,6 +68,7 @@ import com.yasinjahantigh.logarhythm.R
 import com.yasinjahantigh.logarhythm.domain.model.DownloadErrorKind
 import com.yasinjahantigh.logarhythm.domain.model.DownloadItem
 import com.yasinjahantigh.logarhythm.domain.model.DownloadSearchResult
+import com.yasinjahantigh.logarhythm.domain.model.DownloadSource
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -73,6 +77,8 @@ fun DownloadSearchTab(
     onQueryChange: (String) -> Unit,
     onSearch: () -> Unit,
     state: DownloadSearchUiState,
+    sourceFilter: DownloadSource?,
+    onSourceFilterChange: (DownloadSource?) -> Unit,
     recentSearches: List<String>,
     onSelectRecent: (String) -> Unit,
     onRemoveRecent: (String) -> Unit,
@@ -81,6 +87,7 @@ fun DownloadSearchTab(
     preparing: Boolean,
     bottomPadding: Dp,
     onResultClick: (DownloadSearchResult) -> Unit,
+    onDownloadAlbum: (DownloadSearchResult) -> Unit = {},
     onRetry: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -137,7 +144,21 @@ fun DownloadSearchTab(
             )
         )
 
-        if (preparing) {
+        SourceFilterRow(
+            selected = sourceFilter,
+            onSelect = onSourceFilterChange
+        )
+
+        if (sourceFilter == DownloadSource.MUSICMAN) {
+            Text(
+                text = stringResource(R.string.download_musicman_ready_note),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = 20.dp, vertical = 2.dp)
+            )
+        }
+
+        if (preparing && sourceFilter != DownloadSource.MUSICMAN) {
             PreparingRow()
         }
 
@@ -167,10 +188,45 @@ fun DownloadSearchTab(
                     DownloadResultCard(
                         result = result,
                         activeItem = history.firstOrNull { it.sourceUrl == result.url },
-                        onClick = { onResultClick(result) }
+                        onClick = { onResultClick(result) },
+                        onDownloadAlbum = { onDownloadAlbum(result) }
                     )
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun SourceFilterRow(
+    selected: DownloadSource?,
+    onSelect: (DownloadSource?) -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState())
+            .padding(horizontal = 16.dp, vertical = 2.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        FilterChip(
+            selected = selected == null,
+            onClick = { onSelect(null) },
+            label = { Text(stringResource(R.string.download_source_all)) },
+            modifier = Modifier.testTag("download_source_all")
+        )
+        for (source in listOf(
+            DownloadSource.MUSICMAN,
+            DownloadSource.YOUTUBE,
+            DownloadSource.SOUNDCLOUD
+        )) {
+            FilterChip(
+                selected = selected == source,
+                onClick = { onSelect(source) },
+                label = { Text(stringResource(downloadSourceLabelRes(source))) },
+                modifier = Modifier.testTag("download_source_${source.raw}")
+            )
         }
     }
 }

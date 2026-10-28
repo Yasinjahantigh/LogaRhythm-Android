@@ -33,4 +33,5 @@ fun downloadErrorText(item: DownloadItem): String = when (item.errorKind) {
 fun downloadSourceLabelRes(source: DownloadSource): Int = when (source) {
     DownloadSource.YOUTUBE -> R.string.download_source_youtube
     DownloadSource.SOUNDCLOUD -> R.string.download_source_soundcloud
+    DownloadSource.MUSICMAN -> R.string.download_source_musicman
 }

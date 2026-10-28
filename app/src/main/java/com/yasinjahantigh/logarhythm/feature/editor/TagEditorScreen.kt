@@ -6,6 +6,8 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import coil.compose.AsyncImage
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -23,6 +25,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -73,6 +76,7 @@ fun TagEditorScreen(
 ) {
     val track by viewModel.track.collectAsStateWithLifecycle()
     val isSaving by viewModel.isSaving.collectAsStateWithLifecycle()
+    val isFilling by viewModel.isFilling.collectAsStateWithLifecycle()
     val failure by viewModel.failure.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -94,6 +98,56 @@ fun TagEditorScreen(
     var showCropDialog by remember { mutableStateOf(false) }
     var isLoadingCover by remember { mutableStateOf(false) }
     var coverError by remember { mutableStateOf(false) }
+    val coverCandidates by viewModel.coverCandidates.collectAsStateWithLifecycle()
+    val findingCovers by viewModel.findingCovers.collectAsStateWithLifecycle()
+    val selectedCover by viewModel.selectedCover.collectAsStateWithLifecycle()
+
+    androidx.compose.runtime.LaunchedEffect(selectedCover) {
+        val bitmap = selectedCover ?: return@LaunchedEffect
+        pickedBitmap = bitmap
+        removeArtwork = false
+        showCropDialog = true
+        viewModel.clearSelectedCover()
+    }
+
+    coverCandidates?.let { candidates ->
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = viewModel::dismissCovers,
+            title = { Text(stringResource(R.string.tag_editor_find_cover)) },
+            text = {
+                if (findingCovers) {
+                    androidx.compose.material3.CircularProgressIndicator()
+                } else if (candidates.isEmpty()) {
+                    Text(stringResource(R.string.tag_editor_no_covers))
+                } else {
+                    androidx.compose.foundation.lazy.grid.LazyVerticalGrid(
+                        columns = androidx.compose.foundation.lazy.grid.GridCells.Fixed(3),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                        modifier = Modifier.height(300.dp)
+                    ) {
+                        items(candidates.size) { index ->
+                            val candidate = candidates[index]
+                            AsyncImage(
+                                model = candidate.url,
+                                contentDescription = candidate.title,
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier
+                                    .size(88.dp)
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .clickable { viewModel.chooseCover(candidate.url) }
+                            )
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                androidx.compose.material3.TextButton(onClick = viewModel::dismissCovers) {
+                    Text(stringResource(R.string.btn_cancel))
+                }
+            }
+        )
+    }
 
     LaunchedEffect(track) {
         val current = track
@@ -115,6 +169,55 @@ fun TagEditorScreen(
         viewModel.saved.collect {
             Toast.makeText(context, context.getString(R.string.tag_editor_saved), Toast.LENGTH_SHORT).show()
             onNavigateBack()
+        }
+    }
+
+    LaunchedEffect(viewModel) {
+        viewModel.suggestions.collect { resolved ->
+            val emptyMessage = {
+                Toast.makeText(
+                    context,
+                    context.getString(R.string.tag_editor_autofill_empty),
+                    Toast.LENGTH_SHORT
+                ).show()
+            }
+            if (resolved == null) {
+                emptyMessage()
+                return@collect
+            }
+            val nextTitle = resolved.title ?: title
+            val nextArtist = resolved.artist ?: artist
+            val nextAlbum = resolved.album ?: album
+            val nextGenre = resolved.genre ?: genre
+            val nextYear = resolved.year?.toString() ?: year
+            val nextTrack = resolved.trackNumber?.toString() ?: trackNumber
+            val nextDisc = resolved.discNumber?.toString() ?: discNumber
+            val nextComposer = resolved.composer ?: composer
+            val changed = nextTitle != title ||
+                nextArtist != artist ||
+                nextAlbum != album ||
+                nextGenre != genre ||
+                nextYear != year ||
+                nextTrack != trackNumber ||
+                nextDisc != discNumber ||
+                nextComposer != composer
+            if (!changed) {
+                emptyMessage()
+                return@collect
+            }
+            title = nextTitle
+            artist = nextArtist
+            album = nextAlbum
+            genre = nextGenre
+            year = nextYear
+            trackNumber = nextTrack
+            discNumber = nextDisc
+            composer = nextComposer
+            Toast.makeText(
+                context,
+                context.getString(R.string.tag_editor_autofill_done),
+                Toast.LENGTH_SHORT
+            ).show()
         }
     }
 
@@ -223,6 +326,31 @@ fun TagEditorScreen(
             )
             Spacer(modifier = Modifier.height(12.dp))
 
+            OutlinedButton(
+                onClick = viewModel::autoFill,
+                enabled = isLocal && !isSaving && !isFilling,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("tag_editor_autofill")
+            ) {
+                if (isFilling) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(16.dp),
+                        strokeWidth = 2.dp
+                    )
+                } else {
+                    Icon(
+                        imageVector = Icons.Filled.AutoAwesome,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(stringResource(R.string.tag_editor_autofill))
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(
                     modifier = Modifier
@@ -270,6 +398,13 @@ fun TagEditorScreen(
                         modifier = Modifier.testTag("tag_editor_pick_cover")
                     ) {
                         Text(stringResource(R.string.tag_editor_change_cover))
+                    }
+                    OutlinedButton(
+                        enabled = !isSaving && !findingCovers,
+                        onClick = viewModel::findCovers,
+                        modifier = Modifier.testTag("tag_editor_find_cover")
+                    ) {
+                        Text(stringResource(R.string.tag_editor_find_cover))
                     }
                     if (pickedBitmap != null || (track?.artworkUri != null && !removeArtwork)) {
                         TextButton(

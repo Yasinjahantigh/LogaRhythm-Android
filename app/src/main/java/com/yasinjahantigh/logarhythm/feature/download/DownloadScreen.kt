@@ -17,10 +17,15 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -54,6 +59,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.yasinjahantigh.logarhythm.R
 import com.yasinjahantigh.logarhythm.domain.model.DownloadItem
 import com.yasinjahantigh.logarhythm.domain.model.DownloadSearchResult
+import com.yasinjahantigh.logarhythm.domain.model.DownloadSource
 import com.yasinjahantigh.logarhythm.ui.designsystem.LocalPlaybackBottomPadding
 import kotlinx.coroutines.launch
 
@@ -68,6 +74,10 @@ fun DownloadScreen(
     val searchState by viewModel.searchState.collectAsStateWithLifecycle()
     val history by viewModel.history.collectAsStateWithLifecycle()
     val recentSearches by viewModel.recentSearches.collectAsStateWithLifecycle()
+    val sourceFilter by viewModel.sourceFilter.collectAsStateWithLifecycle()
+    val albumSummary by viewModel.albumSummary.collectAsStateWithLifecycle()
+    val albumPreview by viewModel.albumPreview.collectAsStateWithLifecycle()
+    val albumBusy by viewModel.albumBusy.collectAsStateWithLifecycle()
     val preparing by viewModel.preparing.collectAsStateWithLifecycle()
     val updateState by viewModel.updateState.collectAsStateWithLifecycle()
     val version by viewModel.ytdlpVersion.collectAsStateWithLifecycle()
@@ -77,6 +87,44 @@ fun DownloadScreen(
     val haptics = LocalHapticFeedback.current
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
+
+    albumPreview?.let { preview ->
+        AlbumDownloadDialog(
+            preview = preview,
+            busy = albumBusy,
+            onDismiss = viewModel::dismissAlbumPreview,
+            onConfirm = viewModel::confirmAlbumDownload
+        )
+    }
+    if (albumBusy && albumPreview == null) {
+        AlertDialog(
+            onDismissRequest = {},
+            title = { Text(stringResource(R.string.download_album)) },
+            text = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                    Spacer(Modifier.width(12.dp))
+                    Text(stringResource(R.string.album_resolving))
+                }
+            },
+            confirmButton = {}
+        )
+    }
+
+    LaunchedEffect(albumSummary) {
+        val summary = albumSummary ?: return@LaunchedEffect
+        Toast.makeText(
+            context,
+            when {
+                !summary.found -> context.getString(R.string.download_album_not_found)
+                summary.queued == 0 -> context.getString(R.string.download_album_none)
+                summary.failed > 0 -> context.getString(R.string.download_album_partial, summary.album, summary.queued, summary.failed)
+                else -> context.getString(R.string.download_album_queued, summary.album, summary.queued)
+            },
+            Toast.LENGTH_LONG
+        ).show()
+        viewModel.clearAlbumSummary()
+    }
 
     var selectedTab by rememberSaveable { mutableIntStateOf(0) }
     var showSettings by rememberSaveable { mutableStateOf(false) }
@@ -221,6 +269,8 @@ fun DownloadScreen(
                             onQueryChange = viewModel::onQueryChange,
                             onSearch = { viewModel.search() },
                             state = searchState,
+                            sourceFilter = sourceFilter,
+                            onSourceFilterChange = viewModel::setSourceFilter,
                             recentSearches = recentSearches,
                             onSelectRecent = viewModel::selectRecent,
                             onRemoveRecent = viewModel::removeRecent,
@@ -229,6 +279,7 @@ fun DownloadScreen(
                             preparing = preparing,
                             bottomPadding = bottomPadding,
                             onResultClick = { startDownload(it) },
+                            onDownloadAlbum = viewModel::previewAlbum,
                             onRetry = { viewModel.search() }
                         )
                     } else {

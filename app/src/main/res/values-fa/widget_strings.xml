@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="widget_open">باز کردن LogaRhythm</string>
+    <string name="widget_small_label">کاور LogaRhythm</string>
+    <string name="widget_small_description">کاور آلبوم با کنترل پخش و توقف</string>
+    <string name="widget_strip_label">LogaRhythm جمع‌وجور</string>
+    <string name="widget_strip_description">مشخصات آهنگ و کنترل‌های جمع‌وجور پخش</string>
+    <string name="widget_medium_label">پیشرفت LogaRhythm</string>
+    <string name="widget_medium_description">کاور، پیشرفت پخش و کنترل‌های موسیقی</string>
+    <string name="widget_large_label">LogaRhythm کامل</string>
+    <string name="widget_large_description">کنترل کامل پخش و نمایش آهنگ‌های بعدی</string>
+    <string name="widget_player_label">پخش‌کننده LogaRhythm</string>
+    <string name="widget_player_description">کاور بزرگ و همه کنترل‌های پخش با تم اپ</string>
+</resources>
