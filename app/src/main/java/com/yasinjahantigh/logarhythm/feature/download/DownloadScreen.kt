@@ -54,6 +54,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.yasinjahantigh.logarhythm.R
 import com.yasinjahantigh.logarhythm.domain.model.DownloadItem
 import com.yasinjahantigh.logarhythm.domain.model.DownloadSearchResult
+import com.yasinjahantigh.logarhythm.domain.model.DownloadSource
 import com.yasinjahantigh.logarhythm.ui.designsystem.LocalPlaybackBottomPadding
 import kotlinx.coroutines.launch
 
@@ -68,6 +69,7 @@ fun DownloadScreen(
     val searchState by viewModel.searchState.collectAsStateWithLifecycle()
     val history by viewModel.history.collectAsStateWithLifecycle()
     val recentSearches by viewModel.recentSearches.collectAsStateWithLifecycle()
+    val sourceFilter by viewModel.sourceFilter.collectAsStateWithLifecycle()
     val preparing by viewModel.preparing.collectAsStateWithLifecycle()
     val updateState by viewModel.updateState.collectAsStateWithLifecycle()
     val version by viewModel.ytdlpVersion.collectAsStateWithLifecycle()
@@ -221,6 +223,8 @@ fun DownloadScreen(
                             onQueryChange = viewModel::onQueryChange,
                             onSearch = { viewModel.search() },
                             state = searchState,
+                            sourceFilter = sourceFilter,
+                            onSourceFilterChange = viewModel::setSourceFilter,
                             recentSearches = recentSearches,
                             onSelectRecent = viewModel::selectRecent,
                             onRemoveRecent = viewModel::removeRecent,

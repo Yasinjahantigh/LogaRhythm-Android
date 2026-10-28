@@ -8,10 +8,18 @@ import java.text.NumberFormat
  * localized "Unknown ..." string, so placeholders never leak into the UI in the wrong language.
  */
 fun String?.cleanMetaOrNull(): String? {
-    val value = this?.trim().orEmpty()
+    val value = this
+        ?.replace(Regex("\\s+"), " ")
+        ?.trim()
+        ?.removeSurrounding("\"")
+        ?.trim()
+        .orEmpty()
     if (value.isEmpty()) return null
-    return when (value.lowercase()) {
-        "<unknown>", "unknown", "null", "unknown title", "unknown artist", "unknown album", "unknown genre" -> null
+    val key = value.lowercase().trim(' ', '-', '_', '.')
+    if (key.isEmpty()) return null
+    return when (key) {
+        "<unknown>", "unknown", "null", "n/a", "na", "none", "not available",
+        "unknown title", "unknown artist", "unknown album", "unknown genre" -> null
         else -> value
     }
 }

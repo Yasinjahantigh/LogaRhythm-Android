@@ -47,6 +47,7 @@ import com.yasinjahantigh.logarhythm.ui.designsystem.LocalPlaybackBottomPadding
 fun LibraryToolsScreen(
     onNavigateBack: () -> Unit,
     modifier: Modifier = Modifier,
+    onEditTrack: (String) -> Unit = {},
     viewModel: LibraryToolsViewModel = hiltViewModel(),
     playlistViewModel: PlaylistViewModel = hiltViewModel()
 ) {
@@ -68,6 +69,7 @@ fun LibraryToolsScreen(
             onPlayNext = { viewModel.playNext(track) },
             onAddToQueue = { viewModel.addToQueue(track) },
             onAddToPlaylist = { showAddToPlaylist = true },
+            onEditTrack = { onEditTrack(track.id) },
             onHideTrack = { viewModel.hideTrack(track) }
         )
         if (showAddToPlaylist) {
@@ -137,7 +139,14 @@ fun LibraryToolsScreen(
                     }
                     items(group.tracks, key = { "d_" + group.key + it.id }) { track ->
                         Column {
-                            TrackRow(track, currentTrack, isPlaying, viewModel::play) { menuTrack = it }
+                            TrackRow(
+                                track = track,
+                                current = currentTrack,
+                                isPlaying = isPlaying,
+                                onPlay = viewModel::play,
+                                onMenu = { menuTrack = it },
+                                onPlayNext = viewModel::playNext
+                            )
                             Text(
                                 text = track.filePath.ifBlank { track.folder },
                                 style = MaterialTheme.typography.bodySmall,
@@ -154,7 +163,14 @@ fun LibraryToolsScreen(
                 if (tracks != null && tracks.isEmpty()) item { EmptyNote(stringResource(R.string.tools_no_missing)) }
                 tracks?.let { list ->
                     items(list, key = { "m_" + it.id }) { track ->
-                        TrackRow(track, currentTrack, isPlaying, viewModel::play) { menuTrack = it }
+                        TrackRow(
+                            track = track,
+                            current = currentTrack,
+                            isPlaying = isPlaying,
+                            onPlay = viewModel::play,
+                            onMenu = { menuTrack = it },
+                            onPlayNext = viewModel::playNext
+                        )
                     }
                 }
             } else {
@@ -183,7 +199,14 @@ fun LibraryToolsScreen(
                                 .padding(end = 12.dp)
                         ) {
                             Box(modifier = Modifier.weight(1f)) {
-                                TrackRow(track, currentTrack, isPlaying, viewModel::play) { menuTrack = it }
+                                TrackRow(
+                                    track = track,
+                                    current = currentTrack,
+                                    isPlaying = isPlaying,
+                                    onPlay = viewModel::play,
+                                    onMenu = { menuTrack = it },
+                                    onPlayNext = viewModel::playNext
+                                )
                             }
                             TextButton(onClick = { viewModel.unhideTrack(track.id) }) {
                                 Text(stringResource(R.string.btn_restore))
@@ -202,7 +225,8 @@ private fun TrackRow(
     current: Track?,
     isPlaying: Boolean,
     onPlay: (Track) -> Unit,
-    onMenu: (Track) -> Unit
+    onMenu: (Track) -> Unit,
+    onPlayNext: (Track) -> Unit
 ) {
     val isCurrent = current?.id == track.id
     TrackListItem(
@@ -210,7 +234,8 @@ private fun TrackRow(
         onClick = { onPlay(track) },
         isCurrentTrack = isCurrent,
         isPlaying = isCurrent && isPlaying,
-        onMenuClick = { onMenu(track) }
+        onMenuClick = { onMenu(track) },
+        onPlayNext = { onPlayNext(track) }
     )
 }
 
