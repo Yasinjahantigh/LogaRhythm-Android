@@ -31,3 +31,7 @@ class MusicWidgetMediumReceiver : MusicWidgetReceiverBase() {
 class MusicWidgetLargeReceiver : MusicWidgetReceiverBase() {
     override val glanceAppWidget: GlanceAppWidget = MusicWidgetLarge()
 }
+
+class MusicWidgetPlayerReceiver : MusicWidgetReceiverBase() {
+    override val glanceAppWidget: GlanceAppWidget = MusicWidgetPlayer()
+}

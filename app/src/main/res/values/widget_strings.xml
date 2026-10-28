@@ -9,4 +9,6 @@
     <string name="widget_medium_description">Artwork, progress, and playback controls</string>
     <string name="widget_large_label">LogaRhythm Complete</string>
     <string name="widget_large_description">Full playback controls and your up-next queue</string>
+    <string name="widget_player_label">LogaRhythm Player</string>
+    <string name="widget_player_description">Large artwork, progress, and every playback control</string>
 </resources>
