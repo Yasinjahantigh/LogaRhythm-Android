@@ -1,0 +1,8 @@
+name = "logarhythm-installs"
+main = "worker.js"
+compatibility_date = "2026-10-29"
+
+# Created with: wrangler kv namespace create INSTALLS
+[[kv_namespaces]]
+binding = "INSTALLS"
+id = "bbf04246b5594f45a771f9c02e8da4b9"

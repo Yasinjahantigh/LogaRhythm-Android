@@ -5,9 +5,11 @@
 # LogaRhythm
 
 A local music player for Android.<br>
-No account, no subscription. Your library stays on your phone.
+No account, no subscription, no ads. Your library stays on your phone.
 
 <a href="https://github.com/Yasinjahantigh/LogaRhythm-Android/releases/latest"><img alt="Download APK" src="https://img.shields.io/badge/Download-APK-2ea44f?logo=android&logoColor=white" /></a>
+<a href="https://github.com/Yasinjahantigh/LogaRhythm-Android/releases"><img alt="Downloads" src="https://img.shields.io/github/downloads/Yasinjahantigh/LogaRhythm-Android/total?label=downloads&color=2ea44f" /></a>
+<a href="https://logarhythm-installs.yasinjahantigh.workers.dev/stats"><img alt="Installs" src="https://img.shields.io/endpoint?url=https%3A%2F%2Flogarhythm-installs.yasinjahantigh.workers.dev%2Fbadge" /></a>
 <a href="https://t.me/LogaRhythmApp"><img alt="Telegram" src="https://img.shields.io/badge/Telegram-@LogaRhythmApp-2CA5E0?logo=telegram&logoColor=white" /></a>
 <img alt="Android 8.0+" src="https://img.shields.io/badge/Android-8.0%2B-3DDC84?logo=android&logoColor=white" />
 <img alt="License: Apache 2.0" src="https://img.shields.io/badge/License-Apache%202.0-blue.svg" />
@@ -25,78 +27,68 @@ English · [فارسی](README.fa.md)
 
 ## About
 
-LogaRhythm plays the music that is already on your phone. Playlists, history, edited tags and lyrics are stored on the device, and nothing is uploaded anywhere. The only features that use the network are the ones you start yourself: online lyrics, music download, and the optional AI playlist.
+LogaRhythm plays the music that is already on your phone. Playlists, history, edited tags and lyrics are stored on the device, and your files never leave it. The features that use the network are the ones you start yourself — online lyrics, music download and the optional AI playlist — plus two small background calls: a daily check for a newer release on GitHub, and one anonymous install record on the first launch containing a random install id, the app version, device model and Android version. App updates never send that record again. Neither call includes an account, file names, library data or an advertising id. GitHub also counts APK downloads the same way it counts any other file.
 
 ## Features
 
-**Playback**
+### Playback
 - Cross-fade between songs, skip silence, per-song playback speed
-- Sleep timer by minutes or by number of tracks
-- Resume position saved for long tracks (over 20 minutes), such as podcasts and mixes
+- Sleep timer by minutes or by number of tracks; resume position for long tracks
 - Playback resumes when headphones reconnect
-- Swipe the cover to preview the next or previous track; the song changes only when you swipe far enough and release
-- Shuffle can be turned on or off without interrupting the current song
-- ReplayGain (track and album modes), preamp, 5-band equalizer, bass boost
-- Home screen widgets in five sizes: 2×2 cover, 4×1 compact, 4×2 with progress, 4×4 with an up-next queue, and a 4×4 artwork player with theme-matched controls
+- Swipe the cover to preview the next or previous song; the next cover always waits on the right, so swiping left advances and swiping right goes back
+- ReplayGain (track and album), preamp, 5-band equalizer, bass boost and virtualizer
+- Home screen widgets in five sizes, from a 2×2 cover to a 4×4 player with an up-next queue
 
-**Lyrics**
+### Queue
+- Three sections: what already played, what is playing now, and what comes next
+- Drag the grip to reorder upcoming songs; the played section stays put as history
+- Swipe a row to remove it, with undo; tap any row to jump to it
+- Save the whole queue as a playlist in one tap
+
+### Lyrics
 - Reads lyrics embedded in the file, a `.lrc` file next to it, or fetches them online (LRCLIB, NetEase, Kugou, lyrics.ovh, Genius)
 - Synced scrolling, timing adjustment, manual editing, import and export
-- Wrong match? Search with your own title and artist and pick the right result
-- Each online source can be turned off, and you can use your own lyrics server
-- If Genius blocks a request, the lyrics are taken from lyrics.ovh and labeled as a fallback
+- Each online source can be turned off, and you can point the app at your own lyrics server
 
-**Tag and cover editor**
+### Tags and covers
 - Edit title, artist, album, album artist, genre, year, track and disc number, composer
-- Change, crop or remove the cover art
-- Fill title, artist, album, year and track number automatically from online metadata
-- Find cover art online (iTunes, Deezer), then crop it
-- Supports MP3, FLAC, Ogg and M4A; changes are verified before the original file is replaced
+- Change, crop or remove the cover art; find covers online from iTunes and Deezer
+- Auto-fill tags from online metadata; a "Fix names" tool cleans messy file names
+- Writes go to a staged copy and are verified before the original file is replaced
 
-**Library**
-- Sort by title, artist, album, year, date added, duration, play count, last played, or random
-- Filter by favorites, downloaded, or recently added
+### Library
+- Sort and filter by title, artist, album, year, date added, duration, play count and more
 - Multi-select for queueing, playlists, favorites and hiding songs
-- Swipe a song to the right to play it next; it is queued after the current track without interrupting playback
-- Duplicate finder, songs with missing tags, hidden songs, excluded folders
-- Fix names: review suggested before/after corrections for titles and artists, and apply them per track
-- Albums with the same name by different artists stay separate
-- Minimum track length, so voice notes and ringtones stay out
-- Artist pages with top songs, albums and appearances; collaborations are split correctly (`feat.`, `&`, commas), and names like *Tyler, The Creator* stay intact
+- Swipe a song to the right to play it next without interrupting playback
+- Hides ringtones, notifications, alarms and recordings by default, with a switch to show them
+- Stats for your most played songs, artists and albums
 
-**Discovery**
-- Smart mixes: recently added, recently played, most played, forgotten favorites, songs without lyrics, long songs, downloaded
-- Daily mixes, mood-based queues, artist radio
-- Listening stats by week, month or all time
-- Save any mix or the current queue as a playlist
+### Downloads
+- Search and download from YouTube, SoundCloud and MusicMan, in original quality
+- Album downloads with a track picker, duplicate detection and one summary notification
+- Metadata and cover art merged from Deezer, iTunes and MusicBrainz; the source artist always wins
 
-**Download**
-- Search YouTube, SoundCloud and MusicMan (a third-party music server) and save songs with tags and cover art. Choose one source or search all of them; the choice is remembered
-- Download a whole album from a search result: review the track list, pick which songs to keep (all selected by default), then queue them with duplicate detection and a summary notification
-- Progress with remaining time, cancel at any time, and a check that the downloaded file is real audio
-- Download history with play, open and share
+### AI (optional)
+- Describe a mood and get a playlist; regenerate the daily mix while keeping the current songs
+- Works with Gemini or any OpenAI-compatible endpoint you configure; the key stays on the device
 
-**Backup**
-- Playlists, favorites, history and lyrics in a single backup file
+### Updates and installs
+- The app checks GitHub for a newer release about once a day and offers to download and install it
+- The APK is matched to your CPU (arm64-v8a, armeabi-v7a, x86), downloaded with progress, and handed to the Android installer
+- Settings → About shows the installed version, the latest release and its download count
 
-**Appearance**
-- Dark, light and true-black OLED themes, colors from the cover art or your wallpaper (Material You), or a custom accent
-- Persian and English with full right-to-left support, switchable inside the app
-
-**Optional AI playlist**
-- Disabled by default. With your own OpenAI-compatible or Gemini API key, describe a mood and get a playlist built from your own library
-- Regenerate a daily mix: the current songs stay and the AI adds new ones from your library
-- Only a limited sample of song metadata (title, artist, genre, year) is sent, only when you tap Generate. Album names and file paths are never sent. The key is stored encrypted on the device
-
-Technical details for each feature: [docs/FEATURES.md](docs/FEATURES.md)
+### Appearance and data
+- Material 3 with a custom palette; colors can follow the album art, the wallpaper or your own choice
+- Full Persian localization and right-to-left layout
+- Backup and restore playlists, favorites, history and lyrics in one file; M3U import and export
 
 ## Install
 
-Download the latest APK from [Releases](https://github.com/Yasinjahantigh/LogaRhythm-Android/releases/latest). Android 8.0 or newer is required.
+- Android 8.0 or newer. The release page has one APK per CPU; most phones want `arm64-v8a`.
+- Get the APK from [GitHub Releases](https://github.com/Yasinjahantigh/LogaRhythm-Android/releases/latest) or the [Telegram channel](https://t.me/LogaRhythmApp).
+- After the first install, the app updates itself: it finds the newer release, downloads the matching APK and opens the installer. Android verifies the signature, so updates can only come from the same developer.
 
-Announcements and bug reports: [@LogaRhythmApp](https://t.me/LogaRhythmApp) on Telegram, or open an issue on GitHub.
-
-## Build
+## Build from source
 
 ```bash
 git clone https://github.com/Yasinjahantigh/LogaRhythm-Android.git
@@ -104,12 +96,26 @@ cd LogaRhythm-Android
 ./gradlew :app:assembleDebug
 ```
 
-Requires JDK 21 and Android SDK 36. On Windows use `gradlew.bat`.
-If Google Maven is not reachable from your network, add `logarhythm.mirrors=true` to `local.properties`.
+- JDK 17+ and the Android SDK (compileSdk 36) are required.
+- Version numbers come from the git tag; fetch tags before building a release.
+- Networks where Google Maven is blocked can opt into mirrors by adding `logarhythm.mirrors=true` to `local.properties`.
+- Release signing reads `KEYSTORE_PATH`, `KEYSTORE_PASSWORD`, `KEY_ALIAS` and `KEY_PASSWORD` from the environment or Gradle properties.
 
-## License
+## Privacy
 
-Apache 2.0, see [LICENSE](LICENSE).
+- Your music, playlists, history, tags and lyrics never leave the device.
+- Online lyrics, downloads and the AI playlist only run when you start them.
+- The daily update check sends a plain HTTPS request to GitHub with no device information.
+- The first launch sends one anonymous install record (random install id, app version, device model, Android version, CPU ABI) so installs from any mirror can be counted. It is sent once; updates never send it again. Public totals: [stats](https://logarhythm-installs.yasinjahantigh.workers.dev/stats).
+- No advertising id, no analytics SDK, no crash reporter.
+
+## Third-party
 
 The download feature uses [youtubedl-android](https://github.com/junkfood02/youtubedl-android) and [yt-dlp](https://github.com/yt-dlp/yt-dlp) (GPL-3.0); released APKs bundle them. See [THIRD_PARTY_NOTICES](THIRD_PARTY_NOTICES).
 The bundled [Vazirmatn](https://github.com/rastikerdar/vazirmatn) font is licensed under SIL OFL 1.1, see [OFL.txt](app/src/main/assets/OFL.txt).
+
+## License
+
+Apache License 2.0 — see [LICENSE](LICENSE).
+
+Bugs, ideas and pull requests are welcome: open an issue or message [@LogaRhythmApp](https://t.me/LogaRhythmApp?direct).

@@ -181,9 +181,18 @@ def send_apk(path, caption):
     print(f"Telegram APK sent: {os.path.basename(path)}")
 
 
+def release_notes_file():
+    """A hand-written caption wins over the generated one: docs/telegram/<tag>.md."""
+    path = os.path.join("docs", "telegram", f"{TAG}.md")
+    if os.path.isfile(path):
+        with open(path, encoding="utf-8") as f:
+            return f.read().strip()
+    return None
+
+
 commits = get_commits()
-changelog = ask_gemma(commits)
-message = build_message(changelog)
+notes = release_notes_file()
+message = html.escape(notes) if notes else build_message(ask_gemma(commits))
 print(message)
 send_message(message)
 
