@@ -96,6 +96,7 @@ jobs:
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
           REQUIRE_RELEASE_SIGNING: "true"
           GIT_TAG: ${{ steps.versioning.outputs.TAG_NAME }}
+          INSTALL_ENDPOINT: ${{ vars.INSTALL_ENDPOINT }}
         run: ./gradlew :app:assembleRelease
 
       - name: Verify APK signature

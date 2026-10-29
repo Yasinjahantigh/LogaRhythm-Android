@@ -251,20 +251,15 @@ fun QueueScreen(
                                     )
                                 }
                                 val activeDrag = drag
-                                if (activeDrag != null && activeDrag.targetIndex == index &&
-                                    activeDrag.targetIndex != activeDrag.fromIndex
-                                ) {
-                                    // Insertion marker: where the song will land on drop.
-                                    Box(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(horizontal = 20.dp, vertical = 2.dp)
-                                            .height(4.dp)
-                                            .clip(RoundedCornerShape(2.dp))
-                                            .background(MaterialTheme.colorScheme.primary)
-                                            .testTag("queue_insertion_marker")
-                                    )
-                                }
+                                val markerTarget = activeDrag?.targetIndex
+                                val markerFrom = activeDrag?.fromIndex
+                                // The line sits where the row will land: before the target when
+                                // dragging up, after it when dragging down.
+                                val markerAbove = markerTarget != null && markerFrom != null &&
+                                    markerTarget == index && markerTarget < markerFrom
+                                val markerBelow = markerTarget != null && markerFrom != null &&
+                                    markerTarget == index && markerTarget > markerFrom
+                                if (markerAbove) QueueInsertionMarker()
                                 QueueItem(
                                     track = track,
                                     isCurrent = index == currentIndex,
@@ -290,14 +285,16 @@ fun QueueScreen(
                                         val d = drag ?: return@QueueItem
                                         val total = d.totalDy + dy
                                         val finger = d.fingerY?.plus(dy)
+                                        // History is immutable, so drops can never land inside it.
+                                        val minTarget = currentIndex.coerceAtLeast(0)
                                         val target = if (finger != null) {
                                             indexAtViewportY(finger)
                                                 .takeIf { it >= 0 }
-                                                ?.coerceIn(0, queue.size - 1)
+                                                ?.coerceIn(minTarget, queue.size - 1)
                                         } else {
                                             // Coordinates not ready: estimate from row height.
                                             (d.fromIndex + (total / estRowPx).roundToInt())
-                                                .coerceIn(0, queue.size - 1)
+                                                .coerceIn(minTarget, queue.size - 1)
                                         } ?: d.targetIndex
                                         if (target != d.targetIndex) {
                                             haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
@@ -332,6 +329,7 @@ fun QueueScreen(
                                         }
                                     }
                                 )
+                                if (markerBelow) QueueInsertionMarker()
                             }
                         }
                     }
@@ -339,6 +337,19 @@ fun QueueScreen(
             }
         }
     }
+}
+
+@Composable
+private fun QueueInsertionMarker() {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp, vertical = 2.dp)
+            .height(4.dp)
+            .clip(RoundedCornerShape(2.dp))
+            .background(MaterialTheme.colorScheme.primary)
+            .testTag("queue_insertion_marker")
+    )
 }
 
 @Composable
