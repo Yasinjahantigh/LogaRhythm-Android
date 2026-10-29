@@ -91,13 +91,11 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.semantics.setProgress
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.progressBarRangeInfo
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.ProgressBarRangeInfo
-import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.CornerRadius
@@ -166,7 +164,6 @@ fun FullPlayerScreen(
     val shuffle by viewModel.shuffle.collectAsStateWithLifecycle()
     val repeatMode by viewModel.repeatMode.collectAsStateWithLifecycle()
     val isFavorite by viewModel.isFavorite.collectAsStateWithLifecycle()
-    val swipeRightForNext by viewModel.swipeRightForNext.collectAsStateWithLifecycle()
     val playbackSpeed by viewModel.playbackSpeed.collectAsStateWithLifecycle()
     val sleepTimerRemainingMs by viewModel.sleepTimerRemainingMs.collectAsStateWithLifecycle()
     val sleepTimerRemainingTracks by viewModel.sleepTimerRemainingTracks.collectAsStateWithLifecycle()
@@ -331,7 +328,6 @@ fun FullPlayerScreen(
                             isPlaying = isPlaying,
                             isVinylMode = isVinylMode,
                             glowColor = animatedBgColor,
-                            swipeRightForNext = swipeRightForNext,
                             queue = queue,
                             currentIndex = queueIndex,
                             onCommit = viewModel::commitCoverPeek,
@@ -577,7 +573,6 @@ private fun PlayerArtwork(
     isPlaying: Boolean,
     isVinylMode: Boolean,
     glowColor: Color,
-    swipeRightForNext: Boolean,
     queue: List<Track>,
     currentIndex: Int,
     onCommit: (Int, Int) -> Unit,
@@ -585,7 +580,6 @@ private fun PlayerArtwork(
     modifier: Modifier = Modifier
 ) {
     val haptic = LocalHapticFeedback.current
-    val isRtl = LocalLayoutDirection.current == LayoutDirection.Rtl
     val dragX = remember(currentIndex, queue) { Animatable(0f) }
     var coverWidth by remember { mutableFloatStateOf(0f) }
     val scale by animateFloatAsState(
@@ -600,7 +594,7 @@ private fun PlayerArtwork(
         modifier = modifier
             .clip(androidx.compose.ui.graphics.RectangleShape)
             .onSizeChanged { coverWidth = it.width.toFloat() }
-            .pointerInput(currentIndex, queue, swipeRightForNext, isRtl) {
+            .pointerInput(currentIndex, queue) {
                 kotlinx.coroutines.coroutineScope {
                     var distance = 0f
                     var motion: kotlinx.coroutines.Job? = null
@@ -608,7 +602,7 @@ private fun PlayerArtwork(
                         onDragStart = { motion?.cancel(); distance = dragX.value },
                         onDragEnd = {
                             motion = launch {
-                                val target = coverPeekTarget(distance, coverWidth, currentIndex, queue.size, swipeRightForNext, isRtl, true)
+                                val target = coverPeekTarget(distance, coverWidth, currentIndex, queue.size, true)
                                 if (target != null) {
                                     dragX.animateTo(if (distance > 0) coverWidth else -coverWidth, tween(160))
                                     haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
@@ -621,7 +615,7 @@ private fun PlayerArtwork(
                         onHorizontalDrag = { change, amount ->
                             change.consume()
                             val proposed = (distance + amount).coerceIn(-coverWidth, coverWidth)
-                            distance = if (coverPeekTarget(proposed, coverWidth, currentIndex, queue.size, swipeRightForNext, isRtl, false) != null) proposed else 0f
+                            distance = if (coverPeekTarget(proposed, coverWidth, currentIndex, queue.size, false) != null) proposed else 0f
                             launch { dragX.snapTo(distance) }
                         }
                     )
@@ -629,7 +623,7 @@ private fun PlayerArtwork(
             },
         contentAlignment = Alignment.Center
     ) {
-        val peekIndex = coverPeekTarget(dragX.value, coverWidth, currentIndex, queue.size, swipeRightForNext, isRtl, false)
+        val peekIndex = coverPeekTarget(dragX.value, coverWidth, currentIndex, queue.size, false)
         if (peekIndex != null) {
             val neighbour = queue[peekIndex]
             Box(Modifier.fillMaxSize().graphicsLayer {

@@ -9,7 +9,7 @@ pluginManagement {
   repositories {
     // Opt-in mirrors for networks where Google Maven is blocked: logarhythm.mirrors=true
     val mirrors = java.util.Properties().apply {
-      val file = java.io.File("local.properties")
+      val file = java.io.File(settingsDir, "local.properties")
       if (file.isFile) file.inputStream().use { load(it) }
     }.getProperty("logarhythm.mirrors") == "true"
     if (mirrors) {
@@ -29,7 +29,7 @@ dependencyResolutionManagement {
   repositoriesMode.set(RepositoriesMode.PREFER_SETTINGS)
   repositories {
     val mirrors = java.util.Properties().apply {
-      val file = java.io.File("local.properties")
+      val file = java.io.File(settingsDir, "local.properties")
       if (file.isFile) file.inputStream().use { load(it) }
     }.getProperty("logarhythm.mirrors") == "true"
     if (mirrors) {

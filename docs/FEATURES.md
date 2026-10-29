@@ -8,10 +8,18 @@ Technical details for each feature. Back to the [README](../README.md) · [فا�
 - Playback resumes if headphones reconnect within 10 minutes
 - Per-song playback speed
 - Sleep timer by minutes or by track count
-- Swipe the cover horizontally to preview the next or previous track (its cover and title appear). The song changes only if you pass 35% of the way and release; it respects RTL and the swipe-direction setting, and does nothing at the end of the queue
-- Shuffle can be switched on or off without interrupting the current song: only the items before and after it are replaced and the position is kept. Queue edits (play next, add, remove, insert, move) also update the original order, so a song added while shuffled is not lost when shuffle is turned off. The shuffle state and original order are restored after reopening the app
+- Swipe the cover horizontally to preview the next or previous track (its cover and title appear). The song changes only if you pass 35% of the way and release. The next cover always waits on the right, so swiping left advances and swiping right goes back, the same in LTR and RTL layouts; it does nothing at the end of the queue. The mini player follows the same rule
+- Shuffle can be switched on or off without interrupting the current song. Only the songs after the current one are reshuffled; everything that already played keeps its place, so the "Played" section stays real history instead of filling up with unheard songs. Queue edits (play next, add, remove, insert, move) also update the original order, so a song added while shuffled is not lost when shuffle is turned off. The shuffle state and original order are restored after reopening the app
 - The speed dialog shows one shared value for the label, slider and chips
 - Resume position for anything longer than 20 minutes: saved every 10 seconds, restored on reopen
+
+## Queue
+
+- The queue screen shows three sections — Played (dimmed), Now Playing and Up next — and opens scrolled to the current song
+- Upcoming songs are reordered by dragging the grip; the insertion line shows exactly where the song will land, and drops can never land inside the played section
+- The played section is history: those rows have no grip and cannot be swiped away
+- Swipe a row sideways to remove it from the queue, with an undo snackbar
+- The header offers shuffle (reshuffles only the upcoming part), save the queue as a playlist, and clear
 
 ## Audio
 
@@ -120,6 +128,14 @@ The key is encrypted with an Android Keystore key on the device and can be remov
 - Backup and restore of playlists, favorites, history and lyrics in one file (**Settings → Backup**)
 - The library database migrates to v10 on first launch of 1.6.0 and existing data is preserved. Making a backup before a major update is still recommended
 
+## Updates
+
+- **Settings → About** shows the installed version, checks GitHub for a newer release, and reports the download count of the latest one
+- The app also checks once a day on startup when the network is available
+- The APK is matched to the device CPU (arm64-v8a, armeabi-v7a, x86), downloaded with progress, and handed to the Android installer; the system still enforces the signing key, so an update can only come from the same developer
+- The automatic check runs at startup and is on by default; **Settings → About** can switch it off. Android always asks for confirmation before an APK is installed
+- A first-launch install record tells the developer how many installs come from GitHub, Telegram or anywhere else: a random install id, the app version, device model, Android version and CPU ABI. It is stored once per install, so updating the app never counts again; it never includes files, library data, an account or an advertising id. The totals are public at [logarhythm-installs.yasinjahantigh.workers.dev/stats](https://logarhythm-installs.yasinjahantigh.workers.dev/stats)
+
 ## Widgets
 
 Five home screen widgets:
@@ -128,7 +144,7 @@ Five home screen widgets:
 | :--- | :--- | :--- |
 | Small | 2×2 | Cover, play/pause |
 | Strip | 4×1 | Compact info and controls |
-| Medium | 4×2 | Cover, progress bar, controls |
+| Medium | 4×2 | Cover, progress bar, shuffle, previous, play, next and repeat |
 | Large | 4×4 | Full controls and an "Up next" queue |
 | Player | 4×4 | Full-bleed cover, title, artist and album, five controls in the app theme, no progress bar or time |
 

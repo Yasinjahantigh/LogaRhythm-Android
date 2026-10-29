@@ -3,6 +3,7 @@ package com.yasinjahantigh.logarhythm
 import android.content.Context
 import android.content.res.Configuration
 import android.os.Bundle
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -14,11 +15,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.yasinjahantigh.logarhythm.core.library.LibrarySync
 import com.yasinjahantigh.logarhythm.core.utils.ArtworkColorExtractor
 import com.yasinjahantigh.logarhythm.data.datastore.PreferencesManager
+import com.yasinjahantigh.logarhythm.data.update.UpdateManager
 import com.yasinjahantigh.logarhythm.feature.onboarding.OnboardingScreen
+import com.yasinjahantigh.logarhythm.feature.update.UpdateDialogHost
 import com.yasinjahantigh.logarhythm.playback.PlayerController
 import com.yasinjahantigh.logarhythm.ui.MainScreen
 import com.yasinjahantigh.logarhythm.ui.theme.LogaRhythmTheme
@@ -39,6 +43,9 @@ class MainActivity : ComponentActivity() {
 
     @Inject
     lateinit var librarySync: LibrarySync
+
+    @Inject
+    lateinit var updateManager: UpdateManager
 
     override fun onStart() {
         super.onStart()
@@ -98,7 +105,22 @@ class MainActivity : ComponentActivity() {
                 initialValue = onboardingBootstrap
             )
             val currentTrack by playerController.currentTrack.collectAsStateWithLifecycle()
+            val updateState by updateManager.state.collectAsStateWithLifecycle()
             val scope = rememberCoroutineScope()
+            val context = LocalContext.current
+
+            LaunchedEffect(isOnboardingCompleted) {
+                if (isOnboardingCompleted) {
+                    delay(3_000L)
+                    updateManager.autoCheck()
+                }
+            }
+
+            LaunchedEffect(Unit) {
+                updateManager.messages.collect { message ->
+                    Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+                }
+            }
 
             var seedArtworkColor by remember { mutableStateOf<Color?>(null) }
 
@@ -138,6 +160,14 @@ class MainActivity : ComponentActivity() {
                     } else {
                         MainScreen(seedTint = seedArtworkColor)
                     }
+                }
+                if (isOnboardingCompleted) {
+                    UpdateDialogHost(
+                        state = updateState,
+                        installedVersion = updateManager.installedVersion,
+                        onDownload = updateManager::download,
+                        onDismiss = updateManager::dismiss
+                    )
                 }
             }
         }

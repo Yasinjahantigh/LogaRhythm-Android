@@ -37,9 +37,6 @@ class PlayerViewModel @Inject constructor(
     val isCompactMiniPlayer: StateFlow<Boolean> = preferencesManager.isCompactMiniPlayer
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
 
-    val swipeRightForNext: StateFlow<Boolean> = preferencesManager.swipeRightForNext
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
-
     val currentTrack: StateFlow<Track?> = playerController.currentTrack
     val isPlaying: StateFlow<Boolean> = playerController.isPlaying
     val position: StateFlow<Long> = playerController.position

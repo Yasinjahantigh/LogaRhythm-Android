@@ -63,7 +63,8 @@ internal fun WidgetIconButton(
     active: Boolean = false,
     size: Int = 40,
     surface: ColorProvider = ArtControlSurface,
-    modifier: GlanceModifier = GlanceModifier
+    modifier: GlanceModifier = GlanceModifier,
+    iconSize: Int = 24
 ) {
     Box(
         modifier = modifier
@@ -76,7 +77,7 @@ internal fun WidgetIconButton(
         Image(
             provider = ImageProvider(icon),
             contentDescription = description,
-            modifier = GlanceModifier.size(24.dp)
+            modifier = GlanceModifier.size(iconSize.dp)
         )
     }
 }

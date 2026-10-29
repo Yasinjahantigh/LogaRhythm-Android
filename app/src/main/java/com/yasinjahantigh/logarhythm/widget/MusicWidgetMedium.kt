@@ -30,6 +30,7 @@ import androidx.glance.layout.width
 import androidx.glance.text.FontWeight
 import androidx.glance.text.Text
 import androidx.glance.text.TextStyle
+import androidx.media3.common.Player
 import com.yasinjahantigh.logarhythm.MainActivity
 import com.yasinjahantigh.logarhythm.R
 
@@ -56,25 +57,45 @@ private fun MediumWidgetContent(state: MusicWidgetSnapshot) {
             Image(ImageProvider(it), null, GlanceModifier.fillMaxSize(), ContentScale.Crop)
         }
         Image(ImageProvider(R.drawable.widget_scrim), null, GlanceModifier.fillMaxSize(), contentScale = ContentScale.Crop)
-        Column(modifier = GlanceModifier.fillMaxSize().padding(12.dp)) {
-            Text(track.title, style = TextStyle(color = ArtText, fontSize = 16.sp, fontWeight = FontWeight.Bold), maxLines = 1)
-            Text(track.artist, style = TextStyle(color = ArtSecondaryText, fontSize = 12.sp), maxLines = 1)
-            Spacer(modifier = GlanceModifier.height(6.dp))
+        Column(modifier = GlanceModifier.fillMaxSize().padding(horizontal = 12.dp, vertical = 8.dp)) {
+            Text(track.title, style = TextStyle(color = ArtText, fontSize = 15.sp, fontWeight = FontWeight.Bold), maxLines = 1)
+            Text(track.artist, style = TextStyle(color = ArtSecondaryText, fontSize = 11.sp), maxLines = 1)
+            Spacer(modifier = GlanceModifier.height(3.dp))
             val progress = if (state.duration > 0L) state.position.toFloat() / state.duration.toFloat() else 0f
             WaveformProgress(progress.coerceIn(0f, 1f))
-            Spacer(modifier = GlanceModifier.height(6.dp))
-            Row(modifier = GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Spacer(modifier = GlanceModifier.defaultWeight())
-                WidgetIconButton(R.drawable.ic_widget_previous, LocalString(R.string.cd_skip_prev), actionRunCallback<PreviousActionCallback>(), size = 36)
-                Spacer(modifier = GlanceModifier.width(10.dp))
+            Spacer(modifier = GlanceModifier.height(3.dp))
+            Row(
+                modifier = GlanceModifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                WidgetIconButton(
+                    R.drawable.ic_widget_shuffle,
+                    LocalString(R.string.cd_shuffle),
+                    actionRunCallback<ShuffleWidgetAction>(),
+                    active = state.shuffle,
+                    size = 28,
+                    iconSize = 18
+                )
+                Spacer(modifier = GlanceModifier.width(4.dp))
+                WidgetIconButton(R.drawable.ic_widget_previous, LocalString(R.string.cd_skip_prev), actionRunCallback<PreviousActionCallback>(), size = 32, iconSize = 20)
+                Spacer(modifier = GlanceModifier.width(4.dp))
                 WidgetIconButton(
                     if (state.isPlaying) R.drawable.ic_widget_pause_ember else R.drawable.ic_widget_play_ember,
                     LocalString(if (state.isPlaying) R.string.cd_pause else R.string.cd_play),
-                    actionRunCallback<PlayPauseActionCallback>(), active = true, size = 42
+                    actionRunCallback<PlayPauseActionCallback>(), active = true, size = 36, iconSize = 22
                 )
-                Spacer(modifier = GlanceModifier.width(10.dp))
-                WidgetIconButton(R.drawable.ic_widget_next, LocalString(R.string.cd_skip_next), actionRunCallback<NextActionCallback>(), size = 36)
-                Spacer(modifier = GlanceModifier.defaultWeight())
+                Spacer(modifier = GlanceModifier.width(4.dp))
+                WidgetIconButton(R.drawable.ic_widget_next, LocalString(R.string.cd_skip_next), actionRunCallback<NextActionCallback>(), size = 32, iconSize = 20)
+                Spacer(modifier = GlanceModifier.width(4.dp))
+                WidgetIconButton(
+                    if (state.repeatMode == Player.REPEAT_MODE_ONE) R.drawable.ic_widget_repeat_one else R.drawable.ic_widget_repeat,
+                    LocalString(if (state.repeatMode == Player.REPEAT_MODE_ONE) R.string.cd_repeat_one else R.string.cd_repeat),
+                    actionRunCallback<RepeatWidgetAction>(),
+                    active = state.repeatMode != Player.REPEAT_MODE_OFF,
+                    size = 28,
+                    iconSize = 18
+                )
             }
         }
     }

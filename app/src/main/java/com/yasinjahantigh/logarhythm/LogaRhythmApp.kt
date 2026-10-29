@@ -7,6 +7,7 @@ import coil.ImageLoader
 import coil.ImageLoaderFactory
 import coil.memory.MemoryCache
 import com.yasinjahantigh.logarhythm.core.utils.AudioArtworkFetcher
+import com.yasinjahantigh.logarhythm.data.analytics.InstallReporter
 import com.yasinjahantigh.logarhythm.data.download.DownloadNotifications
 import dagger.hilt.android.HiltAndroidApp
 import javax.inject.Inject
@@ -17,6 +18,9 @@ class LogaRhythmApp : Application(), ImageLoaderFactory, Configuration.Provider 
     @Inject
     lateinit var workerFactory: HiltWorkerFactory
 
+    @Inject
+    lateinit var installReporter: InstallReporter
+
     override val workManagerConfiguration: Configuration
         get() = Configuration.Builder()
             .setWorkerFactory(workerFactory)
@@ -25,6 +29,7 @@ class LogaRhythmApp : Application(), ImageLoaderFactory, Configuration.Provider 
     override fun onCreate() {
         super.onCreate()
         DownloadNotifications.createChannel(this)
+        installReporter.reportOnce()
     }
 
     override fun newImageLoader(): ImageLoader {

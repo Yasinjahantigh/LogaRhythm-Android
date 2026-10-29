@@ -8,8 +8,12 @@ import com.yasinjahantigh.logarhythm.data.datastore.PreferencesManager
 import com.yasinjahantigh.logarhythm.R
 import com.yasinjahantigh.logarhythm.data.ai.AiProvider
 import com.yasinjahantigh.logarhythm.data.ai.AiSettings
+import com.yasinjahantigh.logarhythm.data.analytics.InstallReporter
 import com.yasinjahantigh.logarhythm.data.backup.BackupManager
 import com.yasinjahantigh.logarhythm.data.backup.PlaylistFileService
+import com.yasinjahantigh.logarhythm.data.update.AppRelease
+import com.yasinjahantigh.logarhythm.data.update.UpdateManager
+import com.yasinjahantigh.logarhythm.data.update.UpdateState
 import com.yasinjahantigh.logarhythm.domain.library.ArtistSplitter
 import com.yasinjahantigh.logarhythm.domain.lyrics.LyricsSourceTestResult
 import com.yasinjahantigh.logarhythm.domain.model.AiFailure
@@ -43,7 +47,9 @@ class SettingsViewModel @Inject constructor(
     private val lyricsRepository: LyricsRepository,
     private val aiPlaylistRepository: AiPlaylistRepository,
     private val backupManager: BackupManager,
-    private val playlistFileService: PlaylistFileService
+    private val playlistFileService: PlaylistFileService,
+    private val updateManager: UpdateManager,
+    private val installReporter: InstallReporter
 ) : ViewModel() {
 
     /** One-shot result text for a toast; the screen calls [consumeMessage] after showing it. */
@@ -63,8 +69,6 @@ class SettingsViewModel @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0f)
     val resumeOnHeadset: StateFlow<Boolean> = preferencesManager.resumeOnHeadset
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
-    val swipeRightForNext: StateFlow<Boolean> = preferencesManager.swipeRightForNext
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
     val splitArtists: StateFlow<Boolean> = preferencesManager.splitArtists
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
     val artistSeparators: StateFlow<List<String>> = preferencesManager.artistSeparators
@@ -82,6 +86,15 @@ class SettingsViewModel @Inject constructor(
 
     val aiSettings: StateFlow<AiSettings> = aiPlaylistRepository.observeSettings()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), AiSettings())
+
+    val installedVersion: String = updateManager.installedVersion
+    val updateState: StateFlow<UpdateState> = updateManager.state
+    val latestRelease: StateFlow<AppRelease?> = updateManager.lastRelease
+    val autoCheckEnabled: StateFlow<Boolean> = updateManager.autoCheckEnabled
+    val installStatsAvailable: Boolean = installReporter.isConfigured
+
+    fun checkForUpdates() = updateManager.check(silent = false)
+    fun setAutoCheckEnabled(enabled: Boolean) = updateManager.setAutoCheckEnabled(enabled)
 
     private val _aiTestState = MutableStateFlow(AiTestState())
     val aiTestState: StateFlow<AiTestState> = _aiTestState.asStateFlow()
@@ -122,7 +135,6 @@ class SettingsViewModel @Inject constructor(
     fun setReplayGainMode(mode: String) { viewModelScope.launch { preferencesManager.setReplayGainMode(mode) } }
     fun setReplayGainPreampDb(db: Float) { viewModelScope.launch { preferencesManager.setReplayGainPreampDb(db) } }
     fun setResumeOnHeadset(enabled: Boolean) { viewModelScope.launch { preferencesManager.setResumeOnHeadset(enabled) } }
-    fun setSwipeRightForNext(enabled: Boolean) { viewModelScope.launch { preferencesManager.setSwipeRightForNext(enabled) } }
     fun setSplitArtists(enabled: Boolean) { viewModelScope.launch { preferencesManager.setSplitArtists(enabled) } }
     fun setArtistSeparators(raw: String?) {
         viewModelScope.launch {

@@ -1,5 +1,25 @@
 # Changelog
 
+## 1.8.0 - 2026-10-29
+
+### Player
+- The next cover always waits on the right: swipe left to advance and right to go back, in English and Persian alike, and the mini player uses the same rule. The direction setting is gone
+- Shuffle keeps the songs that already played in place and reshuffles only what is still upcoming
+
+### Queue
+- Played songs are read-only: no drag handle and no swipe-to-delete, because their order is history
+- The drag handle is a clear grip icon instead of something that looked like a delete button
+- The drop line now appears exactly where the row will land when dragging down
+
+### Widgets
+- The 4×2 widget fits again instead of clipping its buttons, and shows shuffle and repeat next to previous, play and next
+
+### Updates
+- In-app update check against GitHub releases, with an ABI-matched APK download, progress and the system installer
+- The automatic check runs at startup and is on by default; **Settings → About** can switch it off
+- Anonymous first-launch install record (random install id, app version, device model and Android version), so installs from Telegram count too. It is sent once per install; app updates never count again
+- Settings → About shows the installed version, the latest release and its download count
+
 ## 1.7.0 - 2026-10-29
 
 ### Widgets

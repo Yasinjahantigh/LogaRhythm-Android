@@ -551,7 +551,6 @@ class PreferencesManager @Inject constructor(
     private val keyReplayGain = stringPreferencesKey("key_replay_gain_mode")
     private val keyReplayGainPreamp = floatPreferencesKey("key_replay_gain_preamp_db")
     private val keyResumeOnHeadset = booleanPreferencesKey("key_resume_on_headset")
-    private val keySwipeRightForNext = booleanPreferencesKey("key_swipe_right_for_next")
 
     /** 0 = off. The player fades out/in around each song change (single player, no overlap). */
     val fadeBetweenSongsSec: Flow<Int> = dataStore.data.map { it[keyFadeSec] ?: 0 }
@@ -561,15 +560,12 @@ class PreferencesManager @Inject constructor(
     /** Manual pre-amplifier added on top of the picked ReplayGain tag, in dB [-6, +6]. */
     val replayGainPreampDb: Flow<Float> = dataStore.data.map { it[keyReplayGainPreamp] ?: 0f }
     val resumeOnHeadset: Flow<Boolean> = dataStore.data.map { it[keyResumeOnHeadset] ?: true }
-    /** RTL-friendly default: swipe right skips forward, swipe left goes back. */
-    val swipeRightForNext: Flow<Boolean> = dataStore.data.map { it[keySwipeRightForNext] ?: true }
 
     suspend fun setFadeBetweenSongsSec(seconds: Int) { dataStore.edit { it[keyFadeSec] = seconds.coerceIn(0, 12) } }
     suspend fun setSkipSilence(enabled: Boolean) { dataStore.edit { it[keySkipSilence] = enabled } }
     suspend fun setReplayGainMode(mode: String) { dataStore.edit { it[keyReplayGain] = mode } }
     suspend fun setReplayGainPreampDb(db: Float) { dataStore.edit { it[keyReplayGainPreamp] = db.coerceIn(-6f, 6f) } }
     suspend fun setResumeOnHeadset(enabled: Boolean) { dataStore.edit { it[keyResumeOnHeadset] = enabled } }
-    suspend fun setSwipeRightForNext(enabled: Boolean) { dataStore.edit { it[keySwipeRightForNext] = enabled } }
 
     // ---- Library intelligence ---------------------------------------------------------------
 

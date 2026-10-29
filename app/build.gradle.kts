@@ -1,5 +1,6 @@
 import java.io.ByteArrayOutputStream
 import java.io.File
+import java.util.Properties
 
 plugins {
   alias(libs.plugins.android.application)
@@ -37,6 +38,14 @@ fun getVersionInfo(): Pair<Int, String> {
 
 val (appVersionCode, appVersionName) = getVersionInfo()
 
+// Optional anonymous install counter; empty disables the first-launch ping entirely.
+val localProperties = Properties().apply {
+  val file = rootProject.file("local.properties")
+  if (file.isFile) file.inputStream().use { load(it) }
+}
+val installEndpoint = System.getenv("INSTALL_ENDPOINT")?.trim()
+  ?: localProperties.getProperty("INSTALL_ENDPOINT")?.trim().orEmpty()
+
 android {
   namespace = "com.yasinjahantigh.logarhythm"
   compileSdk = 36
@@ -48,6 +57,7 @@ android {
     targetSdk = 36
     versionCode = appVersionCode
     versionName = appVersionName
+    buildConfigField("String", "INSTALL_ENDPOINT", "\"$installEndpoint\"")
   }
 
   val ksPath = System.getenv("KEYSTORE_PATH") ?: findProperty("KEYSTORE_PATH") as? String
@@ -95,6 +105,7 @@ android {
   }
   buildFeatures {
     compose = true
+    buildConfig = true
   }
   androidResources {
     localeFilters += listOf("en", "fa")

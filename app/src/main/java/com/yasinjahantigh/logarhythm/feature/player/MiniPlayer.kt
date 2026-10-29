@@ -84,8 +84,6 @@ fun MiniPlayerContent(
     modifier: Modifier = Modifier,
     isCompact: Boolean = false,
     onDismiss: (() -> Unit)? = null,
-    /** RTL-friendly default: swipe right skips forward. */
-    swipeRightForNext: Boolean = true,
     /** Artwork-derived tint; when null the player falls back to the theme's primary. */
     tint: Color? = null
 ) {
@@ -111,8 +109,8 @@ fun MiniPlayerContent(
                             val current = dragOffsetX.value
                             if (kotlin.math.abs(current) > 100f) {
                                 haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                val forward = if (swipeRightForNext) current > 0 else current < 0
-                                if (forward) onNext() else onPrevious()
+                                // The next track lives on the right, so a leftward swipe advances.
+                                if (current < 0) onNext() else onPrevious()
                             }
                             dragOffsetX.animateTo(0f, spring())
                         }
@@ -256,7 +254,6 @@ fun MiniPlayer(
     modifier: Modifier = Modifier,
     isCompact: Boolean = false,
     onDismiss: (() -> Unit)? = null,
-    swipeRightForNext: Boolean = true,
     /** Artwork-derived tint; tints the card border/glow and the play button. */
     tint: Color? = null
 ) {
@@ -293,7 +290,6 @@ fun MiniPlayer(
             onExpand = onExpand,
             isCompact = isCompact,
             onDismiss = onDismiss,
-            swipeRightForNext = swipeRightForNext,
             tint = tint
         )
     }

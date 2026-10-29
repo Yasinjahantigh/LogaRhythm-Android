@@ -313,32 +313,36 @@ class PlayerControllerImpl @Inject constructor(
     }
 
     private fun applyShuffleMode(enabled: Boolean, controller: MediaController) {
-        val current = _currentTrack.value
-        val pos = _position.value
-        if (originalQueue.isEmpty() && _queue.value.isNotEmpty()) originalQueue = _queue.value
-        val source = when {
-            originalQueue.isEmpty() -> return
-            enabled -> originalQueue.shuffled()
-            else -> originalQueue
+        val visible = _queue.value
+        if (visible.isEmpty()) {
+            _shuffle.value = enabled
+            controller.shuffleModeEnabled = false
+            return
         }
+        if (originalQueue.isEmpty()) originalQueue = visible
+        val current = _currentTrack.value ?: return
         val index = controller.currentMediaItemIndex
-        val newQueue = if (current != null && index in source.indices) {
-            pinQueueItem(source, current, index)
-        } else {
-            source
-        }
+            .takeIf { it in visible.indices }
+            ?: visible.indexOfFirst { it.id == current.id }.coerceAtLeast(0)
+        // Songs that already played stay exactly where they are; only the rest is shuffled or
+        // restored, so the "Played" section never fills up with unheard tracks.
+        val newQueue = shuffleUpcoming(visible, originalQueue, current, index, enabled)
+        val upcoming = newQueue.drop(index + 1)
+        val pos = _position.value
+
+        _shuffle.value = enabled
         _queue.value = newQueue
         newQueue.forEach { trackMap[it.id] = it }
+        _queueIndex.value = index
         controller.shuffleModeEnabled = false
-        val canSplice = controller.mediaItemCount == _queue.value.size &&
-            index in newQueue.indices && controller.currentMediaItem?.mediaId == current?.id
+        val canSplice = controller.mediaItemCount == visible.size &&
+            controller.currentMediaItemIndex == index &&
+            controller.currentMediaItem?.mediaId == current.id
         if (canSplice) {
             controller.removeMediaItems(index + 1, controller.mediaItemCount)
-            controller.addMediaItems(index + 1, newQueue.drop(index + 1).map(MediaItemMapper::toMediaItem))
-            controller.addMediaItems(0, newQueue.take(index).map(MediaItemMapper::toMediaItem))
-            controller.removeMediaItems(index, index * 2)
+            controller.addMediaItems(index + 1, upcoming.map(MediaItemMapper::toMediaItem))
         } else {
-            controller.setMediaItems(newQueue.map(MediaItemMapper::toMediaItem), 0, pos)
+            controller.setMediaItems(newQueue.map(MediaItemMapper::toMediaItem), index, pos)
         }
         saveQueueState()
     }

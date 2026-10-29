@@ -27,6 +27,8 @@ import androidx.compose.material.icons.filled.ColorLens
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.FolderOff
 import androidx.compose.material.icons.filled.Backup
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material.icons.automirrored.filled.CallSplit
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Headset
@@ -69,6 +71,8 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.yasinjahantigh.logarhythm.R
 import com.yasinjahantigh.logarhythm.data.ai.AiProvider
+import com.yasinjahantigh.logarhythm.data.update.UpdateState
+import com.yasinjahantigh.logarhythm.ui.components.formatCount
 import com.yasinjahantigh.logarhythm.ui.designsystem.LocalPlaybackBottomPadding
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -105,7 +109,6 @@ fun SettingsScreen(
     val replayGainMode by viewModel.replayGainMode.collectAsStateWithLifecycle()
     val replayGainPreampDb by viewModel.replayGainPreampDb.collectAsStateWithLifecycle()
     val resumeOnHeadset by viewModel.resumeOnHeadset.collectAsStateWithLifecycle()
-    val swipeRightForNext by viewModel.swipeRightForNext.collectAsStateWithLifecycle()
     val splitArtists by viewModel.splitArtists.collectAsStateWithLifecycle()
     val artistSeparators by viewModel.artistSeparators.collectAsStateWithLifecycle()
     val artistNeverSplit by viewModel.artistNeverSplit.collectAsStateWithLifecycle()
@@ -113,6 +116,9 @@ fun SettingsScreen(
     val hiddenTracks by viewModel.hiddenTracks.collectAsStateWithLifecycle()
     val aiSettings by viewModel.aiSettings.collectAsStateWithLifecycle()
     val aiTestState by viewModel.aiTestState.collectAsStateWithLifecycle()
+    val updateState by viewModel.updateState.collectAsStateWithLifecycle()
+    val latestRelease by viewModel.latestRelease.collectAsStateWithLifecycle()
+    val autoCheckEnabled by viewModel.autoCheckEnabled.collectAsStateWithLifecycle()
     val message by viewModel.message.collectAsStateWithLifecycle()
     val context = androidx.compose.ui.platform.LocalContext.current
 
@@ -525,15 +531,6 @@ fun SettingsScreen(
                             rowTag = "settings_resume_headset_item",
                             switchTag = "settings_resume_headset_switch"
                         )
-                        SettingsSwitchItem(
-                            title = stringResource(R.string.settings_swipe_next_title),
-                            subtitle = stringResource(R.string.settings_swipe_next_desc),
-                            icon = Icons.Filled.SkipNext,
-                            checked = swipeRightForNext,
-                            onCheckedChange = viewModel::setSwipeRightForNext,
-                            rowTag = "settings_swipe_next_item",
-                            switchTag = "settings_swipe_next_switch"
-                        )
                     }
                 }
 
@@ -761,6 +758,62 @@ fun SettingsScreen(
                             onClick = { importPlaylistsLauncher.launch(arrayOf("*/*")) },
                             testTag = "settings_import_m3u_item"
                         )
+                    }
+                }
+
+                item {
+                    SettingsGroup(title = stringResource(R.string.settings_category_about)) {
+                        SettingsInfoItem(
+                            title = stringResource(R.string.settings_version_title),
+                            subtitle = viewModel.installedVersion,
+                            icon = Icons.Filled.Info,
+                            testTag = "settings_version_item"
+                        )
+                        val updateSubtitle = when (val state = updateState) {
+                            UpdateState.Checking -> stringResource(R.string.update_checking)
+                            is UpdateState.Available ->
+                                stringResource(R.string.update_available_short, state.release.versionName)
+                            is UpdateState.Downloading -> if (state.fraction >= 0f) {
+                                stringResource(
+                                    R.string.update_downloading_percent,
+                                    (state.fraction * 100).toInt()
+                                )
+                            } else {
+                                stringResource(R.string.update_downloading_wait)
+                            }
+                            is UpdateState.Failed -> stringResource(R.string.update_failed_title)
+                            UpdateState.Hidden -> latestRelease?.let {
+                                stringResource(
+                                    R.string.update_latest_short,
+                                    it.versionName,
+                                    formatCount(it.downloads.toInt())
+                                )
+                            } ?: stringResource(R.string.settings_check_update_desc)
+                        }
+                        SettingsActionItem(
+                            title = stringResource(R.string.settings_check_update_title),
+                            subtitle = updateSubtitle,
+                            icon = Icons.Filled.SystemUpdate,
+                            onClick = viewModel::checkForUpdates,
+                            testTag = "settings_check_update_item"
+                        )
+                        SettingsSwitchItem(
+                            title = stringResource(R.string.settings_auto_update_title),
+                            subtitle = stringResource(R.string.settings_auto_update_desc),
+                            icon = Icons.Filled.SystemUpdate,
+                            checked = autoCheckEnabled,
+                            onCheckedChange = viewModel::setAutoCheckEnabled,
+                            rowTag = "settings_auto_update_item",
+                            switchTag = "settings_auto_update_switch"
+                        )
+                        if (viewModel.installStatsAvailable) {
+                            SettingsInfoItem(
+                                title = stringResource(R.string.settings_install_stats_title),
+                                subtitle = stringResource(R.string.settings_install_stats_desc),
+                                icon = Icons.Filled.Info,
+                                testTag = "settings_install_stats_item"
+                            )
+                        }
                     }
                 }
             }
