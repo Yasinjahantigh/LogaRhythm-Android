@@ -77,6 +77,7 @@ fun AlbumDetailScreen(
     var selectedTrackForMenu by remember { mutableStateOf<Track?>(null) }
     var showAddToPlaylistDialog by remember { mutableStateOf(false) }
     val context = LocalContext.current
+    val mediaStoreConsent = com.yasinjahantigh.logarhythm.core.utils.rememberMediaStoreConsent()
 
     if (selectedTrackForMenu != null) {
         val menuTrack = selectedTrackForMenu!!
@@ -89,6 +90,19 @@ fun AlbumDetailScreen(
             onGoToArtist = if (onNavigateToArtist != null && menuTrack.artist.isNotBlank() && menuTrack.artist != "Unknown Artist") {
                 { artistName -> onNavigateToArtist(artistName) }
             } else null,
+            onDeleteTrack = {
+                mediaStoreConsent.delete(menuTrack, onApproved = { approvedTrack ->
+                    viewModel.deleteTrack(approvedTrack) { deleted ->
+                        Toast.makeText(
+                            context,
+                            context.getString(if (deleted) R.string.song_deleted else R.string.track_delete_failed),
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    }
+                }, onCancelled = {
+                    Toast.makeText(context, context.getString(R.string.track_delete_failed), Toast.LENGTH_SHORT).show()
+                })
+            },
             onHideTrack = {
                 viewModel.hideTrack(menuTrack)
                 Toast.makeText(context, context.getString(R.string.track_hidden_toast, menuTrack.title), Toast.LENGTH_SHORT).show()

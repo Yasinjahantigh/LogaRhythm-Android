@@ -24,6 +24,7 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 enum class StatsTab {
+    HISTORY,
     TRACKS,
     ARTISTS,
     ALBUMS
@@ -41,8 +42,18 @@ class StatsViewModel @Inject constructor(
     private val _timeRange = MutableStateFlow(TimeRange.ALL_TIME)
     val timeRange: StateFlow<TimeRange> = _timeRange.asStateFlow()
 
-    private val _selectedTab = MutableStateFlow(StatsTab.TRACKS)
+    private val _selectedTab = MutableStateFlow(StatsTab.HISTORY)
     val selectedTab: StateFlow<StatsTab> = _selectedTab.asStateFlow()
+
+    val currentTrack: StateFlow<Track?> = playerController.currentTrack
+    val isPlaying: StateFlow<Boolean> = playerController.isPlaying
+
+    val recentlyPlayed: StateFlow<List<Track>> = statsRepository.getRecentlyPlayedTracks(limit = 100)
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = emptyList()
+        )
 
     val playlists: StateFlow<List<Playlist>> = playlistRepository.getAllPlaylists()
         .stateIn(

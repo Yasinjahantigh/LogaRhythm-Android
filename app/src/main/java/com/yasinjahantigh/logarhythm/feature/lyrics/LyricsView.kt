@@ -13,6 +13,7 @@ import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.withStyle
@@ -56,10 +57,12 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ManageSearch
 import androidx.compose.material.icons.filled.CloudDownload
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Timer
+import androidx.compose.material.icons.filled.TouchApp
 import androidx.compose.material.icons.filled.FileUpload
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.OpenInBrowser
@@ -128,6 +131,7 @@ fun LyricsView(
     val isHidden by viewModel.isHidden.collectAsStateWithLifecycle()
     val isMismatch by viewModel.lyricsMismatch.collectAsStateWithLifecycle()
     var showOffsetDialog by remember { mutableStateOf(false) }
+    var isTapToSyncMode by remember { mutableStateOf(false) }
 
     if (showOffsetDialog) {
         androidx.compose.material3.AlertDialog(
@@ -136,25 +140,93 @@ fun LyricsView(
             text = {
                 Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
                     Text(
-                        text = String.format(java.util.Locale.ROOT, "%+.1f s", offsetMs / 1000f),
+                        text = String.format(java.util.Locale.ROOT, "%+.2f s", offsetMs / 1000f),
                         style = MaterialTheme.typography.headlineMedium,
-                        fontWeight = FontWeight.Bold
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
                         text = stringResource(R.string.lyrics_offset_hint),
-                        style = MaterialTheme.typography.bodyMedium,
+                        style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         textAlign = TextAlign.Center
                     )
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        androidx.compose.material3.FilledTonalButton(onClick = { viewModel.nudgeOffset(-500L) }) {
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    // Fine adjustment (+/- 0.1s)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        FilledTonalButton(
+                            onClick = { viewModel.nudgeOffset(-100L) },
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text(stringResource(R.string.lyrics_offset_fine_back))
+                        }
+                        FilledTonalButton(
+                            onClick = { viewModel.nudgeOffset(100L) },
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text(stringResource(R.string.lyrics_offset_fine))
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    // Standard adjustment (+/- 0.5s)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        FilledTonalButton(
+                            onClick = { viewModel.nudgeOffset(-500L) },
+                            modifier = Modifier.weight(1f)
+                        ) {
                             Text(stringResource(R.string.lyrics_offset_later))
                         }
-                        androidx.compose.material3.FilledTonalButton(onClick = { viewModel.nudgeOffset(500L) }) {
+                        FilledTonalButton(
+                            onClick = { viewModel.nudgeOffset(500L) },
+                            modifier = Modifier.weight(1f)
+                        ) {
                             Text(stringResource(R.string.lyrics_offset_earlier))
                         }
+                    }
+
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    // Coarse adjustment (+/- 1.0s)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        FilledTonalButton(
+                            onClick = { viewModel.nudgeOffset(-1000L) },
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text(stringResource(R.string.lyrics_offset_1s_back))
+                        }
+                        FilledTonalButton(
+                            onClick = { viewModel.nudgeOffset(1000L) },
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text(stringResource(R.string.lyrics_offset_1s))
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    Button(
+                        onClick = {
+                            showOffsetDialog = false
+                            isTapToSyncMode = true
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(Icons.Filled.TouchApp, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(stringResource(R.string.lyrics_tap_to_sync))
                     }
                 }
             },
@@ -427,12 +499,63 @@ fun LyricsView(
                                 onFindOthers = { viewModel.searchCandidatesOnline() }
                             )
                         }
+                        if (isTapToSyncMode) {
+                            Surface(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                                shape = RoundedCornerShape(14.dp),
+                                color = MaterialTheme.colorScheme.primaryContainer,
+                                tonalElevation = 4.dp
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.TouchApp,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = stringResource(R.string.lyrics_tap_to_sync_banner),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    IconButton(
+                                        onClick = { isTapToSyncMode = false },
+                                        modifier = Modifier.size(28.dp)
+                                    ) {
+                                        Icon(Icons.Default.Close, contentDescription = null, modifier = Modifier.size(16.dp))
+                                    }
+                                }
+                            }
+                        }
                         SyncedLyricsContent(
                             lyrics = lyrics!!,
                             activeIndex = activeIndex,
                             offsetMs = offsetMs,
                             positionFlow = viewModel.livePositionMs,
-                            onSeekTo = viewModel::seekTo
+                            isTapToSyncMode = isTapToSyncMode,
+                            onLineClick = { line ->
+                                if (isTapToSyncMode) {
+                                    val newOffset = viewModel.syncLineToCurrentPosition(line.timestampMs)
+                                    if (newOffset != null) {
+                                        val offsetSec = String.format(Locale.ROOT, "%+.2f", newOffset / 1000f)
+                                        android.widget.Toast.makeText(
+                                            context,
+                                            context.getString(R.string.lyrics_tap_to_sync_success, offsetSec),
+                                            android.widget.Toast.LENGTH_SHORT
+                                        ).show()
+                                    }
+                                    isTapToSyncMode = false
+                                } else {
+                                    viewModel.seekTo((line.timestampMs - offsetMs).coerceAtLeast(0L))
+                                }
+                            }
                         )
                     }
                 }
@@ -590,6 +713,17 @@ fun LyricsView(
                                     },
                                     modifier = Modifier.testTag("lyrics_offset_button")
                                 )
+                                if (lyrics?.isSynced == true) {
+                                    DropdownMenuItem(
+                                        text = { Text(stringResource(R.string.lyrics_tap_to_sync)) },
+                                        leadingIcon = { Icon(Icons.Default.TouchApp, contentDescription = null) },
+                                        onClick = {
+                                            showLyricsMenu = false
+                                            isTapToSyncMode = true
+                                        },
+                                        modifier = Modifier.testTag("lyrics_tap_to_sync_button")
+                                    )
+                                }
                             }
                         }
                     }
@@ -648,14 +782,15 @@ private fun SyncedLyricsContent(
     activeIndex: Int,
     offsetMs: Long,
     positionFlow: kotlinx.coroutines.flow.StateFlow<Long>,
-    onSeekTo: (Long) -> Unit
+    isTapToSyncMode: Boolean = false,
+    onLineClick: (com.yasinjahantigh.logarhythm.domain.model.LyricLine) -> Unit
 ) {
     val listState = rememberLazyListState()
     val configuration = LocalConfiguration.current
     val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
 
     LaunchedEffect(activeIndex) {
-        if (activeIndex >= 0 && activeIndex < lyrics.lines.size) {
+        if (!isTapToSyncMode && activeIndex >= 0 && activeIndex < lyrics.lines.size) {
             listState.animateScrollToItem((activeIndex - 1).coerceAtLeast(0))
         }
     }
@@ -683,6 +818,7 @@ private fun SyncedLyricsContent(
         itemsIndexed(lyrics.lines) { index, line ->
             val isCurrent = index == activeIndex
             val targetAlpha = when {
+                isTapToSyncMode -> 0.9f
                 isCurrent -> 1f
                 activeIndex < 0 -> 0.5f
                 index < activeIndex -> if (activeIndex - index == 1) 0.34f else 0.24f
@@ -699,11 +835,15 @@ private fun SyncedLyricsContent(
             val lineModifier = Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(18.dp))
-                .clickable { onSeekTo((line.timestampMs - offsetMs).coerceAtLeast(0L)) }
+                .background(
+                    if (isTapToSyncMode) MaterialTheme.colorScheme.primary.copy(alpha = 0.08f)
+                    else Color.Transparent
+                )
+                .clickable { onLineClick(line) }
                 .graphicsLayer { this.alpha = alpha }
                 .padding(horizontal = 14.dp, vertical = if (isLandscape) 7.dp else 11.dp)
                 .testTag("lyric_line_$index")
-            if (isCurrent && line.words.isNotEmpty()) {
+            if (isCurrent && line.words.isNotEmpty() && !isTapToSyncMode) {
                 KaraokeLine(
                     line = line,
                     offsetMs = offsetMs,
@@ -716,7 +856,7 @@ private fun SyncedLyricsContent(
                 Text(
                     text = line.text,
                     style = lineStyle,
-                    color = onSurface,
+                    color = if (isTapToSyncMode) MaterialTheme.colorScheme.primary else onSurface,
                     textAlign = TextAlign.Start,
                     modifier = lineModifier
                 )

@@ -22,10 +22,12 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
 import androidx.compose.material.icons.automirrored.filled.PlaylistAddCheck
 import androidx.compose.material.icons.automirrored.filled.QueueMusic
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.Button
@@ -81,10 +83,12 @@ fun PlaylistDetailScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     val context = androidx.compose.ui.platform.LocalContext.current
+    val mediaStoreConsent = com.yasinjahantigh.logarhythm.core.utils.rememberMediaStoreConsent()
 
     var showMenu by remember { mutableStateOf(false) }
     var showRenameDialog by remember { mutableStateOf(false) }
     var showDeleteDialog by remember { mutableStateOf(false) }
+    var showBatchDeleteDialog by remember { mutableStateOf(false) }
     var selectedTrackForMenu by remember { mutableStateOf<Track?>(null) }
     var tracksForAddToPlaylist by remember { mutableStateOf<List<Track>?>(null) }
     var selectionMode by remember { mutableStateOf(false) }
@@ -130,6 +134,44 @@ fun PlaylistDetailScreen(
             onConfirm = {
                 showDeleteDialog = false
                 viewModel.deletePlaylist(onDeleted = onNavigateBack)
+            }
+        )
+    }
+
+    if (showBatchDeleteDialog && selectedTracks.isNotEmpty()) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { showBatchDeleteDialog = false },
+            title = { Text(stringResource(R.string.selection_delete_confirm_title)) },
+            text = { Text(stringResource(R.string.selection_delete_confirm_msg, selectedTracks.size)) },
+            confirmButton = {
+                androidx.compose.material3.Button(
+                    onClick = {
+                        showBatchDeleteDialog = false
+                        val targets = selectedTracks.toList()
+                        mediaStoreConsent.deleteTracks(targets, onApproved = { approved ->
+                            viewModel.deleteTracks(approved) { count ->
+                                scope.launch {
+                                    snackbarHostState.showSnackbar(
+                                        context.getString(R.string.selection_deleted, count)
+                                    )
+                                }
+                            }
+                            exitSelection()
+                        }, onCancelled = {
+                            scope.launch { snackbarHostState.showSnackbar(context.getString(R.string.track_delete_failed)) }
+                        })
+                    },
+                    colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.error
+                    )
+                ) {
+                    Text(stringResource(R.string.btn_delete))
+                }
+            },
+            dismissButton = {
+                androidx.compose.material3.TextButton(onClick = { showBatchDeleteDialog = false }) {
+                    Text(stringResource(R.string.btn_cancel))
+                }
             }
         )
     }
@@ -182,6 +224,19 @@ fun PlaylistDetailScreen(
                 scope.launch {
                     snackbarHostState.showSnackbar(context.getString(R.string.removed_from_playlist))
                 }
+            },
+            onDeleteTrack = {
+                mediaStoreConsent.delete(track, onApproved = { approvedTrack ->
+                    viewModel.deleteTrack(approvedTrack) { deleted ->
+                        scope.launch {
+                            snackbarHostState.showSnackbar(
+                                context.getString(if (deleted) R.string.song_deleted else R.string.track_delete_failed)
+                            )
+                        }
+                    }
+                }, onCancelled = {
+                    scope.launch { snackbarHostState.showSnackbar(context.getString(R.string.track_delete_failed)) }
+                })
             },
             onHideTrack = {
                 viewModel.hideTrack(track)
@@ -306,6 +361,7 @@ fun PlaylistDetailScreen(
                     onFavorite = viewModel::addTracksToFavorites,
                     onRemove = { viewModel.removeTracks(it.map { track -> track.id }) },
                     onHide = viewModel::hideTracks,
+                    onDelete = { showBatchDeleteDialog = true },
                     onDone = ::exitSelection,
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
@@ -327,6 +383,7 @@ private fun PlaylistSelectionBar(
     onFavorite: (List<Track>) -> Unit,
     onRemove: (List<Track>) -> Unit,
     onHide: (List<Track>) -> Unit,
+    onDelete: () -> Unit,
     onDone: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -397,6 +454,20 @@ private fun PlaylistSelectionBar(
                     notify(R.string.selection_hidden)
                     onDone()
                 }
+            ),
+            SelectionAction(
+                icon = Icons.Filled.Share,
+                label = stringResource(R.string.selection_share),
+                onClick = {
+                    com.yasinjahantigh.logarhythm.core.utils.FileUtils.shareTracks(context, selectedTracks)
+                    onDone()
+                }
+            ),
+            SelectionAction(
+                icon = Icons.Filled.Delete,
+                label = stringResource(R.string.selection_delete),
+                iconTint = MaterialTheme.colorScheme.error,
+                onClick = onDelete
             )
         ),
         modifier = modifier

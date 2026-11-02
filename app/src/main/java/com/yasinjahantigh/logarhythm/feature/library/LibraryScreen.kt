@@ -22,11 +22,16 @@ import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
 import androidx.compose.material.icons.automirrored.filled.PlaylistAddCheck
 import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.automirrored.filled.Sort
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -37,6 +42,7 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -82,6 +88,7 @@ fun LibraryScreen(
     onNavigateToSettings: () -> Unit = {},
     onNavigateToSearch: () -> Unit = {},
     onNavigateToTagEditor: (String) -> Unit = {},
+    onNavigateToLibraryTools: () -> Unit = {},
     viewModel: LibraryViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -125,6 +132,7 @@ fun LibraryScreen(
         uiState.visibleTracks.filter { it.id in selectedTrackIds }
     }
     var showSortSheet by remember { mutableStateOf(false) }
+    var showBatchDeleteDialog by remember { mutableStateOf(false) }
 
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
@@ -238,6 +246,42 @@ fun LibraryScreen(
         )
     }
 
+    if (showBatchDeleteDialog && selectedTracks.isNotEmpty()) {
+        AlertDialog(
+            onDismissRequest = { showBatchDeleteDialog = false },
+            title = { Text(stringResource(R.string.selection_delete_confirm_title)) },
+            text = { Text(stringResource(R.string.selection_delete_confirm_msg, selectedTracks.size)) },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showBatchDeleteDialog = false
+                        val targets = selectedTracks.toList()
+                        mediaStoreConsent.deleteTracks(targets, onApproved = { approved ->
+                            viewModel.deleteTracks(approved) { count ->
+                                scope.launch {
+                                    snackbarHostState.showSnackbar(
+                                        context.getString(R.string.selection_deleted, count)
+                                    )
+                                }
+                            }
+                            exitSelection()
+                        }, onCancelled = {
+                            scope.launch { snackbarHostState.showSnackbar(context.getString(R.string.track_delete_failed)) }
+                        })
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Text(stringResource(R.string.btn_delete))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showBatchDeleteDialog = false }) {
+                    Text(stringResource(R.string.btn_cancel))
+                }
+            }
+        )
+    }
+
     Scaffold(
         modifier = modifier.fillMaxSize().testTag("library_screen"),
         contentWindowInsets = WindowInsets(0.dp, 0.dp, 0.dp, 0.dp),
@@ -345,7 +389,11 @@ fun LibraryScreen(
                                     onFilterChange = viewModel::setTrackFilter
                                 )
                                 LibraryTab.ALBUMS -> AlbumsTabContent(albums = uiState.albums, onAlbumClick = onNavigateToAlbum)
-                                LibraryTab.ARTISTS -> ArtistsTabContent(artists = uiState.artists, onArtistClick = onNavigateToArtist)
+                                LibraryTab.ARTISTS -> ArtistsTabContent(
+                                    artists = uiState.artists,
+                                    onArtistClick = onNavigateToArtist,
+                                    onOpenSmartOrganizer = onNavigateToLibraryTools
+                                )
                                 LibraryTab.PLAYLISTS -> PlaylistsTabContent(
                                     onPlaylistClick = onNavigateToPlaylist,
                                     onSmartMixClick = onNavigateToSmartMix,
@@ -426,6 +474,20 @@ fun LibraryScreen(
                                 }
                                 exitSelection()
                             }
+                        ),
+                        SelectionAction(
+                            icon = Icons.Filled.Share,
+                            label = stringResource(R.string.selection_share),
+                            onClick = {
+                                com.yasinjahantigh.logarhythm.core.utils.FileUtils.shareTracks(context, selectedTracks)
+                                exitSelection()
+                            }
+                        ),
+                        SelectionAction(
+                            icon = Icons.Filled.Delete,
+                            label = stringResource(R.string.selection_delete),
+                            iconTint = MaterialTheme.colorScheme.error,
+                            onClick = { showBatchDeleteDialog = true }
                         )
                     ),
                     modifier = Modifier

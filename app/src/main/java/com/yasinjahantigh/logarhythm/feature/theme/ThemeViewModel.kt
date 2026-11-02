@@ -27,6 +27,12 @@ class ThemeViewModel @Inject constructor(
     val customBase: StateFlow<String> = preferencesManager.customBase
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "dark")
 
+    val customBackgroundUri: StateFlow<String?> = preferencesManager.customBackgroundUri
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
+    val customBackgroundAlpha: StateFlow<Float> = preferencesManager.customBackgroundAlpha
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0.35f)
+
     fun setThemeStyle(style: String) {
         viewModelScope.launch { preferencesManager.setThemeStyle(style) }
     }
@@ -41,5 +47,13 @@ class ThemeViewModel @Inject constructor(
 
     fun setBase(base: String) {
         viewModelScope.launch { preferencesManager.setCustomBase(base) }
+    }
+
+    fun setBackgroundUri(uri: String?) {
+        viewModelScope.launch { preferencesManager.setCustomBackgroundUri(uri) }
+    }
+
+    fun setBackgroundAlpha(alpha: Float) {
+        viewModelScope.launch { preferencesManager.setCustomBackgroundAlpha(alpha) }
     }
 }

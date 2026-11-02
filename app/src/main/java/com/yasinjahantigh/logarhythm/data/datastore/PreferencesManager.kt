@@ -66,6 +66,8 @@ class PreferencesManager @Inject constructor(
     private val keyThemeStyle = stringPreferencesKey("key_theme_style")
     private val keyCustomAccent = longPreferencesKey("key_custom_accent")
     private val keyCustomBase = stringPreferencesKey("key_custom_base")
+    private val keyCustomBackgroundUri = stringPreferencesKey("key_custom_background_uri")
+    private val keyCustomBackgroundAlpha = floatPreferencesKey("key_custom_background_alpha")
     private val keyCornerRoundness = stringPreferencesKey("key_corner_roundness")
     private val keyCompactMiniPlayer = booleanPreferencesKey("key_compact_mini_player")
     private val keyMinTrackLengthSec = intPreferencesKey("key_min_track_length_sec")
@@ -196,6 +198,30 @@ class PreferencesManager @Inject constructor(
     suspend fun setCustomBase(base: String) {
         val normalized = base.takeIf { it in setOf("dark", "light", "oled") } ?: "dark"
         dataStore.edit { preferences -> preferences[keyCustomBase] = normalized }
+    }
+
+    val customBackgroundUri: Flow<String?> = dataStore.data.map { preferences ->
+        preferences[keyCustomBackgroundUri]?.takeIf { it.isNotBlank() }
+    }
+
+    val customBackgroundAlpha: Flow<Float> = dataStore.data.map { preferences ->
+        preferences[keyCustomBackgroundAlpha] ?: 0.35f
+    }
+
+    suspend fun setCustomBackgroundUri(uri: String?) {
+        dataStore.edit { preferences ->
+            if (uri.isNullOrBlank()) {
+                preferences.remove(keyCustomBackgroundUri)
+            } else {
+                preferences[keyCustomBackgroundUri] = uri
+            }
+        }
+    }
+
+    suspend fun setCustomBackgroundAlpha(alpha: Float) {
+        dataStore.edit { preferences ->
+            preferences[keyCustomBackgroundAlpha] = alpha.coerceIn(0.05f, 1.0f)
+        }
     }
 
     val cornerRoundness: Flow<String> = dataStore.data.map { preferences ->

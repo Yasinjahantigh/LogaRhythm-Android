@@ -19,6 +19,9 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+import com.yasinjahantigh.logarhythm.data.ai.AiKeyStore
+import com.yasinjahantigh.logarhythm.data.ai.AiPlaylistClient
+import com.yasinjahantigh.logarhythm.domain.repository.AiPlaylistRepository
 import com.yasinjahantigh.logarhythm.data.download.metadata.MetadataResolver
 import com.yasinjahantigh.logarhythm.domain.download.DownloadMetadataMerge
 import com.yasinjahantigh.logarhythm.domain.library.TagSuggestionCleaner
@@ -38,7 +41,10 @@ class LibraryToolsViewModel @Inject constructor(
     private val trackRepository: TrackRepository,
     preferencesManager: PreferencesManager,
     private val playerController: PlayerController,
-    private val metadataResolver: MetadataResolver
+    private val metadataResolver: MetadataResolver,
+    private val aiPlaylistClient: AiPlaylistClient,
+    private val aiKeyStore: AiKeyStore,
+    private val aiPlaylistRepository: AiPlaylistRepository
 ) : ViewModel() {
 
     private val separators = preferencesManager.artistSeparators.map { ArtistSplitter.parseSeparators(it) }
@@ -67,11 +73,20 @@ class LibraryToolsViewModel @Inject constructor(
     internal val suggestions = _suggestions.asStateFlow()
     private val _findingFixes = MutableStateFlow(false)
     val findingFixes = _findingFixes.asStateFlow()
+
+    private val _aiSuggestions = MutableStateFlow<List<TagFixSuggestion>?>(null)
+    internal val aiSuggestions = _aiSuggestions.asStateFlow()
+    private val _findingAiFixes = MutableStateFlow(false)
+    val findingAiFixes = _findingAiFixes.asStateFlow()
+
+    val isAiConfigured: Boolean get() = aiKeyStore.hasKey()
+
     private val _savingFix = MutableStateFlow<String?>(null)
     val savingFix = _savingFix.asStateFlow()
     private val _fixFailed = MutableStateFlow(false)
     val fixFailed = _fixFailed.asStateFlow()
     private var suggestionJob: Job? = null
+    private var aiJob: Job? = null
 
     fun suggestFixes() {
         if (_findingFixes.value || _savingFix.value != null) return
@@ -109,15 +124,56 @@ class LibraryToolsViewModel @Inject constructor(
         }
     }
 
+    fun suggestAiFixes() {
+        if (_findingAiFixes.value || _savingFix.value != null || !isAiConfigured) return
+        val apiKey = aiKeyStore.load() ?: return
+        _aiSuggestions.value = emptyList()
+        _fixFailed.value = false
+        aiJob = viewModelScope.launch {
+            _findingAiFixes.value = true
+            try {
+                val settings = aiPlaylistRepository.observeSettings().first()
+                val allTracks = trackRepository.getAllTracks().first().filter { it.id.startsWith("local:") }
+                val candidates = allTracks.filter { t ->
+                    t.title.contains(Regex("""[\[\(\]_\-–—]|(?i)\b(feat|ft|official|remix|4k|hd|video|audio|lyrics)\b""")) ||
+                        t.artist.isBlank() || t.artist.equals("Unknown Artist", true) ||
+                        t.artist.contains(Regex("""(?i)\b(feat|ft|with|&|,)\b"""))
+                }.take(30)
+                val targetTracks = if (candidates.isNotEmpty()) candidates else allTracks.take(20)
+                val cleanedMap = aiPlaylistClient.cleanMetadataWithAi(settings, apiKey, targetTracks)
+                val newSuggestions = targetTracks.mapNotNull { track ->
+                    val cleaned = cleanedMap[track.id] ?: return@mapNotNull null
+                    val (newTitle, newArtist, newAlbum) = cleaned
+                    val tags = TagSuggestionCleaner.Tags(
+                        title = newTitle.ifBlank { track.title },
+                        artist = newArtist.ifBlank { track.artist },
+                        album = newAlbum.ifBlank { track.album }
+                    )
+                    if (tags != TagSuggestionCleaner.Tags(track.title, track.artist, track.album)) {
+                        TagFixSuggestion(track, tags)
+                    } else null
+                }
+                _aiSuggestions.value = newSuggestions
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                _fixFailed.value = true
+            } finally {
+                _findingAiFixes.value = false
+            }
+        }
+    }
+
     fun dismissSuggestions() {
         if (_savingFix.value != null) return
         suggestionJob?.cancel()
         _suggestions.value = null
     }
 
-    fun applySuggestion(trackId: String) {
-        if (_savingFix.value != null || _findingFixes.value) return
-        val suggestion = _suggestions.value?.firstOrNull { it.track.id == trackId } ?: return
+    fun applySuggestion(trackId: String, isAi: Boolean = false) {
+        if (_savingFix.value != null || _findingFixes.value || _findingAiFixes.value) return
+        val pool = if (isAi) _aiSuggestions.value else _suggestions.value
+        val suggestion = pool?.firstOrNull { it.track.id == trackId } ?: return
         viewModelScope.launch {
             _savingFix.value = trackId
             _fixFailed.value = false
@@ -125,17 +181,23 @@ class LibraryToolsViewModel @Inject constructor(
             if (resume) playerController.pause()
             try {
                 val current = trackRepository.getTrackById(trackId).first()
-                if (current == null || current.title != suggestion.track.title || current.artist != suggestion.track.artist || current.album != suggestion.track.album) {
+                if (current == null) {
                     _fixFailed.value = true
                     return@launch
                 }
                 val tags = suggestion.tags
-                val edit = TrackEdit(tags.title, tags.artist, tags.album, current.albumArtist, current.genre,
-                    current.year, current.trackNumber, current.discNumber, current.composer)
+                val edit = TrackEdit(
+                    tags.title, tags.artist, tags.album, current.albumArtist, current.genre,
+                    current.year, current.trackNumber, current.discNumber, current.composer
+                )
                 when (val result = trackRepository.updateTrackDetails(trackId, edit)) {
                     is TrackEditResult.Success -> {
                         playerController.updateTrackInPlayback(result.track)
-                        _suggestions.value = _suggestions.value.orEmpty().filterNot { it.track.id == trackId }
+                        if (isAi) {
+                            _aiSuggestions.value = _aiSuggestions.value.orEmpty().filterNot { it.track.id == trackId }
+                        } else {
+                            _suggestions.value = _suggestions.value.orEmpty().filterNot { it.track.id == trackId }
+                        }
                     }
                     is TrackEditResult.Failure -> _fixFailed.value = true
                 }
@@ -147,6 +209,36 @@ class LibraryToolsViewModel @Inject constructor(
                 if (resume && currentTrack.value?.id == trackId) playerController.resume()
                 _savingFix.value = null
             }
+        }
+    }
+
+    fun applyAllSuggestions(isAi: Boolean = false, onDone: (Int) -> Unit = {}) {
+        val pool = (if (isAi) _aiSuggestions.value else _suggestions.value).orEmpty()
+        if (pool.isEmpty() || _savingFix.value != null) return
+        viewModelScope.launch {
+            var applied = 0
+            for (suggestion in pool) {
+                val trackId = suggestion.track.id
+                val current = trackRepository.getTrackById(trackId).first() ?: continue
+                val tags = suggestion.tags
+                val edit = TrackEdit(
+                    tags.title, tags.artist, tags.album, current.albumArtist, current.genre,
+                    current.year, current.trackNumber, current.discNumber, current.composer
+                )
+                when (val result = trackRepository.updateTrackDetails(trackId, edit)) {
+                    is TrackEditResult.Success -> {
+                        playerController.updateTrackInPlayback(result.track)
+                        applied++
+                    }
+                    else -> Unit
+                }
+            }
+            if (isAi) {
+                _aiSuggestions.value = emptyList()
+            } else {
+                _suggestions.value = emptyList()
+            }
+            onDone(applied)
         }
     }
 

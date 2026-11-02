@@ -102,6 +102,9 @@ fun MusicNavGraph(
                 },
                 onNavigateToTagEditor = { trackId ->
                     navController.navigate(NavDestination.createTagEditorRoute(trackId))
+                },
+                onNavigateToLibraryTools = {
+                    navController.navigate(NavDestination.ROUTE_LIBRARY_TOOLS)
                 }
             )
         }
@@ -140,6 +143,9 @@ fun MusicNavGraph(
                 onNavigateBack = { navController.popBackStack() },
                 onEditTrack = { trackId ->
                     navController.navigate(NavDestination.createTagEditorRoute(trackId))
+                },
+                onNavigateToSettings = {
+                    navController.navigate(NavDestination.Settings.route)
                 }
             )
         }

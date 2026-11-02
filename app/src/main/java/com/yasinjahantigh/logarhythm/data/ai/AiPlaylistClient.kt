@@ -115,6 +115,56 @@ class AiPlaylistClient @Inject constructor(
         )
     }
 
+    suspend fun cleanMetadataWithAi(
+        settings: AiSettings,
+        apiKey: String,
+        tracks: List<Track>
+    ): Map<String, Triple<String, String, String>> = withContext(Dispatchers.IO) {
+        if (tracks.isEmpty()) return@withContext emptyMap()
+        val userPrompt = buildString {
+            appendLine("Clean and standardize these music tracks. Extract the correct artist and title. Remove YouTube noise like [Official Video], (Audio), [4K], ft., etc. Return a JSON object with a key 'items' containing an array of objects: {\"id\": \"track_id\", \"title\": \"clean title\", \"artist\": \"clean artist\", \"album\": \"clean album\"}.")
+            tracks.forEach {
+                appendLine("${it.id} | ${it.title} | ${it.artist} | ${it.album}")
+            }
+        }
+        val request = when (settings.provider) {
+            AiProvider.OPENAI_COMPATIBLE -> openAiRequest(
+                settings = settings,
+                apiKey = apiKey,
+                system = "You are a professional music tag cleaner. Output only valid JSON with format: {\"items\": [{\"id\":\"...\",\"title\":\"...\",\"artist\":\"...\",\"album\":\"...\"}]}",
+                user = userPrompt,
+                jsonMode = true
+            )
+            AiProvider.GEMINI -> geminiRequest(
+                settings = settings,
+                apiKey = apiKey,
+                system = "You are a professional music tag cleaner. Output only valid JSON with format: {\"items\": [{\"id\":\"...\",\"title\":\"...\",\"artist\":\"...\",\"album\":\"...\"}]}",
+                user = userPrompt
+            )
+        }
+        try {
+            client.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) return@withContext emptyMap()
+                val text = extractText(settings.provider, response.body?.string().orEmpty()) ?: return@withContext emptyMap()
+                val jsonStr = extractJsonObject(text) ?: return@withContext emptyMap()
+                val obj = JSONObject(jsonStr)
+                val items = obj.optJSONArray("items") ?: return@withContext emptyMap()
+                val result = mutableMapOf<String, Triple<String, String, String>>()
+                for (i in 0 until items.length()) {
+                    val item = items.optJSONObject(i) ?: continue
+                    val id = item.optString("id").takeIf { it.isNotBlank() } ?: continue
+                    val title = item.optString("title").takeIf { it.isNotBlank() } ?: continue
+                    val artist = item.optString("artist").takeIf { it.isNotBlank() } ?: continue
+                    val album = item.optString("album").orEmpty()
+                    result[id] = Triple(title, artist, album)
+                }
+                result
+            }
+        } catch (_: Exception) {
+            emptyMap()
+        }
+    }
+
     private suspend fun performGeneration(
         settings: AiSettings,
         apiKey: String,

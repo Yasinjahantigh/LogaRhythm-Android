@@ -11,6 +11,8 @@ object DownloadCommand {
         add("--no-warnings" to null)
         add("--ignore-errors" to null)
         add("--no-playlist" to null)
+        add("--socket-timeout" to "15")
+        add("--extractor-args" to "youtube:player_client=android,web")
         if (cookiesPath != null) add("--cookies" to cookiesPath)
     }
 
@@ -20,14 +22,18 @@ object DownloadCommand {
         videoId: String,
         cookiesPath: String? = null
     ): List<Pair<String, String?>> = buildList {
-        add("-f" to "bestaudio[ext=m4a]/bestaudio[ext=mp3]/bestaudio")
+        add("-f" to "bestaudio[ext=m4a]/bestaudio[ext=mp3]/bestaudio/best")
         add("--newline" to null)
         add("--continue" to null)
         add("--no-playlist" to null)
         add("--no-mtime" to null)
-        add("--retries" to "3")
-        add("--fragment-retries" to "3")
-        add("--socket-timeout" to "20")
+        add("--retries" to "5")
+        add("--fragment-retries" to "5")
+        add("--socket-timeout" to "25")
+        add("--buffer-size" to "64k")
+        add("--http-chunk-size" to "10M")
+        add("--concurrent-fragments" to "4")
+        add("--extractor-args" to "youtube:player_client=android,web")
         add("--paths" to workspace.absolutePath)
         add("--output" to "$videoId.%(ext)s")
         if (cookiesPath != null) add("--cookies" to cookiesPath)

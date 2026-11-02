@@ -1,8 +1,11 @@
 package com.yasinjahantigh.logarhythm.data.repository
 
+import android.content.ContentUris
 import android.content.Context
 import android.net.Uri
+import android.os.Build
 import android.provider.MediaStore
+import java.io.File
 import com.yasinjahantigh.logarhythm.core.artwork.ArtworkVersionStore
 import com.yasinjahantigh.logarhythm.core.utils.SearchUtils
 import com.yasinjahantigh.logarhythm.data.datastore.PreferencesManager
@@ -465,26 +468,52 @@ class TrackRepositoryImpl @Inject constructor(
      * callers receive false and the Room/playlist records are deliberately retained.
      */
     override suspend fun deleteTrack(track: Track): Boolean = withContext(Dispatchers.IO) {
-        if (!track.id.startsWith("local:")) return@withContext false
+        if (!track.id.startsWith("local:")) {
+            if (track.filePath.isNotBlank()) {
+                runCatching { File(track.filePath).delete() }
+            }
+            withContext(NonCancellable) {
+                musicDatabase.withTransaction {
+                    musicDao.deleteTracksByIds(listOf(track.id))
+                    playlistDao.removeTrackFromAllPlaylists(track.id)
+                }
+            }
+            return@withContext true
+        }
+
         val mediaStoreId = track.id.removePrefix("local:").toLongOrNull() ?: return@withContext false
-        // Never reconstruct a URI from the numeric ID: IDs can be volume-scoped. Use the
-        // exact MediaStore URI carried by the track and refuse malformed/mismatched identities.
         val uri = runCatching { Uri.parse(track.uri) }.getOrNull()
             ?.takeIf {
                 it.scheme.equals("content", ignoreCase = true) &&
-                    it.authority.equals("media", ignoreCase = true) &&
-                    it.lastPathSegment?.toLongOrNull() == mediaStoreId
-            } ?: return@withContext false
+                    it.authority.equals("media", ignoreCase = true)
+            } ?: ContentUris.withAppendedId(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, mediaStoreId)
+        val file = if (track.filePath.isNotBlank()) File(track.filePath) else null
 
         try {
-            val initialCursor = context.contentResolver.query(
-                uri, arrayOf(MediaStore.Audio.Media._ID), null, null, null
-            ) ?: return@withContext false // Unknown provider/query state is not proof of absence.
-            val queriedBefore = initialCursor.use { cursor ->
-                if (!cursor.moveToFirst()) null else cursor.getLong(0)
+            if (file != null && file.exists()) {
+                runCatching { file.delete() }
             }
-            if (queriedBefore == null) {
-                // The underlying item is already gone; finish removing the stale app entry.
+            val rowsDeleted = runCatching { context.contentResolver.delete(uri, null, null) }.getOrDefault(0)
+
+            val isGoneOrTrashed = runCatching {
+                val projection = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                    arrayOf(MediaStore.Audio.Media._ID, MediaStore.MediaColumns.IS_TRASHED)
+                } else {
+                    arrayOf(MediaStore.Audio.Media._ID)
+                }
+                context.contentResolver.query(uri, projection, null, null, null)?.use { cursor ->
+                    if (!cursor.moveToFirst()) {
+                        true
+                    } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                        val trashedIdx = cursor.getColumnIndex(MediaStore.MediaColumns.IS_TRASHED)
+                        trashedIdx >= 0 && cursor.getInt(trashedIdx) == 1
+                    } else {
+                        false
+                    }
+                } ?: (file != null && !file.exists())
+            }.getOrDefault(rowsDeleted > 0 || (file != null && !file.exists()))
+
+            if (isGoneOrTrashed || rowsDeleted > 0 || (file != null && !file.exists())) {
                 withContext(NonCancellable) {
                     musicDatabase.withTransaction {
                         musicDao.deleteTracksByIds(listOf(track.id))
@@ -493,44 +522,45 @@ class TrackRepositoryImpl @Inject constructor(
                 }
                 return@withContext true
             }
-            if (queriedBefore != mediaStoreId) return@withContext false
-
-            // Once deletion starts, complete the verify-and-DB-commit section even if the
-            // caller navigates away or its coroutine is cancelled. Otherwise a successful
-            // provider delete could leave a stale Room row/playlist reference.
-            withContext(NonCancellable) deleteAndCommit@ {
-                // Some providers can throw after changing the item. Don't infer the final
-                // state from the exception alone; query the exact URI and clean Room only if
-                // absence is confirmed.
-                runCatching { context.contentResolver.delete(uri, null, null) }
-                val remains = try {
-                    context.contentResolver.query(
-                        uri,
-                        arrayOf(MediaStore.Audio.Media._ID),
-                        null,
-                        null,
-                        null
-                    )?.use { it.moveToFirst() }
-                } catch (_: Exception) {
-                    null
-                } ?: return@deleteAndCommit false // Unknown is not the same as deleted.
-                if (remains) return@deleteAndCommit false
-
-                // Storage deletion is verified. Only now remove the track and playlist refs.
-                musicDatabase.withTransaction {
-                    musicDao.deleteTracksByIds(listOf(track.id))
-                    playlistDao.removeTrackFromAllPlaylists(track.id)
-                }
-                true
-            }
+            return@withContext false
         } catch (cancelled: CancellationException) {
             throw cancelled
-        } catch (_: SecurityException) {
-            // Permission/consent wasn't granted. Preserve local records for a retry.
-            false
         } catch (_: Exception) {
+            val fileGone = file != null && !file.exists()
+            if (fileGone) {
+                withContext(NonCancellable) {
+                    musicDatabase.withTransaction {
+                        musicDao.deleteTracksByIds(listOf(track.id))
+                        playlistDao.removeTrackFromAllPlaylists(track.id)
+                    }
+                }
+                return@withContext true
+            }
             false
         }
+    }
+
+    override suspend fun deleteTracks(tracks: List<Track>): Int = withContext(Dispatchers.IO) {
+        if (tracks.isEmpty()) return@withContext 0
+        var deletedCount = 0
+        val deletedIds = mutableListOf<String>()
+
+        for (track in tracks) {
+            val ok = deleteTrack(track)
+            if (ok) {
+                deletedCount++
+                deletedIds.add(track.id)
+            }
+        }
+        if (deletedIds.isNotEmpty()) {
+            withContext(NonCancellable) {
+                musicDatabase.withTransaction {
+                    musicDao.deleteTracksByIds(deletedIds)
+                    playlistDao.removeTracksFromAllPlaylists(deletedIds)
+                }
+            }
+        }
+        deletedCount
     }
 
     override fun getAllDeviceFolderNames(): Flow<List<String>> =

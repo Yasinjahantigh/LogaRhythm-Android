@@ -124,8 +124,22 @@ class LyricsViewModel @Inject constructor(
 
     fun nudgeOffset(deltaMs: Long) {
         val track = currentTrack.value ?: return
-        val next = (offsetMs.value + deltaMs).coerceIn(-10_000L, 10_000L)
+        val next = (offsetMs.value + deltaMs).coerceIn(-30_000L, 30_000L)
         viewModelScope.launch(Dispatchers.IO) { lyricsRepository.setOffset(track.id, next) }
+    }
+
+    fun setOffset(targetMs: Long) {
+        val track = currentTrack.value ?: return
+        val clamped = targetMs.coerceIn(-30_000L, 30_000L)
+        viewModelScope.launch(Dispatchers.IO) { lyricsRepository.setOffset(track.id, clamped) }
+    }
+
+    fun syncLineToCurrentPosition(lineTimestampMs: Long): Long? {
+        val track = currentTrack.value ?: return null
+        val currentPos = livePositionMs.value
+        val newOffset = (lineTimestampMs - currentPos).coerceIn(-30_000L, 30_000L)
+        viewModelScope.launch(Dispatchers.IO) { lyricsRepository.setOffset(track.id, newOffset) }
+        return newOffset
     }
 
     fun resetOffset() {

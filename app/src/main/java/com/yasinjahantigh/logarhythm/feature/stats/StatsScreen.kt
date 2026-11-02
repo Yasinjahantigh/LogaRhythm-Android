@@ -20,12 +20,18 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.yasinjahantigh.logarhythm.R
 import com.yasinjahantigh.logarhythm.domain.model.Track
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
+import com.yasinjahantigh.logarhythm.feature.library.TrackListItem
+import com.yasinjahantigh.logarhythm.ui.designsystem.LocalPlaybackBottomPadding
 import com.yasinjahantigh.logarhythm.feature.playlist.AddToPlaylistDialog
 import com.yasinjahantigh.logarhythm.feature.playlist.SongMenuBottomSheet
 
@@ -45,6 +51,9 @@ fun StatsScreen(
     val topArtists by viewModel.topArtists.collectAsStateWithLifecycle()
     val topAlbums by viewModel.topAlbums.collectAsStateWithLifecycle()
     val playlists by viewModel.playlists.collectAsStateWithLifecycle()
+    val recentlyPlayed by viewModel.recentlyPlayed.collectAsStateWithLifecycle()
+    val currentTrack by viewModel.currentTrack.collectAsStateWithLifecycle()
+    val isPlaying by viewModel.isPlaying.collectAsStateWithLifecycle()
 
     var selectedTrackForMenu by remember { mutableStateOf<Track?>(null) }
     var trackForAddToPlaylist by remember { mutableStateOf<Track?>(null) }
@@ -81,6 +90,7 @@ fun StatsScreen(
             TotalTimeCard(totalTimeMs = totalTimeMs)
 
             val tabs = listOf(
+                StatsTab.HISTORY to stringResource(R.string.stats_history),
                 StatsTab.TRACKS to stringResource(R.string.stats_top_tracks),
                 StatsTab.ARTISTS to stringResource(R.string.stats_top_artists),
                 StatsTab.ALBUMS to stringResource(R.string.stats_top_albums)
@@ -110,6 +120,33 @@ fun StatsScreen(
             }
 
             when (selectedTab) {
+                StatsTab.HISTORY -> {
+                    if (recentlyPlayed.isEmpty()) {
+                        StatsEmptyTabContent(
+                            title = stringResource(R.string.stats_history_empty_title),
+                            message = stringResource(R.string.stats_history_empty_desc),
+                            modifier = Modifier.weight(1f)
+                        )
+                    } else {
+                        val bottomPadding = LocalPlaybackBottomPadding.current
+                        LazyColumn(
+                            modifier = Modifier.weight(1f).testTag("stats_history_list"),
+                            contentPadding = PaddingValues(top = 8.dp, bottom = bottomPadding + 16.dp)
+                        ) {
+                            itemsIndexed(recentlyPlayed, key = { index, track -> "hist_${track.id}_$index" }) { index, track ->
+                                val isCurrent = currentTrack?.id == track.id
+                                TrackListItem(
+                                    track = track,
+                                    onClick = { viewModel.playTrackFromTop(recentlyPlayed, index) },
+                                    isCurrentTrack = isCurrent,
+                                    isPlaying = isCurrent && isPlaying,
+                                    onMenuClick = { selectedTrackForMenu = track },
+                                    onPlayNext = { viewModel.playNext(track) }
+                                )
+                            }
+                        }
+                    }
+                }
                 StatsTab.TRACKS -> {
                     StatsTracksTab(
                         tracks = topTracks,

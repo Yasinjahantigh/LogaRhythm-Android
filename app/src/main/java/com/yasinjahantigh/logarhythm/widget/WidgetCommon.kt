@@ -11,6 +11,7 @@ import androidx.glance.action.Action
 import androidx.glance.action.actionStartActivity
 import androidx.glance.action.clickable
 import androidx.glance.appwidget.cornerRadius
+import androidx.glance.appwidget.LinearProgressIndicator
 import androidx.glance.background
 import androidx.glance.color.ColorProvider as dayNightColorProvider
 import androidx.glance.unit.ColorProvider
@@ -31,29 +32,34 @@ import androidx.glance.text.TextStyle
 import com.yasinjahantigh.logarhythm.MainActivity
 import com.yasinjahantigh.logarhythm.R
 
-internal val ArtText = dayNightColorProvider(day = Color(0xFFE8E4DC), night = Color(0xFFE8E4DC))
+// Crisp text and surface colors for artwork/dark backgrounds
+internal val ArtText = ColorProvider(Color.White)
+internal val ArtSecondaryText = ColorProvider(Color(0xFFB0B3B8))
+internal val ArtControlSurface = ColorProvider(Color(0x26FFFFFF))
+internal val ArtControlSurfaceActive = ColorProvider(Color(0x40FFFFFF))
+internal val ArtProgressTrack = ColorProvider(Color(0x33FFFFFF))
+internal val ArtBackground = ColorProvider(Color(0xFF101215))
 
-internal val ArtSecondaryText = dayNightColorProvider(day = Color(0xFFB8B2A8), night = Color(0xFFB8B2A8))
+// Queue / Samsung Music style widget colors
+internal val QueueBackground = ColorProvider(Color(0xFF101215))
+internal val QueueCardSurface = ColorProvider(Color(0xFF1E2127))
+internal val QueueControlSurface = ColorProvider(Color(0x1AFFFFFF))
+internal val QueueActiveItemSurface = ColorProvider(Color(0x2EF4B266))
+internal val QueueTextPrimary = ColorProvider(Color(0xFFF5F5F7))
+internal val QueueTextSecondary = ColorProvider(Color(0xFF8E9298))
+internal val QueueActiveTextPrimary = ColorProvider(Color(0xFFF4B266))
+internal val QueueActiveTextSecondary = ColorProvider(Color(0xCCF4B266))
 
-internal val ArtControlSurface = dayNightColorProvider(day = Color(0x26E8E4DC), night = Color(0x26E8E4DC))
+// Adaptive Day/Night widget colors for Card & Strip widgets
+internal val WidgetBackground = dayNightColorProvider(day = Color(0xFFFFFFFF), night = Color(0xFF14161A))
+internal val WidgetCardBackground = dayNightColorProvider(day = Color(0xFFF3F4F6), night = Color(0xFF1E2126))
+internal val WidgetText = dayNightColorProvider(day = Color(0xFF121418), night = Color(0xFFFFFFFF))
+internal val WidgetSecondaryText = dayNightColorProvider(day = Color(0xFF6B7280), night = Color(0xFF9E9EA4))
+internal val WidgetAccent = dayNightColorProvider(day = Color(0xFFE07A00), night = Color(0xFFF4B266))
+internal val WidgetControlSurface = dayNightColorProvider(day = Color(0x14000000), night = Color(0x26FFFFFF))
+internal val WidgetProgressTrack = dayNightColorProvider(day = Color(0x1F000000), night = Color(0x33FFFFFF))
 
-internal val ArtProgressTrack = dayNightColorProvider(day = Color(0x40E8E4DC), night = Color(0x40E8E4DC))
-
-internal val ArtBackground = dayNightColorProvider(day = Color(0xFF15181C), night = Color(0xFF15181C))
-
-internal val WidgetBackground = dayNightColorProvider(day = Color(0xFFFBF8F2), night = Color(0xFF15181C))
-
-internal val WidgetText = dayNightColorProvider(day = Color(0xFF15181C), night = Color(0xFFE8E4DC))
-
-internal val WidgetSecondaryText = dayNightColorProvider(day = Color(0xFF625D55), night = Color(0xFFB8B2A8))
-
-internal val WidgetAccent = dayNightColorProvider(day = Color(0xFF8A4F00), night = Color(0xFFF4B266))
-
-internal val WidgetControlSurface = dayNightColorProvider(day = Color(0x148A4F00), night = Color(0x26E8E4DC))
-
-/** Deterministic bar heights so the meter never jitters between refreshes. */
-private val WaveformBars = intArrayOf(34, 58, 84, 46, 100, 64, 92, 72, 86, 50)
-
+internal fun colorProvider(color: Color): ColorProvider = ColorProvider(color)
 
 @Composable
 internal fun WidgetIconButton(
@@ -82,10 +88,28 @@ internal fun WidgetIconButton(
     }
 }
 
+/** Smooth, modern linear progress bar for widgets. */
+@Composable
+internal fun LinearProgressBar(
+    progress: Float,
+    modifier: GlanceModifier = GlanceModifier,
+    height: Int = 4,
+    trackColor: ColorProvider = WidgetProgressTrack,
+    progressColor: ColorProvider = WidgetAccent
+) {
+    LinearProgressIndicator(
+        progress = progress.coerceIn(0f, 1f),
+        modifier = modifier.fillMaxWidth().height(height.dp).cornerRadius((height / 2).dp),
+        color = progressColor,
+        backgroundColor = trackColor
+    )
+}
+
+/** Deterministic bar heights so the meter never jitters between refreshes. */
+private val WaveformBars = intArrayOf(34, 58, 84, 46, 100, 64, 92, 72, 86, 50)
 
 /**
- * Ember level meter: a waveform silhouette that fills up with the accent colour as the track
- * advances. Ten bars is the maximum a single Glance container may hold.
+ * Waveform progress visualizer that fills with accent color as playback advances.
  */
 @Composable
 internal fun WaveformProgress(progress: Float, modifier: GlanceModifier = GlanceModifier) {
@@ -111,59 +135,56 @@ internal fun WaveformProgress(progress: Float, modifier: GlanceModifier = Glance
     }
 }
 
-
 @Composable
 internal fun WidgetEmptyState() {
     Column(
         modifier = GlanceModifier
             .fillMaxSize()
             .background(WidgetBackground)
-            .cornerRadius(20.dp)
+            .cornerRadius(22.dp)
             .clickable(actionStartActivity<MainActivity>())
-            .padding(18.dp),
+            .padding(16.dp),
         verticalAlignment = Alignment.Vertical.CenterVertically,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Box(modifier = GlanceModifier.width(36.dp).height(3.dp).background(accentColor()).cornerRadius(2.dp)) {}
-        Spacer(modifier = GlanceModifier.height(12.dp))
-        Image(
-            provider = ImageProvider(R.drawable.ic_music_placeholder),
-            contentDescription = null,
-            modifier = GlanceModifier.size(40.dp)
-        )
+        Box(
+            modifier = GlanceModifier
+                .size(48.dp)
+                .cornerRadius(24.dp)
+                .background(WidgetCardBackground),
+            contentAlignment = Alignment.Center
+        ) {
+            Image(
+                provider = ImageProvider(R.drawable.ic_music_placeholder),
+                contentDescription = null,
+                modifier = GlanceModifier.size(28.dp)
+            )
+        }
         Spacer(modifier = GlanceModifier.height(10.dp))
         Text(
             text = LocalString(R.string.app_name),
-            style = TextStyle(color = accentColor(), fontSize = 13.sp, fontWeight = FontWeight.Bold)
+            style = TextStyle(color = WidgetAccent, fontSize = 13.sp, fontWeight = FontWeight.Bold)
         )
-        Spacer(modifier = GlanceModifier.height(6.dp))
+        Spacer(modifier = GlanceModifier.height(4.dp))
         Text(
             text = LocalString(R.string.no_track_playing),
-            style = TextStyle(color = WidgetText, fontSize = 17.sp, fontWeight = FontWeight.Bold)
+            style = TextStyle(color = WidgetText, fontSize = 15.sp, fontWeight = FontWeight.Bold)
         )
         Spacer(modifier = GlanceModifier.height(4.dp))
         Text(
             text = LocalString(R.string.widget_open),
-            style = TextStyle(color = WidgetSecondaryText, fontSize = 12.sp)
+            style = TextStyle(color = WidgetSecondaryText, fontSize = 11.sp)
         )
     }
 }
 
-
 internal fun accentColor() = WidgetAccent
 
-
-/**
- * Reading the Glance state is what subscribes the composition to widget updates: Glance only
- * recomposes when a state it provides changes, so without this call the widget renders once and
- * silently ignores every later update. The data itself is prepared outside the session.
- */
 @Composable
 internal fun widgetSnapshot(): MusicWidgetSnapshot {
     androidx.glance.currentState<androidx.datastore.preferences.core.Preferences>()
     return MusicWidgetUpdater.currentState()
 }
-
 
 @Composable
 internal fun LocalString(stringRes: Int): String = androidx.glance.LocalContext.current.getString(stringRes)

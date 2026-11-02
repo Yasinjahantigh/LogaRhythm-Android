@@ -80,4 +80,33 @@ class ArtistDetailViewModel @Inject constructor(
             trackRepository.hideTrack(track.id)
         }
     }
+
+    fun deleteTrack(track: Track, onDone: (Boolean) -> Unit = {}) {
+        viewModelScope.launch {
+            if (currentTrack.value?.id == track.id) {
+                playerController.next()
+            }
+            val deleted = try {
+                trackRepository.deleteTrack(track)
+            } catch (_: Exception) {
+                false
+            }
+            onDone(deleted)
+        }
+    }
+
+    fun deleteTracks(tracks: List<Track>, onDone: (Int) -> Unit = {}) {
+        viewModelScope.launch {
+            val currentId = currentTrack.value?.id
+            if (tracks.any { it.id == currentId }) {
+                playerController.next()
+            }
+            val count = try {
+                trackRepository.deleteTracks(tracks)
+            } catch (_: Exception) {
+                0
+            }
+            onDone(count)
+        }
+    }
 }

@@ -279,6 +279,9 @@ class LibraryViewModel @Inject constructor(
                 normalized.field.name,
                 normalized.direction.name
             )
+            if (tab == LibraryTab.SONGS) {
+                com.yasinjahantigh.logarhythm.widget.MusicWidgetUpdater.requestUpdate(context)
+            }
         }
     }
 
@@ -369,6 +372,9 @@ class LibraryViewModel @Inject constructor(
 
     fun deleteTrack(track: Track, onDone: (Boolean) -> Unit = {}) {
         viewModelScope.launch {
+            if (currentTrack.value?.id == track.id) {
+                playerController.next()
+            }
             val deleted = try {
                 trackRepository.deleteTrack(track)
             } catch (cancelled: CancellationException) {
@@ -377,6 +383,23 @@ class LibraryViewModel @Inject constructor(
                 false
             }
             onDone(deleted)
+        }
+    }
+
+    fun deleteTracks(tracks: List<Track>, onDone: (Int) -> Unit = {}) {
+        viewModelScope.launch {
+            val currentId = currentTrack.value?.id
+            if (tracks.any { it.id == currentId }) {
+                playerController.next()
+            }
+            val count = try {
+                trackRepository.deleteTracks(tracks)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                0
+            }
+            onDone(count)
         }
     }
 

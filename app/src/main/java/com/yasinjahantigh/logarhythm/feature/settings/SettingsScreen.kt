@@ -3,6 +3,8 @@ package com.yasinjahantigh.logarhythm.feature.settings
 import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
+import android.content.Intent
+import android.net.Uri
 import android.widget.Toast
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -23,6 +25,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.CloudDownload
+import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.ColorLens
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.FolderOff
@@ -805,6 +808,18 @@ fun SettingsScreen(
                             onCheckedChange = viewModel::setAutoCheckEnabled,
                             rowTag = "settings_auto_update_item",
                             switchTag = "settings_auto_update_switch"
+                        )
+                        SettingsActionItem(
+                            title = stringResource(R.string.settings_github_title),
+                            subtitle = stringResource(R.string.settings_github_desc),
+                            icon = Icons.Filled.Code,
+                            onClick = {
+                                runCatching {
+                                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/Yasinjahantigh/LogaRhythm-Android"))
+                                    context.startActivity(intent)
+                                }
+                            },
+                            testTag = "settings_github_item"
                         )
                         if (viewModel.installStatsAvailable) {
                             SettingsInfoItem(

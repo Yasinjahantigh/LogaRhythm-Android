@@ -32,7 +32,7 @@ fun getVersionInfo(): Pair<Int, String> {
     val name = "$major.$minor.$patch"
     Pair(code, name)
   } else {
-    Pair(10700, "1.7.0")
+    Pair(10900, "1.9.0")
   }
 }
 
@@ -138,7 +138,7 @@ android {
       isEnable = true
       reset()
       include("armeabi-v7a", "arm64-v8a", "x86", "x86_64")
-      isUniversalApk = false
+      isUniversalApk = true
     }
   }
   testOptions { unitTests { isIncludeAndroidResources = true } }

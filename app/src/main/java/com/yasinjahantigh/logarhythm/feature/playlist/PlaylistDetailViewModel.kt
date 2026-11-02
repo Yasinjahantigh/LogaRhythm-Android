@@ -129,6 +129,35 @@ class PlaylistDetailViewModel @Inject constructor(
         }
     }
 
+    fun deleteTrack(track: Track, onDone: (Boolean) -> Unit = {}) {
+        viewModelScope.launch {
+            if (playerController.currentTrack.value?.id == track.id) {
+                playerController.next()
+            }
+            val ok = try {
+                trackRepository.deleteTrack(track)
+            } catch (_: Exception) {
+                false
+            }
+            onDone(ok)
+        }
+    }
+
+    fun deleteTracks(tracks: List<Track>, onDone: (Int) -> Unit = {}) {
+        viewModelScope.launch {
+            val currentId = playerController.currentTrack.value?.id
+            if (tracks.any { it.id == currentId }) {
+                playerController.next()
+            }
+            val count = try {
+                trackRepository.deleteTracks(tracks)
+            } catch (_: Exception) {
+                0
+            }
+            onDone(count)
+        }
+    }
+
     fun createPlaylist(name: String) {
         viewModelScope.launch {
             playlistRepository.createPlaylist(name)

@@ -24,6 +24,7 @@ fun LogaRhythmTheme(
     customBase: String = "dark",
     cornerRoundness: String = "standard",
     seedArtworkColor: Color? = null,
+    hasCustomBackground: Boolean = false,
     darkTheme: Boolean = when (themeMode) {
         "light" -> false
         "dark" -> true
@@ -39,7 +40,7 @@ fun LogaRhythmTheme(
         else -> darkTheme
     }
     val fallback = if (effectiveDark) DarkColorScheme else LightColorScheme
-    val colorScheme = when (themeStyle) {
+    val rawColorScheme = when (themeStyle) {
         "oled" -> OledColorScheme
         "album_art" -> seedArtworkColor?.let { generateDynamicSchemeFromSeed(it, effectiveDark) } ?: fallback
         "wallpaper" -> if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -52,6 +53,11 @@ fun LogaRhythmTheme(
             if (customBase == "oled") generated.withBlackSurfaces() else generated
         }
         else -> fallback
+    }
+    val colorScheme = if (hasCustomBackground) {
+        rawColorScheme.copy(background = Color.Transparent)
+    } else {
+        rawColorScheme
     }
 
     if (!view.isInEditMode) {
