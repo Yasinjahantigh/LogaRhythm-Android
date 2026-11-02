@@ -39,6 +39,7 @@ interface TrackRepository {
     /** Full tag/cover edit; writes the file, verifies it, mirrors MediaStore and updates Room. */
     suspend fun updateTrackDetails(id: String, edit: TrackEdit): TrackEditResult
     suspend fun deleteTrack(track: Track): Boolean
+    suspend fun deleteTracks(tracks: List<Track>): Int
     fun getHiddenTracks(): Flow<List<Track>>
     fun getAllDeviceFolderNames(): Flow<List<String>>
     suspend fun hideTrack(trackId: String)

@@ -36,7 +36,8 @@ import com.yasinjahantigh.logarhythm.R
 data class SelectionAction(
     val icon: ImageVector,
     val label: String,
-    val onClick: () -> Unit
+    val onClick: () -> Unit,
+    val iconTint: androidx.compose.ui.graphics.Color? = null
 )
 
 /** Header shown instead of the normal title bar while songs are selected. */
@@ -113,7 +114,7 @@ fun SelectionActionBar(
                     Icon(
                         imageVector = action.icon,
                         contentDescription = action.label,
-                        tint = MaterialTheme.colorScheme.primary,
+                        tint = action.iconTint ?: MaterialTheme.colorScheme.primary,
                         modifier = Modifier.size(23.dp)
                     )
                     Spacer(Modifier.height(3.dp))

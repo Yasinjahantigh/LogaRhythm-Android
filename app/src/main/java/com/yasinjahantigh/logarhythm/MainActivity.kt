@@ -8,15 +8,24 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.Crossfade
+import androidx.compose.foundation.background
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import coil.compose.AsyncImage
 import com.yasinjahantigh.logarhythm.core.library.LibrarySync
 import com.yasinjahantigh.logarhythm.core.utils.ArtworkColorExtractor
 import com.yasinjahantigh.logarhythm.data.datastore.PreferencesManager
@@ -101,6 +110,8 @@ class MainActivity : ComponentActivity() {
             val customAccent by preferencesManager.customAccentColor.collectAsStateWithLifecycle(initialValue = 0xFFF4B266)
             val customBase by preferencesManager.customBase.collectAsStateWithLifecycle(initialValue = "dark")
             val cornerRoundness by preferencesManager.cornerRoundness.collectAsStateWithLifecycle(initialValue = "standard")
+            val customBackgroundUri by preferencesManager.customBackgroundUri.collectAsStateWithLifecycle(initialValue = null)
+            val customBackgroundAlpha by preferencesManager.customBackgroundAlpha.collectAsStateWithLifecycle(initialValue = 0.35f)
             val isOnboardingCompleted by preferencesManager.isOnboardingCompleted.collectAsStateWithLifecycle(
                 initialValue = onboardingBootstrap
             )
@@ -144,21 +155,53 @@ class MainActivity : ComponentActivity() {
                 customAccentColor = Color(customAccent),
                 customBase = customBase,
                 cornerRoundness = cornerRoundness,
-                seedArtworkColor = seedArtworkColor
+                seedArtworkColor = seedArtworkColor,
+                hasCustomBackground = customBackgroundUri != null && isOnboardingCompleted
             ) {
-                Crossfade(targetState = isOnboardingCompleted, label = "onboarding_crossfade") { completed ->
-                    if (!completed) {
-                        OnboardingScreen(
-                            onFinish = {
-                                scope.launch {
-                                    preferencesManager.setOnboardingCompleted(true)
-                                    // Permission was just answered in onboarding; index the library now.
-                                    librarySync.requestRefresh(force = true)
+                Surface(
+                    modifier = Modifier.fillMaxSize(),
+                    color = MaterialTheme.colorScheme.surface
+                ) {
+                    Box(modifier = Modifier.fillMaxSize()) {
+                        if (customBackgroundUri != null && isOnboardingCompleted) {
+                            AsyncImage(
+                                model = customBackgroundUri,
+                                contentDescription = null,
+                                modifier = Modifier.fillMaxSize(),
+                                contentScale = ContentScale.Crop
+                            )
+                            val isDark = when (themeStyle) {
+                                "oled" -> true
+                                "custom" -> customBase != "light"
+                                else -> when (themeMode) {
+                                    "light" -> false
+                                    "dark" -> true
+                                    else -> isSystemInDarkTheme()
                                 }
                             }
-                        )
-                    } else {
-                        MainScreen(seedTint = seedArtworkColor)
+                            val overlayColor = if (isDark) Color.Black else Color.White
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .background(overlayColor.copy(alpha = 1f - customBackgroundAlpha))
+                            )
+                        }
+
+                        Crossfade(targetState = isOnboardingCompleted, label = "onboarding_crossfade") { completed ->
+                            if (!completed) {
+                                OnboardingScreen(
+                                    onFinish = {
+                                        scope.launch {
+                                            preferencesManager.setOnboardingCompleted(true)
+                                            // Permission was just answered in onboarding; index the library now.
+                                            librarySync.requestRefresh(force = true)
+                                        }
+                                    }
+                                )
+                            } else {
+                                MainScreen(seedTint = seedArtworkColor)
+                            }
+                        }
                     }
                 }
                 if (isOnboardingCompleted) {

@@ -47,6 +47,9 @@ class DownloadWorker @AssistedInject constructor(
     private val searchService: YtDlpSearchService,
     private val downloader: YtDlpDownloader,
     private val musicManDownloader: MusicManDownloader,
+    private val saavnDownloader: com.yasinjahantigh.logarhythm.data.download.saavn.SaavnDownloader,
+    private val radioJavanClient: com.yasinjahantigh.logarhythm.data.download.radiojavan.RadioJavanClient,
+    private val radioJavanDownloader: com.yasinjahantigh.logarhythm.data.download.radiojavan.RadioJavanDownloader,
     private val metadataResolver: MetadataResolver,
     private val artworkLoader: ArtworkLoader,
     private val mp4Remuxer: Mp4Remuxer,
@@ -76,6 +79,8 @@ class DownloadWorker @AssistedInject constructor(
         } catch (cancelled: CancellationException) {
             downloader.cancel(id)
             musicManDownloader.cancel(id)
+            saavnDownloader.cancel(id)
+            radioJavanDownloader.cancel(id)
             markCancelled(id)
             throw cancelled
         } catch (_: YoutubeDL.CanceledException) {
@@ -184,10 +189,78 @@ class DownloadWorker @AssistedInject constructor(
         channel: Channel<ProgressEvent>
     ): DownloadOutcome {
         val dir = workspace.dirFor(item.id)
-        if (item.source == DownloadSource.MUSICMAN) {
+        if (item.source == DownloadSource.RADIOJAVAN) {
+            val file = radioJavanDownloader.download(
+                songId = item.videoId,
+                sourceUrl = item.sourceUrl,
+                downloadId = item.id,
+                workspace = dir
+            ) { progress, eta, line ->
+                channel.trySend(ProgressEvent(progress, eta, line))
+            }
+            return DownloadOutcome(file, false, title, artist, artwork)
+        } else if (item.source == DownloadSource.DEEZER) {
+            // When user picks Deezer, match audio via Radio Javan (for Persian) or YouTube/SoundCloud
+            val query = "$title $artist".trim()
+            val rjMatches = runCatching { radioJavanClient.search(query, 3) }.getOrNull().orEmpty()
+            val rjBest = rjMatches.firstOrNull()
+            if (rjBest != null) {
+                try {
+                    val file = radioJavanDownloader.download(
+                        songId = rjBest.id,
+                        sourceUrl = rjBest.url,
+                        downloadId = item.id,
+                        workspace = dir
+                    ) { progress, eta, line ->
+                        channel.trySend(ProgressEvent(progress, eta, line))
+                    }
+                    return DownloadOutcome(file, false, title, artist, artwork)
+                } catch (_: Exception) {
+                }
+            }
+            val ytFallback = runCatching {
+                searchService.searchSoundCloud(query).firstOrNull()
+            }.getOrNull()
+            if (ytFallback != null) {
+                val file = downloadOnce(item, ytFallback.url, ytFallback.id, dir, channel)
+                return DownloadOutcome(file, true, title, artist, artwork)
+            }
+            val ytSearchUrl = "ytsearch1:$query"
+            val file = downloadOnce(item, ytSearchUrl, item.id, dir, channel)
+            return DownloadOutcome(file, true, title, artist, artwork)
+        } else if (item.source == DownloadSource.MUSICMAN) {
             val trackId = item.videoId.ifBlank { item.sourceUrl.substringAfterLast('/') }
-            val file = musicManDownloader.download(
-                trackId = trackId,
+            try {
+                val file = musicManDownloader.download(
+                    trackId = trackId,
+                    downloadId = item.id,
+                    workspace = dir
+                ) { progress, eta, line ->
+                    channel.trySend(ProgressEvent(progress, eta, line))
+                }
+                return DownloadOutcome(file, false, title, artist, artwork)
+            } catch (e: Exception) {
+                // If MusicMan server fails, fall back to Radio Javan or YouTube
+                val query = "$title $artist".trim()
+                val rjMatch = runCatching { radioJavanClient.search(query, 1).firstOrNull() }.getOrNull()
+                if (rjMatch != null) {
+                    val file = radioJavanDownloader.download(
+                        songId = rjMatch.id,
+                        sourceUrl = rjMatch.url,
+                        downloadId = item.id,
+                        workspace = dir
+                    ) { progress, eta, line ->
+                        channel.trySend(ProgressEvent(progress, eta, line))
+                    }
+                    return DownloadOutcome(file, true, title, artist, artwork)
+                }
+                throw e
+            }
+        } else if (item.source == DownloadSource.SAAVN) {
+            val songId = item.videoId.ifBlank { "saavn_${item.id}" }
+            val file = saavnDownloader.download(
+                downloadUrl = item.sourceUrl,
+                songId = songId,
                 downloadId = item.id,
                 workspace = dir
             ) { progress, eta, line ->

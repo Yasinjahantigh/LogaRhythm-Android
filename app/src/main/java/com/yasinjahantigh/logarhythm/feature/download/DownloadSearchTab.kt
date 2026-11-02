@@ -158,7 +158,7 @@ fun DownloadSearchTab(
             )
         }
 
-        if (preparing && sourceFilter != DownloadSource.MUSICMAN) {
+        if (preparing && sourceFilter != DownloadSource.MUSICMAN && sourceFilter != DownloadSource.SAAVN && sourceFilter != DownloadSource.RADIOJAVAN && sourceFilter != DownloadSource.DEEZER) {
             PreparingRow()
         }
 
@@ -217,9 +217,13 @@ private fun SourceFilterRow(
             modifier = Modifier.testTag("download_source_all")
         )
         for (source in listOf(
+            DownloadSource.RADIOJAVAN,
+            DownloadSource.DEEZER,
             DownloadSource.MUSICMAN,
+            DownloadSource.SAAVN,
             DownloadSource.YOUTUBE,
-            DownloadSource.SOUNDCLOUD
+            DownloadSource.SOUNDCLOUD,
+            DownloadSource.BANDCAMP
         )) {
             FilterChip(
                 selected = selected == source,

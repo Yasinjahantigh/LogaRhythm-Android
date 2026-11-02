@@ -135,6 +135,7 @@ fun FullPlayerScreen(
     onCollapse: () -> Unit,
     modifier: Modifier = Modifier,
     onNavigateToTagEditor: (String) -> Unit = {},
+    onNavigateToArtist: ((String) -> Unit)? = null,
     lyricsViewModel: LyricsViewModel = hiltViewModel(),
     playlistViewModel: PlaylistViewModel = hiltViewModel()
 ) {
@@ -303,7 +304,8 @@ fun FullPlayerScreen(
                             CompactTrackRow(
                                 track = track,
                                 isFavorite = isFavorite,
-                                onToggleFavorite = viewModel::toggleFavorite
+                                onToggleFavorite = viewModel::toggleFavorite,
+                                onArtistClick = onNavigateToArtist
                             )
                         }
                         LyricsView(
@@ -424,7 +426,8 @@ fun FullPlayerScreen(
                                 TrackIdentityAndActions(
                                     track = track,
                                     isFavorite = isFavorite,
-                                    onToggleFavorite = viewModel::toggleFavorite
+                                    onToggleFavorite = viewModel::toggleFavorite,
+                                    onArtistClick = onNavigateToArtist
                                 )
                                 PlaybackTimeline(
                                     positionState = positionState,
@@ -468,7 +471,8 @@ fun FullPlayerScreen(
                             TrackIdentityAndActions(
                                 track = track,
                                 isFavorite = isFavorite,
-                                onToggleFavorite = viewModel::toggleFavorite
+                                onToggleFavorite = viewModel::toggleFavorite,
+                                onArtistClick = onNavigateToArtist
                             )
                         }
 
@@ -713,7 +717,8 @@ private fun CompactTrackRow(
     track: Track?,
     isFavorite: Boolean,
     onToggleFavorite: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onArtistClick: ((String) -> Unit)? = null
 ) {
     val title = track?.title.cleanMetaOrNull() ?: stringResource(R.string.unknown_title)
     val artist = track?.artist.cleanMetaOrNull() ?: stringResource(R.string.unknown_artist)
@@ -743,7 +748,12 @@ private fun CompactTrackRow(
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.primary,
                 maxLines = 1,
-                overflow = TextOverflow.Ellipsis
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(6.dp))
+                    .clickable(enabled = onArtistClick != null && track?.artist?.isNotBlank() == true) {
+                        track?.artist?.let { onArtistClick?.invoke(it) }
+                    }
             )
         }
         FavoriteButton(isFavorite = isFavorite, onToggleFavorite = onToggleFavorite)
@@ -755,7 +765,8 @@ fun TrackIdentityAndActions(
     track: Track?,
     isFavorite: Boolean,
     onToggleFavorite: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onArtistClick: ((String) -> Unit)? = null
 ) {
     val displayTitle = track?.title.cleanMetaOrNull() ?: stringResource(R.string.unknown_title)
     val displayArtist = track?.artist.cleanMetaOrNull() ?: stringResource(R.string.unknown_artist)
@@ -783,7 +794,12 @@ fun TrackIdentityAndActions(
                 style = MaterialTheme.typography.titleMedium,
                 color = scheme.primary,
                 maxLines = 1,
-                overflow = TextOverflow.Ellipsis
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(6.dp))
+                    .clickable(enabled = onArtistClick != null && track?.artist?.isNotBlank() == true) {
+                        track?.artist?.let { onArtistClick?.invoke(it) }
+                    }
             )
         }
         FavoriteButton(isFavorite = isFavorite, onToggleFavorite = onToggleFavorite)

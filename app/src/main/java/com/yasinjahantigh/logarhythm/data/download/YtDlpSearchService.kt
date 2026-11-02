@@ -44,15 +44,21 @@ class YtDlpSearchService @Inject constructor(
         } else {
             null
         }
+        val bandcamp = if (DownloadSource.BANDCAMP in sources) {
+            async(Dispatchers.IO) { searchSource(DownloadSource.BANDCAMP, "bcsearch10:$query") }
+        } else {
+            null
+        }
         val yt = youtube?.await() ?: SourceOutcome(emptyList(), null)
         val sc = soundcloud?.await() ?: SourceOutcome(emptyList(), null)
-        val failures = listOfNotNull(yt.failure, sc.failure)
+        val bc = bandcamp?.await() ?: SourceOutcome(emptyList(), null)
+        val failures = listOfNotNull(yt.failure, sc.failure, bc.failure)
         Outcome(
-            results = yt.results + sc.results,
+            results = yt.results + sc.results + bc.results,
             failure = when {
                 failures.isEmpty() -> null
                 failures.contains(DownloadErrorKind.NETWORK) -> DownloadErrorKind.NETWORK
-                else -> yt.failure ?: sc.failure
+                else -> yt.failure ?: sc.failure ?: bc.failure
             }
         )
     }

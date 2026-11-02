@@ -34,8 +34,11 @@ import androidx.glance.text.TextStyle
 import androidx.media3.common.Player
 import com.yasinjahantigh.logarhythm.MainActivity
 import com.yasinjahantigh.logarhythm.R
+import com.yasinjahantigh.logarhythm.core.utils.TimeUtils
 
-/** Large artwork background with title, progress and the full transport row. */
+/**
+ * 4x4 Immersive Large Player widget with blurred backdrop, artwork card, progress, and full controls.
+ */
 class MusicWidgetPlayer : GlanceAppWidget() {
     override val sizeMode = SizeMode.Single
 
@@ -50,92 +53,211 @@ class MusicWidgetPlayer : GlanceAppWidget() {
 @Composable
 private fun PlayerWidgetContent(state: MusicWidgetSnapshot) {
     val track = state.track ?: return
-    Box(
-        modifier = GlanceModifier.fillMaxSize().background(ArtBackground).cornerRadius(24.dp)
-            .clickable(actionStartActivity<MainActivity>())
-    ) {
-        (state.artwork.cover ?: state.artwork.blurred)?.let {
-            Image(ImageProvider(it), null, GlanceModifier.fillMaxSize(), ContentScale.Crop)
-        } ?: Image(
-            ImageProvider(R.drawable.ic_music_placeholder),
-            null,
-            GlanceModifier.size(80.dp),
-            ContentScale.Crop
-        )
-        Image(ImageProvider(R.drawable.widget_scrim), null, GlanceModifier.fillMaxSize(), contentScale = ContentScale.Crop)
 
-        Column(modifier = GlanceModifier.fillMaxSize().padding(horizontal = 20.dp, vertical = 18.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Image(ImageProvider(R.drawable.ic_widget_note), null, GlanceModifier.size(14.dp))
-                Spacer(GlanceModifier.width(7.dp))
-                Text(
-                    text = LocalString(R.string.now_playing),
-                    style = TextStyle(color = ArtSecondaryText, fontSize = 12.sp, fontWeight = FontWeight.Bold),
-                    maxLines = 1
+    Box(
+        modifier = GlanceModifier
+            .fillMaxSize()
+            .background(ArtBackground)
+            .cornerRadius(28.dp)
+            .clickable(actionStartActivity<MainActivity>()),
+        contentAlignment = Alignment.Center
+    ) {
+        // Blurred backdrop
+        state.artwork.blurred?.let {
+            Image(
+                provider = ImageProvider(it),
+                contentDescription = null,
+                modifier = GlanceModifier.fillMaxSize(),
+                contentScale = ContentScale.Crop
+            )
+        }
+
+        // Dark gradient scrim
+        Image(
+            provider = ImageProvider(R.drawable.widget_scrim),
+            contentDescription = null,
+            modifier = GlanceModifier.fillMaxSize(),
+            contentScale = ContentScale.Crop
+        )
+
+        Column(
+            modifier = GlanceModifier
+                .fillMaxSize()
+                .padding(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            // Header: Badge and Favorite
+            Row(
+                modifier = GlanceModifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    modifier = GlanceModifier
+                        .cornerRadius(12.dp)
+                        .background(ArtControlSurface)
+                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Image(
+                            provider = ImageProvider(R.drawable.ic_widget_note),
+                            contentDescription = null,
+                            modifier = GlanceModifier.size(12.dp)
+                        )
+                        Spacer(modifier = GlanceModifier.width(4.dp))
+                        Text(
+                            text = LocalString(R.string.now_playing).uppercase(),
+                            style = TextStyle(color = ArtText, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                        )
+                    }
+                }
+                Spacer(modifier = GlanceModifier.defaultWeight())
+                WidgetIconButton(
+                    icon = if (state.favorite) R.drawable.ic_widget_favorite_active else R.drawable.ic_widget_favorite,
+                    description = LocalString(if (state.favorite) R.string.cd_unfavorite else R.string.cd_favorite),
+                    action = actionRunCallback<FavoriteWidgetAction>(),
+                    size = 32,
+                    iconSize = 18,
+                    surface = ArtControlSurface
                 )
             }
-            Spacer(GlanceModifier.defaultWeight())
+
+            Spacer(modifier = GlanceModifier.defaultWeight())
+
+            // Center: Album Art Card
+            val coverProvider = state.artwork.cover?.let { ImageProvider(it) }
+                ?: ImageProvider(R.drawable.ic_music_placeholder)
+
+            Box(
+                modifier = GlanceModifier
+                    .size(110.dp)
+                    .cornerRadius(20.dp)
+                    .background(ArtControlSurface),
+                contentAlignment = Alignment.Center
+            ) {
+                Image(
+                    provider = coverProvider,
+                    contentDescription = null,
+                    modifier = GlanceModifier.fillMaxSize().cornerRadius(20.dp),
+                    contentScale = ContentScale.Crop
+                )
+            }
+
+            Spacer(modifier = GlanceModifier.defaultWeight())
+
+            // Title & Artist
             Text(
                 text = track.title,
-                style = TextStyle(color = ArtText, fontSize = 25.sp, fontWeight = FontWeight.Bold),
-                maxLines = 2
-            )
-            Spacer(GlanceModifier.height(4.dp))
-            Text(
-                text = track.artist,
-                style = TextStyle(color = ArtSecondaryText, fontSize = 15.sp),
+                style = TextStyle(color = ArtText, fontSize = 17.sp, fontWeight = FontWeight.Bold),
                 maxLines = 1
             )
-            if (track.album.isNotBlank()) {
-                Spacer(GlanceModifier.height(2.dp))
-                Text(
-                    text = track.album,
-                    style = TextStyle(color = ArtSecondaryText, fontSize = 12.sp),
-                    maxLines = 1
+            Spacer(modifier = GlanceModifier.height(2.dp))
+            Text(
+                text = if (track.album.isNotBlank()) "${track.artist} · ${track.album}" else track.artist,
+                style = TextStyle(color = ArtSecondaryText, fontSize = 12.sp),
+                maxLines = 1
+            )
+
+            Spacer(modifier = GlanceModifier.height(8.dp))
+
+            // Progress Bar & Timestamps
+            val progress = if (state.duration > 0L) state.position.toFloat() / state.duration.toFloat() else 0f
+            Column(modifier = GlanceModifier.fillMaxWidth()) {
+                LinearProgressBar(
+                    progress = progress,
+                    height = 4,
+                    trackColor = ArtProgressTrack,
+                    progressColor = WidgetAccent
                 )
+                Spacer(modifier = GlanceModifier.height(3.dp))
+                Row(modifier = GlanceModifier.fillMaxWidth()) {
+                    Text(
+                        text = TimeUtils.formatDuration(state.position),
+                        style = TextStyle(color = ArtSecondaryText, fontSize = 10.sp)
+                    )
+                    Spacer(modifier = GlanceModifier.defaultWeight())
+                    Text(
+                        text = TimeUtils.formatDuration(state.duration),
+                        style = TextStyle(color = ArtSecondaryText, fontSize = 10.sp)
+                    )
+                }
             }
-            Spacer(GlanceModifier.defaultWeight())
+
+            Spacer(modifier = GlanceModifier.height(8.dp))
+
+            // Transport Controls Row
             Row(
                 modifier = GlanceModifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
+                // Shuffle
                 WidgetIconButton(
-                    R.drawable.ic_widget_shuffle,
-                    LocalString(R.string.cd_shuffle),
-                    actionRunCallback<ShuffleWidgetAction>(),
-                    active = state.shuffle,
-                    size = 38
+                    icon = if (state.shuffle) R.drawable.ic_widget_shuffle_active else R.drawable.ic_widget_shuffle,
+                    description = LocalString(R.string.cd_shuffle),
+                    action = actionRunCallback<ShuffleWidgetAction>(),
+                    size = 36,
+                    iconSize = 20,
+                    surface = ArtControlSurface
                 )
-                Spacer(GlanceModifier.width(10.dp))
+                Spacer(modifier = GlanceModifier.width(10.dp))
+
+                // Previous
                 WidgetIconButton(
-                    R.drawable.ic_widget_previous,
-                    LocalString(R.string.cd_skip_prev),
-                    actionRunCallback<PreviousActionCallback>(),
-                    size = 42
+                    icon = R.drawable.ic_widget_previous,
+                    description = LocalString(R.string.cd_skip_prev),
+                    action = actionRunCallback<PreviousActionCallback>(),
+                    size = 40,
+                    iconSize = 22,
+                    surface = ArtControlSurface
                 )
-                Spacer(GlanceModifier.width(12.dp))
+                Spacer(modifier = GlanceModifier.width(10.dp))
+
+                // Play/Pause (Large Prominent Button)
+                Box(
+                    modifier = GlanceModifier
+                        .size(52.dp)
+                        .cornerRadius(26.dp)
+                        .background(ArtText)
+                        .clickable(actionRunCallback<PlayPauseActionCallback>()),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Image(
+                        provider = ImageProvider(
+                            if (state.isPlaying) R.drawable.ic_widget_pause_dark else R.drawable.ic_widget_play_dark
+                        ),
+                        contentDescription = LocalString(if (state.isPlaying) R.string.cd_pause else R.string.cd_play),
+                        modifier = GlanceModifier.size(28.dp)
+                    )
+                }
+                Spacer(modifier = GlanceModifier.width(10.dp))
+
+                // Next
                 WidgetIconButton(
-                    if (state.isPlaying) R.drawable.ic_widget_pause_ember else R.drawable.ic_widget_play_ember,
-                    LocalString(if (state.isPlaying) R.string.cd_pause else R.string.cd_play),
-                    actionRunCallback<PlayPauseActionCallback>(),
-                    active = true,
-                    size = 54
+                    icon = R.drawable.ic_widget_next,
+                    description = LocalString(R.string.cd_skip_next),
+                    action = actionRunCallback<NextActionCallback>(),
+                    size = 40,
+                    iconSize = 22,
+                    surface = ArtControlSurface
                 )
-                Spacer(GlanceModifier.width(12.dp))
+                Spacer(modifier = GlanceModifier.width(10.dp))
+
+                // Repeat
+                val repeatIcon = when (state.repeatMode) {
+                    Player.REPEAT_MODE_ONE -> R.drawable.ic_widget_repeat_one_active
+                    Player.REPEAT_MODE_ALL -> R.drawable.ic_widget_repeat_active
+                    else -> R.drawable.ic_widget_repeat
+                }
                 WidgetIconButton(
-                    R.drawable.ic_widget_next,
-                    LocalString(R.string.cd_skip_next),
-                    actionRunCallback<NextActionCallback>(),
-                    size = 42
-                )
-                Spacer(GlanceModifier.width(10.dp))
-                WidgetIconButton(
-                    if (state.repeatMode == Player.REPEAT_MODE_ONE) R.drawable.ic_widget_repeat_one else R.drawable.ic_widget_repeat,
-                    LocalString(if (state.repeatMode == Player.REPEAT_MODE_ONE) R.string.cd_repeat_one else R.string.cd_repeat),
-                    actionRunCallback<RepeatWidgetAction>(),
-                    active = state.repeatMode != Player.REPEAT_MODE_OFF,
-                    size = 38
+                    icon = repeatIcon,
+                    description = LocalString(
+                        if (state.repeatMode == Player.REPEAT_MODE_ONE) R.string.cd_repeat_one else R.string.cd_repeat
+                    ),
+                    action = actionRunCallback<RepeatWidgetAction>(),
+                    size = 36,
+                    iconSize = 20,
+                    surface = ArtControlSurface
                 )
             }
         }

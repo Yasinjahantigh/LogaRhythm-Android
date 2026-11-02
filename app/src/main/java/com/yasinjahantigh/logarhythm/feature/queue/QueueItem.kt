@@ -113,21 +113,23 @@ fun QueueItem(
                 .padding(horizontal = 8.dp, vertical = 1.dp)
                 .clip(RoundedCornerShape(22.dp)),
             backgroundContent = {
-                val active = dismissState.targetValue != SwipeToDismissBoxValue.Settled
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(if (active) MaterialTheme.colorScheme.errorContainer else Color.Transparent)
-                        .padding(horizontal = 24.dp),
-                    contentAlignment = if (dismissState.dismissDirection == SwipeToDismissBoxValue.StartToEnd) {
-                        Alignment.CenterStart
-                    } else Alignment.CenterEnd
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Delete,
-                        contentDescription = stringResource(R.string.cd_remove_from_queue),
-                        tint = MaterialTheme.colorScheme.onErrorContainer
-                    )
+                val direction = dismissState.dismissDirection
+                if (direction != SwipeToDismissBoxValue.Settled) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(MaterialTheme.colorScheme.errorContainer)
+                            .padding(horizontal = 24.dp),
+                        contentAlignment = if (direction == SwipeToDismissBoxValue.StartToEnd) {
+                            Alignment.CenterStart
+                        } else Alignment.CenterEnd
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Delete,
+                            contentDescription = stringResource(R.string.cd_remove_from_queue),
+                            tint = MaterialTheme.colorScheme.onErrorContainer
+                        )
+                    }
                 }
             }
         ) {
@@ -181,7 +183,7 @@ private fun QueueItemRow(
                 shadowElevation = if (isDragging) 12.dp.toPx() else 0f
             }
             .alpha(if (isPlayed) 0.55f else 1f)
-            .background(if (isCurrent) scheme.primaryContainer.copy(alpha = 0.55f) else scheme.surface)
+            .background(if (isCurrent) scheme.primaryContainer else scheme.surface)
             .clickable(onClick = onClick)
             .padding(start = 8.dp, top = 6.dp, bottom = 6.dp, end = if (draggable) 0.dp else 12.dp)
             .testTag("queue_item_${track.id}"),

@@ -6,19 +6,28 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -50,6 +59,8 @@ fun LibraryToolsScreen(
     onNavigateBack: () -> Unit,
     modifier: Modifier = Modifier,
     onEditTrack: (String) -> Unit = {},
+    onNavigateToSettings: () -> Unit = {},
+    initialTab: Int = 0,
     viewModel: LibraryToolsViewModel = hiltViewModel(),
     playlistViewModel: PlaylistViewModel = hiltViewModel()
 ) {
@@ -61,6 +72,8 @@ fun LibraryToolsScreen(
     val playlists by playlistViewModel.playlists.collectAsStateWithLifecycle()
     val suggestions by viewModel.suggestions.collectAsStateWithLifecycle()
     val findingFixes by viewModel.findingFixes.collectAsStateWithLifecycle()
+    val aiSuggestions by viewModel.aiSuggestions.collectAsStateWithLifecycle()
+    val findingAiFixes by viewModel.findingAiFixes.collectAsStateWithLifecycle()
     val savingFix by viewModel.savingFix.collectAsStateWithLifecycle()
     val fixFailed by viewModel.fixFailed.collectAsStateWithLifecycle()
     val mediaStoreConsent = com.yasinjahantigh.logarhythm.core.utils.rememberMediaStoreConsent()
@@ -69,7 +82,7 @@ fun LibraryToolsScreen(
         if (fixFailed) android.widget.Toast.makeText(context, R.string.tools_fix_failed, android.widget.Toast.LENGTH_SHORT).show()
     }
 
-    var tab by rememberSaveable { mutableIntStateOf(0) }
+    var tab by rememberSaveable { mutableIntStateOf(initialTab) }
     var menuTrack by remember { mutableStateOf<Track?>(null) }
     var showAddToPlaylist by remember { mutableStateOf(false) }
 
@@ -133,7 +146,20 @@ fun LibraryToolsScreen(
             FilterChip(
                 selected = tab == 3,
                 onClick = { tab = 3; viewModel.suggestFixes() },
-                label = { Text(stringResource(R.string.tools_suggest_fixes) + (suggestions?.let { " (${it.size})" } ?: "")) }
+                label = { Text(stringResource(R.string.tools_regex_cleaner) + (suggestions?.let { " (${it.size})" } ?: "")) }
+            )
+            FilterChip(
+                selected = tab == 4,
+                onClick = {
+                    tab = 4
+                    if (viewModel.isAiConfigured && aiSuggestions == null) {
+                        viewModel.suggestAiFixes()
+                    }
+                },
+                leadingIcon = {
+                    Icon(Icons.Filled.AutoAwesome, contentDescription = null, modifier = Modifier.size(16.dp))
+                },
+                label = { Text(stringResource(R.string.tools_ai_cleaner) + (aiSuggestions?.let { " (${it.size})" } ?: "")) }
             )
         }
 
@@ -190,31 +216,7 @@ fun LibraryToolsScreen(
                         )
                     }
                 }
-            } else if (tab == 3) {
-                if (findingFixes) item { EmptyNote(stringResource(R.string.tools_finding_fixes)) }
-                val list = suggestions
-                if (!findingFixes && list != null && list.isEmpty()) item { EmptyNote(stringResource(R.string.tools_no_fixes)) }
-                list?.let { items(it, key = { s -> "fix_" + s.track.id }) { suggestion ->
-                    Card(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp)) {
-                        Column(Modifier.padding(12.dp)) {
-                            Text(suggestion.track.title, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            FixDiff(stringResource(R.string.tag_editor_field_title), suggestion.track.title, suggestion.tags.title)
-                            FixDiff(stringResource(R.string.tag_editor_field_artist), suggestion.track.artist, suggestion.tags.artist)
-                            FixDiff(stringResource(R.string.tag_editor_field_album), suggestion.track.album, suggestion.tags.album)
-                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                                TextButton(
-                                    enabled = savingFix == null,
-                                    onClick = {
-                                        mediaStoreConsent.write(suggestion.track, onApproved = {
-                                            viewModel.applySuggestion(suggestion.track.id)
-                                        })
-                                    }
-                                ) { Text(stringResource(R.string.btn_apply)) }
-                            }
-                        }
-                    }
-                } }
-            } else {
+            } else if (tab == 2) {
                 val hidden = hiddenTracks
                 if (hidden != null && hidden.isEmpty()) {
                     item { EmptyNote(stringResource(R.string.tools_no_hidden_tracks)) }
@@ -254,6 +256,176 @@ fun LibraryToolsScreen(
                             }
                         }
                     }
+                }
+            } else if (tab == 3) {
+                if (findingFixes) item { EmptyNote(stringResource(R.string.tools_finding_fixes)) }
+                val list = suggestions
+                if (!findingFixes && list != null && list.isEmpty()) item { EmptyNote(stringResource(R.string.tools_no_fixes)) }
+                if (!findingFixes && list != null && list.isNotEmpty()) {
+                    item(key = "regex_apply_all_header") {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "${list.size} suggestions",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Button(
+                                onClick = {
+                                    val tracksToConsent = list.map { it.track }
+                                    mediaStoreConsent.deleteTracks(tracksToConsent, onApproved = {
+                                        viewModel.applyAllSuggestions(isAi = false) { count ->
+                                            android.widget.Toast.makeText(context, "$count updated", android.widget.Toast.LENGTH_SHORT).show()
+                                        }
+                                    })
+                                }
+                            ) {
+                                Text(stringResource(R.string.tools_apply_all))
+                            }
+                        }
+                    }
+                }
+                list?.let { items(it, key = { s -> "fix_" + s.track.id }) { suggestion ->
+                    Card(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp)) {
+                        Column(Modifier.padding(12.dp)) {
+                            Text(suggestion.track.title, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            FixDiff(stringResource(R.string.tag_editor_field_title), suggestion.track.title, suggestion.tags.title)
+                            FixDiff(stringResource(R.string.tag_editor_field_artist), suggestion.track.artist, suggestion.tags.artist)
+                            FixDiff(stringResource(R.string.tag_editor_field_album), suggestion.track.album, suggestion.tags.album)
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                                TextButton(
+                                    enabled = savingFix == null,
+                                    onClick = {
+                                        mediaStoreConsent.write(suggestion.track, onApproved = {
+                                            viewModel.applySuggestion(suggestion.track.id, isAi = false)
+                                        })
+                                    }
+                                ) { Text(stringResource(R.string.btn_apply)) }
+                            }
+                        }
+                    }
+                } }
+            } else if (tab == 4) {
+                if (!viewModel.isAiConfigured) {
+                    item {
+                        Card(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
+                            Column(modifier = Modifier.padding(18.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                                Icon(Icons.Filled.AutoAwesome, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(40.dp))
+                                Spacer(modifier = Modifier.height(10.dp))
+                                Text(
+                                    text = stringResource(R.string.tools_ai_not_configured_title),
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Text(
+                                    text = stringResource(R.string.tools_ai_not_configured_desc),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                                )
+                                Spacer(modifier = Modifier.height(16.dp))
+                                Button(onClick = onNavigateToSettings) {
+                                    Icon(Icons.Filled.Settings, contentDescription = null, modifier = Modifier.size(18.dp))
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(stringResource(R.string.tools_ai_configure_btn))
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    item {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = stringResource(R.string.tools_ai_cleaner),
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Button(
+                                onClick = { viewModel.suggestAiFixes() },
+                                enabled = !findingAiFixes
+                            ) {
+                                Icon(Icons.Filled.AutoAwesome, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(stringResource(R.string.tools_ai_scan_btn))
+                            }
+                        }
+                    }
+                    if (findingAiFixes) {
+                        item {
+                            Column(modifier = Modifier.fillMaxWidth().padding(32.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                                CircularProgressIndicator()
+                                Spacer(modifier = Modifier.height(12.dp))
+                                Text(
+                                    text = stringResource(R.string.tools_ai_scanning),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
+                    val aiList = aiSuggestions
+                    if (!findingAiFixes && aiList != null && aiList.isEmpty()) {
+                        item { EmptyNote(stringResource(R.string.tools_no_fixes)) }
+                    }
+                    if (!findingAiFixes && aiList != null && aiList.isNotEmpty()) {
+                        item(key = "ai_apply_all_header") {
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "${aiList.size} suggestions",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Button(
+                                    onClick = {
+                                        val tracksToConsent = aiList.map { it.track }
+                                        mediaStoreConsent.deleteTracks(tracksToConsent, onApproved = {
+                                            viewModel.applyAllSuggestions(isAi = true) { count ->
+                                                android.widget.Toast.makeText(context, "$count updated", android.widget.Toast.LENGTH_SHORT).show()
+                                            }
+                                        })
+                                    }
+                                ) {
+                                    Text(stringResource(R.string.tools_apply_all))
+                                }
+                            }
+                        }
+                    }
+                    aiList?.let { items(it, key = { s -> "ai_fix_" + s.track.id }) { suggestion ->
+                        Card(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp)) {
+                            Column(Modifier.padding(12.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Filled.AutoAwesome, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(suggestion.track.title, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                }
+                                FixDiff(stringResource(R.string.tag_editor_field_title), suggestion.track.title, suggestion.tags.title)
+                                FixDiff(stringResource(R.string.tag_editor_field_artist), suggestion.track.artist, suggestion.tags.artist)
+                                FixDiff(stringResource(R.string.tag_editor_field_album), suggestion.track.album, suggestion.tags.album)
+                                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                                    TextButton(
+                                        enabled = savingFix == null,
+                                        onClick = {
+                                            mediaStoreConsent.write(suggestion.track, onApproved = {
+                                                viewModel.applySuggestion(suggestion.track.id, isAi = true)
+                                            })
+                                        }
+                                    ) { Text(stringResource(R.string.btn_apply)) }
+                                }
+                            }
+                        }
+                    } }
                 }
             }
         }

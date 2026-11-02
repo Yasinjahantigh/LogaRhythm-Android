@@ -132,7 +132,8 @@ jobs:
         with:
           tag_name: ${{ steps.versioning.outputs.TAG_NAME }}
           files: LogaRhythm-*.apk
-          generate_release_notes: true
+          body_path: docs/telegram/${{ steps.versioning.outputs.TAG_NAME }}.md
+          generate_release_notes: false
 
       - name: Post to Telegram
         env:

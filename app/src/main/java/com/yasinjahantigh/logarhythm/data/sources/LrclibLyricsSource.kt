@@ -30,29 +30,80 @@ class LrclibLyricsSource @Inject constructor(
         val title = LyricsTextNormalizer.queryTitle(query.title)
         if (title.isBlank()) return@withContext LyricsSearchResult(status = LyricsSourceStatus.EMPTY)
         val artist = LyricsTextNormalizer.queryArtist(query.artist)
-        val searchTerm = listOf(title, artist).filter { it.isNotBlank() }.joinToString(" ")
-        val response = http.get(
-            "https://lrclib.net/api/search?q=${encode(searchTerm)}",
-            mapOf("Accept" to "application/json")
-        )
+
+        val candidates = mutableListOf<LyricsCandidate>()
+
+        // 1. Try exact match with /api/get if artist is known
+        if (artist.isNotBlank()) {
+            val getUrl = buildString {
+                append("https://lrclib.net/api/get?track_name=").append(encode(title))
+                append("&artist_name=").append(encode(artist))
+                if (query.album.isNotBlank()) append("&album_name=").append(encode(query.album))
+                if (query.durationMs > 0L) append("&duration=").append(query.durationMs / 1000)
+            }
+            val getResp = http.get(getUrl, mapOf("Accept" to "application/json"))
+            if (getResp.ok && !getResp.body.isNullOrBlank()) {
+                val item = runCatching { JSONObject(getResp.body) }.getOrNull()
+                if (item != null) {
+                    val lyrics = parseLyricsFromJson(item)
+                    if (lyrics != null && !lyrics.isEmpty) {
+                        val id = LyricsResponseFields.text(item, "id").ifBlank { "0" }
+                        val trackName = LyricsResponseFields.text(item, "trackName").ifBlank { title }
+                        val artistName = LyricsResponseFields.text(item, "artistName").ifBlank { artist }
+                        val albumName = LyricsResponseFields.text(item, "albumName")
+                        val durationMs = (item.optDouble("duration", 0.0) * 1000).toLong()
+                        candidates.add(
+                            LyricsCandidate(
+                                id = "lrclib_$id",
+                                trackName = trackName,
+                                artistName = artistName,
+                                albumName = albumName,
+                                durationMs = durationMs,
+                                isSynced = lyrics.isSynced,
+                                sourceName = displayName,
+                                providerId = this@LrclibLyricsSource.id,
+                                lyrics = lyrics
+                            )
+                        )
+                        // If exact match gave synced lyrics, return it directly!
+                        if (lyrics.isSynced) {
+                            return@withContext LyricsSearchResult(candidates = candidates, status = LyricsSourceStatus.OK)
+                        }
+                    }
+                }
+            }
+        }
+
+        // 2. Search by track_name & artist_name or general query
+        val searchUrl = if (artist.isNotBlank()) {
+            "https://lrclib.net/api/search?track_name=${encode(title)}&artist_name=${encode(artist)}"
+        } else {
+            "https://lrclib.net/api/search?q=${encode(title)}"
+        }
+        var response = http.get(searchUrl, mapOf("Accept" to "application/json"))
+        if (!response.ok && artist.isNotBlank()) {
+            val searchTerm = listOf(title, artist).filter { it.isNotBlank() }.joinToString(" ")
+            response = http.get("https://lrclib.net/api/search?q=${encode(searchTerm)}", mapOf("Accept" to "application/json"))
+        }
+
         when {
-            response.blocked -> return@withContext LyricsSearchResult(
+            response.blocked && candidates.isEmpty() -> return@withContext LyricsSearchResult(
                 status = LyricsSourceStatus.BLOCKED,
                 detail = response.error
             )
-            response.timedOut -> return@withContext LyricsSearchResult(
+            response.timedOut && candidates.isEmpty() -> return@withContext LyricsSearchResult(
                 status = LyricsSourceStatus.TIMEOUT,
                 detail = response.error
             )
-            !response.ok -> return@withContext LyricsSearchResult(
+            !response.ok && candidates.isEmpty() -> return@withContext LyricsSearchResult(
                 status = if (response.code == 404) LyricsSourceStatus.EMPTY else LyricsSourceStatus.ERROR,
                 detail = response.error
             )
         }
 
-        try {
-            val array = JSONArray(response.body)
-            val candidates = buildList {
+        if (response.ok && !response.body.isNullOrBlank()) {
+            try {
+                val array = JSONArray(response.body)
                 for (i in 0 until array.length().coerceAtMost(10)) {
                     val item = array.optJSONObject(i) ?: continue
                     val lyrics = parseLyricsFromJson(item) ?: continue
@@ -61,7 +112,7 @@ class LrclibLyricsSource @Inject constructor(
                     val artistName = LyricsResponseFields.text(item, "artistName").ifBlank { artist }
                     val albumName = LyricsResponseFields.text(item, "albumName")
                     val durationMs = (item.optDouble("duration", 0.0) * 1000).toLong()
-                    add(
+                    candidates.add(
                         LyricsCandidate(
                             id = "lrclib_$id",
                             trackName = trackName,
@@ -75,14 +126,16 @@ class LrclibLyricsSource @Inject constructor(
                         )
                     )
                 }
+            } catch (_: Exception) {
             }
-            LyricsSearchResult(
-                candidates = candidates,
-                status = if (candidates.isEmpty()) LyricsSourceStatus.EMPTY else LyricsSourceStatus.OK
-            )
-        } catch (error: Exception) {
-            LyricsSearchResult(status = LyricsSourceStatus.ERROR, detail = error.message)
         }
+
+        // Sort so that synced candidates always appear first
+        val sortedCandidates = candidates.sortedByDescending { if (it.isSynced) 1 else 0 }
+        LyricsSearchResult(
+            candidates = sortedCandidates,
+            status = if (sortedCandidates.isEmpty()) LyricsSourceStatus.EMPTY else LyricsSourceStatus.OK
+        )
     }
 
     private fun parseLyricsFromJson(json: JSONObject): Lyrics? {
