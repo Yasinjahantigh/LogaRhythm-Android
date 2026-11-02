@@ -42,6 +42,8 @@ class UpdateManager @Inject constructor(
     private companion object {
         const val API_URL =
             "https://api.github.com/repos/Yasinjahantigh/LogaRhythm-Android/releases/latest"
+        const val ALL_RELEASES_URL =
+            "https://api.github.com/repos/Yasinjahantigh/LogaRhythm-Android/releases?per_page=100"
         const val PREFS = "update_prefs"
         const val KEY_SKIPPED_VERSION = "skipped_version"
         const val KEY_LAST_AUTO_CHECK = "last_auto_check"
@@ -203,48 +205,82 @@ class UpdateManager @Inject constructor(
     }
 
     private fun fetchLatestRelease(): AppRelease? {
-        val request = Request.Builder()
-            .url(API_URL)
+        val allReleasesRequest = Request.Builder()
+            .url(ALL_RELEASES_URL)
             .header("Accept", "application/vnd.github+json")
             .build()
-        client.newCall(request).execute().use { response ->
-            if (!response.isSuccessful) return null
-            val body = response.body?.string() ?: return null
-            val json = JSONObject(body)
-            val tag = json.optString("tag_name")
-            val match = VERSION_TAG.matchEntire(tag.trim()) ?: return null
-            val (major, minor, patch) = match.destructured
-            val versionCode = major.toInt() * 10000 + minor.toInt() * 100 + patch.toInt()
-            val versionName = tag.trim().removePrefix("v")
 
-            val assets = json.optJSONArray("assets") ?: JSONArray()
-            val apks = ArrayList<ApkAsset>()
-            var downloads = 0L
-            for (i in 0 until assets.length()) {
-                val asset = assets.optJSONObject(i) ?: continue
-                val name = asset.optString("name")
-                val url = asset.optString("browser_download_url")
-                if (!name.endsWith(".apk", ignoreCase = true) || url.isBlank()) continue
-                downloads += asset.optLong("download_count")
-                apks += ApkAsset(name, url, asset.optLong("size"))
+        val pair = runCatching {
+            client.newCall(allReleasesRequest).execute().use { response ->
+                if (!response.isSuccessful) null
+                else {
+                    val body = response.body?.string() ?: return null
+                    val array = JSONArray(body)
+                    if (array.length() == 0) null
+                    else {
+                        var totalDownloads = 0L
+                        for (i in 0 until array.length()) {
+                            val rel = array.optJSONObject(i) ?: continue
+                            val relAssets = rel.optJSONArray("assets") ?: continue
+                            for (j in 0 until relAssets.length()) {
+                                totalDownloads += relAssets.optJSONObject(j)?.optLong("download_count") ?: 0L
+                            }
+                        }
+                        Pair(array.optJSONObject(0), totalDownloads)
+                    }
+                }
             }
-            if (apks.isEmpty()) return null
+        }.getOrNull()
 
-            val abi = deviceAbi()
-            val apk = apks.firstOrNull { it.name.endsWith("-$abi.apk") }
-                ?: apks.maxByOrNull { it.size }
-                ?: return null
-            return AppRelease(
-                versionName = versionName,
-                versionCode = versionCode,
-                notes = json.optString("body").trim(),
-                apkUrl = apk.url,
-                apkName = apk.name,
-                apkSizeBytes = apk.size,
-                abi = abi,
-                downloads = downloads
-            )
+        val (json, downloads) = pair ?: run {
+            val singleRequest = Request.Builder()
+                .url(API_URL)
+                .header("Accept", "application/vnd.github+json")
+                .build()
+            client.newCall(singleRequest).execute().use { response ->
+                if (!response.isSuccessful) return null
+                val body = response.body?.string() ?: return null
+                val singleObj = JSONObject(body)
+                var singleDownloads = 0L
+                val singleAssets = singleObj.optJSONArray("assets") ?: JSONArray()
+                for (i in 0 until singleAssets.length()) {
+                    singleDownloads += singleAssets.optJSONObject(i)?.optLong("download_count") ?: 0L
+                }
+                Pair(singleObj, singleDownloads)
+            }
+        } ?: return null
+
+        val tag = json.optString("tag_name")
+        val match = VERSION_TAG.matchEntire(tag.trim()) ?: return null
+        val (major, minor, patch) = match.destructured
+        val versionCode = major.toInt() * 10000 + minor.toInt() * 100 + patch.toInt()
+        val versionName = tag.trim().removePrefix("v")
+
+        val assets = json.optJSONArray("assets") ?: JSONArray()
+        val apks = ArrayList<ApkAsset>()
+        for (i in 0 until assets.length()) {
+            val asset = assets.optJSONObject(i) ?: continue
+            val name = asset.optString("name")
+            val url = asset.optString("browser_download_url")
+            if (!name.endsWith(".apk", ignoreCase = true) || url.isBlank()) continue
+            apks += ApkAsset(name, url, asset.optLong("size"))
         }
+        if (apks.isEmpty()) return null
+
+        val abi = deviceAbi()
+        val apk = apks.firstOrNull { it.name.endsWith("-$abi.apk") }
+            ?: apks.maxByOrNull { it.size }
+            ?: return null
+        return AppRelease(
+            versionName = versionName,
+            versionCode = versionCode,
+            notes = json.optString("body").trim(),
+            apkUrl = apk.url,
+            apkName = apk.name,
+            apkSizeBytes = apk.size,
+            abi = abi,
+            downloads = downloads
+        )
     }
 
     private fun deviceAbi(): String {
