@@ -77,22 +77,39 @@ class LyricsRepositoryImpl @Inject constructor(
         val cachedLyrics = cached?.takeIf { it.content.isNotBlank() }?.let {
             LrcParser.parse(it.content).copy(source = it.source).takeIf { parsed -> !parsed.isEmpty }
         }
-        if (cachedLyrics != null && isFresh(cached)) return@withContext cachedLyrics
+        val isManual = cached != null && (
+            cached.source.startsWith("manual") ||
+            cached.source == "user_manual" ||
+            cached.source == "user_clipboard" ||
+            cached.source == "imported_file"
+        )
+        // Manual/imported lyrics or already synced fresh cache wins immediately
+        if (cachedLyrics != null && (isManual || (cachedLyrics.isSynced && isFresh(cached)))) {
+            return@withContext cachedLyrics
+        }
 
-        // Companion .lrc or embedded tags still beat a network lookup.
+        // Companion .lrc file or embedded synced lyrics also win immediately
         val local = localFileLyricsSource.getLyrics(track)
-        if (local != null && !local.isEmpty) {
-            cacheLyrics(track.id, local, local.source ?: "local_file")
+        if (local != null && !local.isEmpty && local.isSynced) {
+            cacheLyrics(track.id, local, local.source ?: "companion")
             return@withContext local
         }
 
+        // If cached/local lyrics are plain/static, prioritize searching online for SYNCED lyrics!
         val online = searchBest(track)
         if (online != null) {
-            cacheLyrics(track.id, online.lyrics, online.providerId)
-            return@withContext online.lyrics.copy(source = online.providerId)
+            if (online.lyrics.isSynced || (cachedLyrics == null && local == null)) {
+                cacheLyrics(track.id, online.lyrics, online.providerId)
+                return@withContext online.lyrics.copy(source = online.providerId)
+            }
         }
 
-        // A stale cached copy is still better than an empty screen.
+        // Fall back to local embedded plain lyrics or stale cached lyrics
+        if (local != null && !local.isEmpty) {
+            cacheLyrics(track.id, local, local.source ?: "embedded")
+            return@withContext local
+        }
+
         cachedLyrics
     }
 

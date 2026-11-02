@@ -47,8 +47,14 @@ class InstallReporter @Inject constructor(
 
     val isConfigured: Boolean = BuildConfig.INSTALL_ENDPOINT.isNotBlank()
 
+    // Robolectric unit tests build and run the real Application; without this guard every CI run
+    // would report a few dozen fake installs.
+    private val isTestRuntime: Boolean =
+        Build.MODEL.orEmpty().contains("robolectric", ignoreCase = true) ||
+            Build.FINGERPRINT.orEmpty().contains("robolectric", ignoreCase = true)
+
     fun reportOnce() {
-        if (!isConfigured) return
+        if (!isConfigured || isTestRuntime) return
         if (prefs.getBoolean(KEY_REPORTED, false)) return
         val installId = prefs.getString(KEY_INSTALL_ID, null) ?: UUID.randomUUID().toString().also {
             prefs.edit().putString(KEY_INSTALL_ID, it).apply()

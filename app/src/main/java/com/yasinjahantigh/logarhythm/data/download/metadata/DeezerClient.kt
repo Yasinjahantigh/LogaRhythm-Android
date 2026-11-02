@@ -26,6 +26,34 @@ class DeezerClient @Inject constructor(
 
     data class ArtworkCandidate(val url: String, val title: String, val artist: String, val album: String?)
 
+    suspend fun searchDownload(term: String, limit: Int = 25): List<com.yasinjahantigh.logarhythm.domain.model.DownloadSearchResult> =
+        withContext(Dispatchers.IO) {
+            val query = term.trim()
+            if (query.isBlank()) return@withContext emptyList()
+            val url = "https://api.deezer.com/search?q=${URLEncoder.encode(query, "UTF-8")}&limit=${limit.coerceIn(1, 50)}"
+            val data = HttpJson.get(client, url)?.optJSONArray("data") ?: return@withContext emptyList()
+            (0 until data.length()).mapNotNull { index ->
+                val item = data.optJSONObject(index) ?: return@mapNotNull null
+                val id = item.optLong("id", 0L).takeIf { it > 0 }?.toString() ?: return@mapNotNull null
+                val title = item.optString("title").takeIf { it.isNotBlank() } ?: return@mapNotNull null
+                val artist = item.optJSONObject("artist")?.optString("name").orEmpty()
+                val album = item.optJSONObject("album")
+                val art = listOf("cover_xl", "cover_big", "cover_medium")
+                    .map { album?.optString(it).orEmpty() }.firstOrNull { it.startsWith("http") }
+                val durationMs = item.optLong("duration", 0L) * 1000L
+                val link = item.optString("link").ifBlank { "https://www.deezer.com/track/$id" }
+                com.yasinjahantigh.logarhythm.domain.model.DownloadSearchResult(
+                    id = id,
+                    title = title,
+                    artist = artist,
+                    source = com.yasinjahantigh.logarhythm.domain.model.DownloadSource.DEEZER,
+                    url = link,
+                    durationMs = durationMs,
+                    thumbnailUrl = art
+                )
+            }
+        }
+
     suspend fun searchCandidates(title: String, artist: String): List<ArtworkCandidate> =
         withContext(Dispatchers.IO) {
             val query = listOf(title, artist).filter { it.isNotBlank() }.joinToString(" ")

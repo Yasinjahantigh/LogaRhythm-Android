@@ -198,6 +198,10 @@ fun MainScreen(
                     onNavigateToTagEditor = { trackId ->
                         playerViewModel.collapse()
                         navController.navigate(NavDestination.createTagEditorRoute(trackId))
+                    },
+                    onNavigateToArtist = { artistName ->
+                        playerViewModel.collapse()
+                        navController.navigate(NavDestination.createArtistDetailRoute(artistName))
                     }
                 )
             }

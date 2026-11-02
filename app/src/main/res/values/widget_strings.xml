@@ -11,4 +11,8 @@
     <string name="widget_large_description">Full playback controls and your up-next queue</string>
     <string name="widget_player_label">LogaRhythm Player</string>
     <string name="widget_player_description">Large artwork with every playback control in the app theme</string>
+    <string name="widget_queue_label">LogaRhythm Playlist</string>
+    <string name="widget_queue_description">Scrollable song list with playback controls</string>
+    <string name="widget_no_songs">No songs in library</string>
+    <string name="widget_select_to_play">Select a song to play</string>
 </resources>

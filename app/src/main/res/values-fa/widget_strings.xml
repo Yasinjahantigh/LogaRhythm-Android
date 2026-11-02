@@ -11,4 +11,8 @@
     <string name="widget_large_description">کنترل کامل پخش و نمایش آهنگ‌های بعدی</string>
     <string name="widget_player_label">پخش‌کننده LogaRhythm</string>
     <string name="widget_player_description">کاور بزرگ و همه کنترل‌های پخش با تم اپ</string>
+    <string name="widget_queue_label">لیست آهنگ‌های LogaRhythm</string>
+    <string name="widget_queue_description">لیست آهنگ‌ها با قابلیت اسکرول و کنترل‌های کامل پخش</string>
+    <string name="widget_no_songs">آهنگی در کتابخانه وجود ندارد</string>
+    <string name="widget_select_to_play">آهنگی را برای پخش انتخاب کنید</string>
 </resources>

@@ -9,6 +9,7 @@ import androidx.glance.appwidget.action.ActionCallback
 import com.yasinjahantigh.logarhythm.playback.PlaybackService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 
 internal fun startPlaybackAction(context: Context, action: String) {
@@ -98,6 +99,37 @@ class PlayQueueWidgetAction : ActionCallback {
     companion object {
         val indexKey = ActionParameters.Key<Int>("queue_index")
         val trackIdKey = ActionParameters.Key<String>("queue_track_id")
+    }
+}
+
+class PlayTrackWidgetAction : ActionCallback {
+    override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
+        val trackId = parameters[trackIdKey] ?: return
+        withContext(Dispatchers.Main) {
+            val entryPoint = MusicWidgetActions.entryPoint(context)
+            val controller = entryPoint.playerController()
+            val sortedTracks = MusicWidgetUpdater.currentSortedTracks(context)
+            val index = sortedTracks.indexOfFirst { it.id == trackId }
+            if (index >= 0) {
+                controller.play(sortedTracks, index)
+            } else {
+                val queue = controller.queue.value
+                val qIndex = queue.indexOfFirst { it.id == trackId }
+                if (qIndex >= 0) {
+                    controller.playQueueItem(qIndex)
+                } else {
+                    val track = entryPoint.trackRepository().getTrackById(trackId).first()
+                    if (track != null) {
+                        controller.play(listOf(track), 0)
+                    }
+                }
+            }
+        }
+        refreshAfterAction(context)
+    }
+
+    companion object {
+        val trackIdKey = ActionParameters.Key<String>("track_id")
     }
 }
 

@@ -66,6 +66,20 @@ class FolderDetailViewModel @Inject constructor(
         }
     }
 
+    fun deleteTrack(track: Track, onDone: (Boolean) -> Unit = {}) {
+        viewModelScope.launch {
+            if (currentTrack.value?.id == track.id) {
+                playerController.next()
+            }
+            val deleted = try {
+                trackRepository.deleteTrack(track)
+            } catch (_: Exception) {
+                false
+            }
+            onDone(deleted)
+        }
+    }
+
     fun excludeFolder() {
         viewModelScope.launch {
             trackRepository.excludeFolder(folderName)

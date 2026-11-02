@@ -10,9 +10,12 @@ import androidx.glance.appwidget.GlanceAppWidget
 import androidx.glance.appwidget.GlanceAppWidgetManager
 import androidx.glance.appwidget.state.updateAppWidgetState
 import androidx.datastore.preferences.core.longPreferencesKey
+import com.yasinjahantigh.logarhythm.data.datastore.PreferencesManager
 import com.yasinjahantigh.logarhythm.data.room.MusicDao
 import com.yasinjahantigh.logarhythm.domain.model.Track
 import com.yasinjahantigh.logarhythm.domain.repository.PlaylistRepository
+import com.yasinjahantigh.logarhythm.domain.repository.TrackRepository
+import com.yasinjahantigh.logarhythm.feature.library.SortField
 import com.yasinjahantigh.logarhythm.playback.PlaybackService
 import com.yasinjahantigh.logarhythm.playback.PlayerController
 import dagger.hilt.EntryPoint
@@ -24,6 +27,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import java.util.concurrent.atomic.AtomicBoolean
@@ -34,6 +38,8 @@ interface MusicWidgetEntryPoint {
     fun playerController(): PlayerController
     fun playlistRepository(): PlaylistRepository
     fun musicDao(): MusicDao
+    fun trackRepository(): TrackRepository
+    fun preferencesManager(): PreferencesManager
 }
 
 internal data class MusicWidgetArtwork(
@@ -52,7 +58,8 @@ internal data class MusicWidgetSnapshot(
     val repeatMode: Int,
     val favorite: Boolean,
     val upcoming: List<IndexedValue<Track>>,
-    val artwork: MusicWidgetArtwork
+    val artwork: MusicWidgetArtwork,
+    val sortedTracks: List<Track> = emptyList()
 )
 
 /**
@@ -70,15 +77,23 @@ object MusicWidgetUpdater {
 
     @Volatile
     private var snapshot: MusicWidgetSnapshot? = null
+    @Volatile
+    private var cachedTracks: List<Track> = emptyList()
+    @Volatile
+    private var cachedSortedTracks: List<Track> = emptyList()
+    private var lastSortField: String? = null
+    private var lastSortDirection: String? = null
     private var favoriteTrackId: String? = null
     private var favoriteValue: Boolean = false
     private val revisionKey = longPreferencesKey("music_widget_revision")
 
-    private val allWidgets: List<Pair<Class<out BroadcastReceiver>, GlanceAppWidget>> = listOf(        MusicWidgetSmallReceiver::class.java to MusicWidgetSmall(),
+    private val allWidgets: List<Pair<Class<out BroadcastReceiver>, GlanceAppWidget>> = listOf(
+        MusicWidgetSmallReceiver::class.java to MusicWidgetSmall(),
         MusicWidgetStripReceiver::class.java to MusicWidgetStrip(),
         MusicWidgetMediumReceiver::class.java to MusicWidgetMedium(),
         MusicWidgetLargeReceiver::class.java to MusicWidgetLarge(),
-        MusicWidgetPlayerReceiver::class.java to MusicWidgetPlayer()
+        MusicWidgetPlayerReceiver::class.java to MusicWidgetPlayer(),
+        MusicWidgetQueueReceiver::class.java to MusicWidgetQueue()
     )
 
     private val progressWidgets: List<Pair<Class<out BroadcastReceiver>, GlanceAppWidget>> = listOf(
@@ -190,6 +205,18 @@ object MusicWidgetUpdater {
             } ?: false
         }
 
+        val preferencesManager = entryPoint.preferencesManager()
+        val (sortField, sortDirection) = preferencesManager.librarySortOrderCached("SONGS")
+        if (cachedTracks.isEmpty() || sortField != lastSortField || sortDirection != lastSortDirection) {
+            val allTracks = withTimeoutOrNull(2_000L) {
+                entryPoint.trackRepository().getAllTracks().first()
+            } ?: cachedTracks
+            cachedTracks = allTracks
+            lastSortField = sortField
+            lastSortDirection = sortDirection
+            cachedSortedTracks = sortTracks(allTracks, sortField, sortDirection)
+        }
+
         val artworkUri = track?.artworkUri
         val artwork = MusicWidgetArtwork(
             blurred = WidgetArtworkCache.blurred(context, artworkUri),
@@ -207,8 +234,49 @@ object MusicWidgetUpdater {
             repeatMode = live?.repeatMode ?: controller.repeatMode.value,
             favorite = favoriteValue,
             upcoming = upcoming,
-            artwork = artwork
+            artwork = artwork,
+            sortedTracks = cachedSortedTracks.take(200)
         )
+    }
+
+    internal fun sortTracks(tracks: List<Track>, fieldName: String, directionName: String): List<Track> {
+        val asc = directionName == "ASCENDING"
+        val text = String.CASE_INSENSITIVE_ORDER
+        fun <T> List<T>.orderedBy(comparator: Comparator<T>): List<T> =
+            if (asc) sortedWith(comparator) else sortedWith(comparator.reversed())
+
+        val field = runCatching { SortField.valueOf(fieldName) }.getOrDefault(SortField.TITLE)
+        return when (field) {
+            SortField.TITLE -> tracks.orderedBy(compareBy(text) { it.title })
+            SortField.ARTIST -> tracks.orderedBy(compareBy(text) { it.artist })
+            SortField.ALBUM -> tracks.orderedBy(compareBy(text) { it.album })
+            SortField.YEAR -> tracks.orderedBy(compareBy { it.year })
+            SortField.DATE_ADDED -> tracks.orderedBy(compareBy { it.dateAdded })
+            SortField.DATE_MODIFIED -> tracks.orderedBy(compareBy { it.dateModified })
+            SortField.DURATION -> tracks.orderedBy(compareBy { it.durationMs })
+            SortField.RANDOM -> tracks.shuffled()
+            else -> tracks.orderedBy(compareBy(text) { it.title })
+        }
+    }
+
+    internal fun currentSortedTracks(context: Context): List<Track> {
+        val current = cachedSortedTracks
+        if (current.isNotEmpty()) return current
+        val entryPoint = EntryPointAccessors.fromApplication(
+            context.applicationContext,
+            MusicWidgetEntryPoint::class.java
+        )
+        val (sortField, sortDirection) = entryPoint.preferencesManager().librarySortOrderCached("SONGS")
+        val tracks = runCatching {
+            runBlocking {
+                withTimeoutOrNull(2000L) { entryPoint.trackRepository().getAllTracks().first() }
+            }
+        }.getOrNull() ?: emptyList()
+        cachedTracks = tracks
+        lastSortField = sortField
+        lastSortDirection = sortDirection
+        cachedSortedTracks = sortTracks(tracks, sortField, sortDirection)
+        return cachedSortedTracks
     }
 
     private suspend fun render(
@@ -251,6 +319,7 @@ object MusicWidgetUpdater {
         repeatMode = 0,
         favorite = false,
         upcoming = emptyList(),
-        artwork = MusicWidgetArtwork(null, null, null, emptyList())
+        artwork = MusicWidgetArtwork(null, null, null, emptyList()),
+        sortedTracks = cachedSortedTracks.take(200)
     )
 }
