@@ -6,6 +6,7 @@ import android.os.Build
 import androidx.core.content.FileProvider
 import androidx.core.content.pm.PackageInfoCompat
 import com.yasinjahantigh.logarhythm.R
+import com.yasinjahantigh.logarhythm.data.analytics.InstallReporter
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -36,7 +37,8 @@ import javax.inject.Singleton
 @Singleton
 class UpdateManager @Inject constructor(
     @param:ApplicationContext context: Context,
-    baseClient: OkHttpClient
+    baseClient: OkHttpClient,
+    private val installReporter: InstallReporter
 ) {
 
     private companion object {
@@ -204,7 +206,7 @@ class UpdateManager @Inject constructor(
         }
     }
 
-    private fun fetchLatestRelease(): AppRelease? {
+    private suspend fun fetchLatestRelease(): AppRelease? {
         val allReleasesRequest = Request.Builder()
             .url(ALL_RELEASES_URL)
             .header("Accept", "application/vnd.github+json")
@@ -271,6 +273,10 @@ class UpdateManager @Inject constructor(
         val apk = apks.firstOrNull { it.name.endsWith("-$abi.apk") }
             ?: apks.maxByOrNull { it.size }
             ?: return null
+
+        val workerInstalls = runCatching { installReporter.fetchTotalInstalls() }.getOrNull() ?: 0L
+        val effectiveDownloads = maxOf(downloads, workerInstalls)
+
         return AppRelease(
             versionName = versionName,
             versionCode = versionCode,
@@ -279,7 +285,7 @@ class UpdateManager @Inject constructor(
             apkName = apk.name,
             apkSizeBytes = apk.size,
             abi = abi,
-            downloads = downloads
+            downloads = effectiveDownloads
         )
     }
 

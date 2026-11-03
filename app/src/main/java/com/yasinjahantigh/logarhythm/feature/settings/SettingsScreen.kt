@@ -122,6 +122,7 @@ fun SettingsScreen(
     val updateState by viewModel.updateState.collectAsStateWithLifecycle()
     val latestRelease by viewModel.latestRelease.collectAsStateWithLifecycle()
     val autoCheckEnabled by viewModel.autoCheckEnabled.collectAsStateWithLifecycle()
+    val totalDeviceInstalls by viewModel.totalDeviceInstalls.collectAsStateWithLifecycle()
     val message by viewModel.message.collectAsStateWithLifecycle()
     val context = androidx.compose.ui.platform.LocalContext.current
 
@@ -786,10 +787,11 @@ fun SettingsScreen(
                             }
                             is UpdateState.Failed -> stringResource(R.string.update_failed_title)
                             UpdateState.Hidden -> latestRelease?.let {
+                                val count = maxOf(it.downloads, totalDeviceInstalls ?: 0L)
                                 stringResource(
                                     R.string.update_latest_short,
                                     it.versionName,
-                                    formatCount(it.downloads.toInt())
+                                    formatCount(count.toInt())
                                 )
                             } ?: stringResource(R.string.settings_check_update_desc)
                         }
@@ -822,9 +824,15 @@ fun SettingsScreen(
                             testTag = "settings_github_item"
                         )
                         if (viewModel.installStatsAvailable) {
+                            val installSubtitle = if (totalDeviceInstalls != null && totalDeviceInstalls!! > 0) {
+                                stringResource(R.string.settings_install_stats_count, formatCount(totalDeviceInstalls!!.toInt())) +
+                                    " · " + stringResource(R.string.settings_install_stats_desc)
+                            } else {
+                                stringResource(R.string.settings_install_stats_desc)
+                            }
                             SettingsInfoItem(
                                 title = stringResource(R.string.settings_install_stats_title),
-                                subtitle = stringResource(R.string.settings_install_stats_desc),
+                                subtitle = installSubtitle,
                                 icon = Icons.Filled.Info,
                                 testTag = "settings_install_stats_item"
                             )

@@ -133,7 +133,9 @@ private fun AvailableDialog(
                             )
                         }
                         Text(
-                            text = size,
+                            text = if (release.downloads > 0) {
+                                stringResource(R.string.update_meta, size, formatCount(release.downloads.toInt()))
+                            } else size,
                             style = MaterialTheme.typography.labelMedium,
                             fontWeight = FontWeight.SemiBold,
                             color = MaterialTheme.colorScheme.onSurfaceVariant

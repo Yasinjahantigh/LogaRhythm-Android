@@ -797,14 +797,15 @@
     <string name="settings_auto_update_title">Check for updates automatically</string>
     <string name="settings_auto_update_desc">Once a day at startup, when a connection is available</string>
     <string name="settings_install_stats_title">Anonymous install count</string>
+    <string name="settings_install_stats_count">%1$s active device installs</string>
     <string name="settings_install_stats_desc">One record on first launch: a random install id, app version, device model and Android version. App updates never send it again. No account, files or library data</string>
     <string name="update_checking">Checking…</string>
     <string name="update_available_title">Version %1$s is ready</string>
     <string name="update_whats_new">What\'s new in this version</string>
     <string name="update_available_short">Version %1$s is available</string>
     <string name="update_installed_version">Installed: %1$s</string>
-    <string name="update_meta">%1$s · %2$s downloads</string>
-    <string name="update_latest_short">Latest %1$s · %2$s downloads</string>
+    <string name="update_meta">%1$s · %2$s installs</string>
+    <string name="update_latest_short">Latest %1$s · %2$s installs</string>
     <string name="update_download_install">Download &amp; install</string>
     <string name="update_later">Later</string>
     <string name="update_downloading_title">Downloading update</string>

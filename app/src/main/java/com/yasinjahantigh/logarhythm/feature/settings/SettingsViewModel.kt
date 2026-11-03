@@ -92,6 +92,13 @@ class SettingsViewModel @Inject constructor(
     val latestRelease: StateFlow<AppRelease?> = updateManager.lastRelease
     val autoCheckEnabled: StateFlow<Boolean> = updateManager.autoCheckEnabled
     val installStatsAvailable: Boolean = installReporter.isConfigured
+    val totalDeviceInstalls: StateFlow<Long?> = installReporter.totalInstalls
+
+    init {
+        viewModelScope.launch {
+            installReporter.fetchTotalInstalls()
+        }
+    }
 
     fun checkForUpdates() = updateManager.check(silent = false)
     fun setAutoCheckEnabled(enabled: Boolean) = updateManager.setAutoCheckEnabled(enabled)
