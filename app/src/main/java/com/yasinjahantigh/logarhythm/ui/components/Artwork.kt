@@ -25,7 +25,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
+import coil.size.Precision
 import com.yasinjahantigh.logarhythm.core.artwork.ArtworkVersionStore
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 
 /** Deterministic warm gradients for artists, genres and songs without embedded artwork. */
 private val ArtPalette: List<Pair<Color, Color>> = listOf(
@@ -69,8 +72,11 @@ fun ArtworkImage(
     val brush = remember(fallbackKey) { artBrushFor(fallbackKey) }
     val monogram = remember(fallbackKey) { monogramOf(fallbackKey) }
     val context = LocalContext.current
-    val versions by ArtworkVersionStore.versions.collectAsState()
-    val version = uri?.let { versions[it] } ?: 0L
+    val versionFlow = remember(uri) {
+        uri?.let { key -> ArtworkVersionStore.versions.map { it[key] ?: 0L }.distinctUntilChanged() }
+    }
+    val version = if (versionFlow != null) versionFlow.collectAsState(initial = 0L).value else 0L
+    val isLargeHero = glyphSize.value > 26f
 
     Box(
         modifier = modifier
@@ -94,12 +100,14 @@ fun ArtworkImage(
             )
         }
         if (!uri.isNullOrBlank()) {
-            val request = remember(uri, version) {
+            val request = remember(uri, version, isLargeHero) {
                 ImageRequest.Builder(context)
                     .data(uri)
                     .memoryCacheKey("$uri#v$version")
                     .diskCacheKey("$uri#v$version")
-                    .crossfade(true)
+                    .allowRgb565(!isLargeHero)
+                    .precision(Precision.INEXACT)
+                    .crossfade(isLargeHero)
                     .build()
             }
             AsyncImage(

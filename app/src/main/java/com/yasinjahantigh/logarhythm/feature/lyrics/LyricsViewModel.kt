@@ -7,6 +7,7 @@ import androidx.lifecycle.viewModelScope
 import com.yasinjahantigh.logarhythm.data.datastore.PreferencesManager
 import com.yasinjahantigh.logarhythm.domain.model.LyricLine
 import com.yasinjahantigh.logarhythm.domain.model.Lyrics
+import com.yasinjahantigh.logarhythm.domain.lyrics.LrcParser
 import com.yasinjahantigh.logarhythm.domain.lyrics.LyricsMismatch
 import com.yasinjahantigh.logarhythm.domain.model.Track
 import com.yasinjahantigh.logarhythm.domain.repository.LyricsRepository
@@ -189,6 +190,12 @@ class LyricsViewModel @Inject constructor(
             }
             if (embedded != null) _isManualEditOpen.value = false
         }
+    }
+
+    fun saveTimestampedLines(lines: List<LyricLine>, targetTrack: Track? = currentTrack.value) {
+        val formatted = LrcParser.formatLines(lines)
+        if (formatted.isBlank()) return
+        saveManualLyrics(formatted, targetTrack)
     }
 
     fun deleteLyrics(targetTrack: Track? = currentTrack.value, removeFromFile: Boolean = true) {

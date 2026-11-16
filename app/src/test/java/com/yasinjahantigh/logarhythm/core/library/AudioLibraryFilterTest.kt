@@ -145,4 +145,49 @@ class AudioLibraryFilterTest {
             )
         )
     }
+
+    @Test
+    fun hidesWhatsAppPttCallRecordersVoiceCodecsAndUntaggedShortNonMusic() {
+        assertTrue(
+            AudioLibraryFilter.isHidden(
+                "/storage/emulated/0/WhatsApp/Media/WhatsApp Audio/PTT-20261115-WA0012.opus",
+                "WhatsApp Audio",
+                "PTT-20261115-WA0012.opus"
+            )
+        )
+        assertTrue(
+            AudioLibraryFilter.isHidden(
+                "/storage/emulated/0/MIUI/sound_recorder/call_rec/call_12345.mp3",
+                "call_rec",
+                "call_12345.mp3"
+            )
+        )
+        assertTrue(
+            AudioLibraryFilter.isHidden(
+                "/storage/emulated/0/Download/clip.amr",
+                "Download",
+                "clip.amr"
+            )
+        )
+        assertTrue(
+            AudioLibraryFilter.isHidden(
+                filePath = "/storage/emulated/0/Download/memo_01.m4a",
+                folderName = "Download",
+                fileName = "memo_01.m4a",
+                isMusic = false,
+                durationMs = 42_000L,
+                hasArtistOrAlbum = false
+            )
+        )
+        assertFalse(
+            AudioLibraryFilter.isHidden(
+                filePath = "/storage/emulated/0/Music/Track 01.m4a",
+                folderName = "Music",
+                fileName = "Track 01.m4a",
+                isMusic = false,
+                durationMs = 42_000L,
+                hasArtistOrAlbum = true
+            )
+        )
+    }
 }

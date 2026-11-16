@@ -1,10 +1,18 @@
 package com.yasinjahantigh.logarhythm.playback
 
+import android.content.Context
+import android.media.AudioDeviceCallback
+import android.media.AudioDeviceInfo
+import android.media.AudioManager
 import android.media.audiofx.BassBoost
 import android.media.audiofx.Equalizer
+import android.media.audiofx.PresetReverb
 import android.media.audiofx.Virtualizer
 import android.util.Log
 import com.yasinjahantigh.logarhythm.data.datastore.PreferencesManager
+import com.yasinjahantigh.logarhythm.data.room.DeviceEqDao
+import com.yasinjahantigh.logarhythm.data.room.DeviceEqProfileEntity
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -20,30 +28,55 @@ import javax.inject.Singleton
 @Singleton
 @Suppress("DEPRECATION")
 class EqualizerManager @Inject constructor(
-    private val preferencesManager: PreferencesManager
+    @ApplicationContext private val context: Context,
+    private val preferencesManager: PreferencesManager,
+    private val deviceEqDao: DeviceEqDao,
+    private val stereoBalanceAudioProcessor: StereoBalanceAudioProcessor
 ) {
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
     private var equalizer: Equalizer? = null
     private var bassBoost: BassBoost? = null
     private var virtualizer: Virtualizer? = null
+    private var presetReverb: PresetReverb? = null
     private var currentAudioSessionId: Int = 0
+    private var currentDeviceKey: String = "speaker"
+    private val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
+    private val deviceCallback = object : AudioDeviceCallback() {
+        override fun onAudioDevicesAdded(addedDevices: Array<out AudioDeviceInfo>?) = onOutputRouteChanged()
+        override fun onAudioDevicesRemoved(removedDevices: Array<out AudioDeviceInfo>?) = onOutputRouteChanged()
+    }
 
     private val _equalizerState = MutableStateFlow(EqualizerState())
     val equalizerState: StateFlow<EqualizerState> = _equalizerState.asStateFlow()
 
     init {
+        runCatching { audioManager?.registerAudioDeviceCallback(deviceCallback, null) }
+        val (initKey, initLabel) = detectOutputDevice()
+        currentDeviceKey = initKey
+
         // Preload saved preferences into state before session binds
         scope.launch(Dispatchers.IO) {
             val enabled = preferencesManager.isEqualizerEnabled.first()
             val preset = preferencesManager.equalizerPreset.first().toShort()
             val savedBass = preferencesManager.bassBoostStrength.first().toShort()
             val savedVirt = preferencesManager.virtualizerStrength.first().toShort()
+            val balance = preferencesManager.stereoBalance.first()
+            val mono = preferencesManager.monoAudio.first()
+            val autoEq = preferencesManager.deviceAutoEqEnabled.first()
+            val reverb = preferencesManager.slowedReverbEnabled.first()
+            stereoBalanceAudioProcessor.setStereoBalance(balance)
+            stereoBalanceAudioProcessor.setMonoAudio(mono)
             _equalizerState.update {
                 it.copy(
                     isEnabled = enabled,
                     currentPreset = preset,
                     bassBoostStrength = savedBass,
-                    virtualizerStrength = savedVirt
+                    virtualizerStrength = savedVirt,
+                    stereoBalance = balance,
+                    monoAudio = mono,
+                    deviceAutoEqEnabled = autoEq,
+                    activeDeviceLabel = initLabel,
+                    reverbEnabled = reverb
                 )
             }
         }
@@ -75,6 +108,16 @@ class EqualizerManager @Inject constructor(
             } catch (e: Exception) {
                 Log.w("EqualizerManager", "Virtualizer not supported: ${e.message}")
                 _equalizerState.update { it.copy(isVirtualizerSupported = false) }
+            }
+
+            try {
+                val rev = PresetReverb(0, audioSessionId)
+                val reverbOn = _equalizerState.value.reverbEnabled
+                rev.preset = if (reverbOn) PresetReverb.PRESET_LARGEROOM else PresetReverb.PRESET_NONE
+                rev.enabled = reverbOn
+                presetReverb = rev
+            } catch (e: Exception) {
+                Log.w("EqualizerManager", "PresetReverb not supported: ${e.message}")
             }
         } catch (e: Exception) {
             Log.w("EqualizerManager", "Equalizer not supported on this device/session: ${e.message}")
@@ -230,6 +273,107 @@ class EqualizerManager @Inject constructor(
         }
         setBassBoostStrength(0)
         setVirtualizerStrength(0)
+        setStereoBalance(0f)
+        setMonoAudio(false)
+    }
+
+    fun setStereoBalance(balance: Float) {
+        val clamped = balance.coerceIn(-1f, 1f)
+        stereoBalanceAudioProcessor.setStereoBalance(clamped)
+        _equalizerState.update { it.copy(stereoBalance = clamped) }
+        scope.launch(Dispatchers.IO) { preferencesManager.setStereoBalance(clamped) }
+    }
+
+    fun setMonoAudio(enabled: Boolean) {
+        stereoBalanceAudioProcessor.setMonoAudio(enabled)
+        _equalizerState.update { it.copy(monoAudio = enabled) }
+        scope.launch(Dispatchers.IO) { preferencesManager.setMonoAudio(enabled) }
+    }
+
+    fun setReverbEnabled(enabled: Boolean) {
+        runCatching {
+            presetReverb?.apply {
+                preset = if (enabled) PresetReverb.PRESET_LARGEROOM else PresetReverb.PRESET_NONE
+                this.enabled = enabled
+            }
+        }
+        _equalizerState.update { it.copy(reverbEnabled = enabled) }
+    }
+
+    fun setDeviceAutoEqEnabled(enabled: Boolean) {
+        _equalizerState.update { it.copy(deviceAutoEqEnabled = enabled) }
+        scope.launch(Dispatchers.IO) {
+            preferencesManager.setDeviceAutoEqEnabled(enabled)
+            if (enabled) saveCurrentProfileForDevice(currentDeviceKey, _equalizerState.value.activeDeviceLabel)
+        }
+    }
+
+    private fun onOutputRouteChanged() {
+        val (newKey, newLabel) = detectOutputDevice()
+        val prevKey = currentDeviceKey
+        if (newKey == prevKey) return
+        currentDeviceKey = newKey
+        _equalizerState.update { it.copy(activeDeviceLabel = newLabel) }
+
+        if (_equalizerState.value.deviceAutoEqEnabled) {
+            scope.launch(Dispatchers.IO) {
+                saveCurrentProfileForDevice(prevKey, prevKey)
+                val profile = deviceEqDao.getByKey(newKey) ?: return@launch
+                applyProfileOnMain(profile)
+            }
+        }
+    }
+
+    private suspend fun saveCurrentProfileForDevice(deviceKey: String, label: String) {
+        val st = _equalizerState.value
+        val csv = st.bands.sortedBy { it.index }.joinToString(",") { it.currentLevelMb.toString() }
+        deviceEqDao.upsert(
+            DeviceEqProfileEntity(
+                deviceKey = deviceKey,
+                deviceLabel = label,
+                enabled = st.isEnabled,
+                presetIndex = st.currentPreset.toInt(),
+                bandLevelsCsv = csv,
+                bassStrength = st.bassBoostStrength.toInt(),
+                virtualizerStrength = st.virtualizerStrength.toInt(),
+                updatedAt = System.currentTimeMillis()
+            )
+        )
+    }
+
+    private fun applyProfileOnMain(profile: DeviceEqProfileEntity) {
+        scope.launch(Dispatchers.Main) {
+            setEqualizerEnabled(profile.enabled)
+            val eq = equalizer
+            if (eq != null) {
+                val levels = profile.bandLevelsCsv.split(',').mapNotNull { it.toShortOrNull() }
+                if (profile.presetIndex >= 0) {
+                    setPreset(profile.presetIndex.toShort())
+                } else if (levels.isNotEmpty()) {
+                    levels.forEachIndexed { idx, mb -> setBandLevel(idx.toShort(), mb) }
+                }
+            }
+            setBassBoostStrength(profile.bassStrength.toShort())
+            setVirtualizerStrength(profile.virtualizerStrength.toShort())
+        }
+    }
+
+    private fun detectOutputDevice(): Pair<String, String> {
+        val outputs = runCatching { audioManager?.getDevices(AudioManager.GET_DEVICES_OUTPUTS) }.getOrNull()
+            ?: return "speaker" to "Speaker"
+        for (info in outputs) {
+            when (info.type) {
+                AudioDeviceInfo.TYPE_BLUETOOTH_A2DP, AudioDeviceInfo.TYPE_BLE_HEADSET -> {
+                    val name = info.productName?.toString()?.trim()?.takeIf { it.isNotBlank() } ?: "Bluetooth"
+                    return "bt:${name.lowercase()}" to name
+                }
+                AudioDeviceInfo.TYPE_WIRED_HEADSET, AudioDeviceInfo.TYPE_WIRED_HEADPHONES, AudioDeviceInfo.TYPE_USB_HEADSET -> {
+                    val name = info.productName?.toString()?.trim()?.takeIf { it.isNotBlank() } ?: "Wired Headphones"
+                    return "wired" to name
+                }
+            }
+        }
+        return "speaker" to "Speaker"
     }
 
     private fun persistSettings() {
@@ -243,6 +387,9 @@ class EqualizerManager @Inject constructor(
                 bassBoost = state.bassBoostStrength.toInt(),
                 virtualizer = state.virtualizerStrength.toInt()
             )
+            if (state.deviceAutoEqEnabled) {
+                saveCurrentProfileForDevice(currentDeviceKey, state.activeDeviceLabel)
+            }
         }
     }
 
@@ -250,12 +397,15 @@ class EqualizerManager @Inject constructor(
         try { equalizer?.release() } catch (_: Exception) {}
         try { bassBoost?.release() } catch (_: Exception) {}
         try { virtualizer?.release() } catch (_: Exception) {}
+        try { presetReverb?.release() } catch (_: Exception) {}
         equalizer = null
         bassBoost = null
         virtualizer = null
+        presetReverb = null
     }
 
     fun release() {
+        runCatching { audioManager?.unregisterAudioDeviceCallback(deviceCallback) }
         releaseEffects()
         currentAudioSessionId = 0
     }

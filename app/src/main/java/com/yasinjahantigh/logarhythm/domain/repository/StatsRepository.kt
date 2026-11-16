@@ -16,13 +16,17 @@ interface StatsRepository {
 
     fun getAllPlayEvents(): Flow<List<PlayEvent>>
 
-    fun getTotalListenTimeMs(sinceTimestamp: Long = 0L): Flow<Long>
+    fun getTotalListenTimeMs(sinceTimestamp: Long = 0L, untilTimestamp: Long = Long.MAX_VALUE): Flow<Long>
 
-    fun getTopTracks(sinceTimestamp: Long = 0L, limit: Int = 50): Flow<List<TrackStat>>
+    fun getCompletedPlayCount(sinceTimestamp: Long = 0L, untilTimestamp: Long = Long.MAX_VALUE): Flow<Int>
 
-    fun getTopArtists(sinceTimestamp: Long = 0L, limit: Int = 50): Flow<List<ArtistStat>>
+    fun getPeakHour(sinceTimestamp: Long = 0L, untilTimestamp: Long = Long.MAX_VALUE): Flow<Int?>
 
-    fun getTopAlbums(sinceTimestamp: Long = 0L, limit: Int = 50): Flow<List<AlbumStat>>
+    fun getTopTracks(sinceTimestamp: Long = 0L, limit: Int = 50, untilTimestamp: Long = Long.MAX_VALUE): Flow<List<TrackStat>>
+
+    fun getTopArtists(sinceTimestamp: Long = 0L, limit: Int = 50, untilTimestamp: Long = Long.MAX_VALUE): Flow<List<ArtistStat>>
+
+    fun getTopAlbums(sinceTimestamp: Long = 0L, limit: Int = 50, untilTimestamp: Long = Long.MAX_VALUE): Flow<List<AlbumStat>>
 
     fun getRecentlyPlayedTracks(limit: Int = 20): Flow<List<Track>>
 

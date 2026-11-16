@@ -83,7 +83,11 @@ fun ExcludedFoldersDialog(
     onToggleFolder: (String) -> Unit,
     onResetDefaults: () -> Unit,
     onClearAll: () -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    whitelistMode: Boolean = false,
+    whitelistedFolders: Set<String> = emptySet(),
+    onSetWhitelistMode: (Boolean) -> Unit = {},
+    onToggleWhitelistFolder: (String) -> Unit = {}
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -92,7 +96,11 @@ fun ExcludedFoldersDialog(
                 Text(stringResource(R.string.settings_excluded_folders_dialog_title), style = MaterialTheme.typography.titleLarge)
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    text = stringResource(R.string.settings_excluded_folders_desc, excludedFolders.size),
+                    text = if (whitelistMode) {
+                        stringResource(R.string.settings_whitelist_folders_desc, whitelistedFolders.size)
+                    } else {
+                        stringResource(R.string.settings_excluded_folders_desc, excludedFolders.size)
+                    },
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.primary
                 )
@@ -102,13 +110,30 @@ fun ExcludedFoldersDialog(
             Column {
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    TextButton(onClick = onResetDefaults) {
-                        Text(stringResource(R.string.settings_reset_excluded_folders), style = MaterialTheme.typography.labelMedium)
-                    }
-                    TextButton(onClick = onClearAll) {
-                        Text(stringResource(R.string.settings_clear_all_exclusions), style = MaterialTheme.typography.labelMedium)
+                    Text(
+                        text = stringResource(R.string.settings_folder_whitelist_mode),
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.weight(1f)
+                    )
+                    androidx.compose.material3.Switch(
+                        checked = whitelistMode,
+                        onCheckedChange = onSetWhitelistMode
+                    )
+                }
+                if (!whitelistMode) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        TextButton(onClick = onResetDefaults) {
+                            Text(stringResource(R.string.settings_reset_excluded_folders), style = MaterialTheme.typography.labelMedium)
+                        }
+                        TextButton(onClick = onClearAll) {
+                            Text(stringResource(R.string.settings_clear_all_exclusions), style = MaterialTheme.typography.labelMedium)
+                        }
                     }
                 }
                 if (allFolders.isEmpty()) {
@@ -119,19 +144,23 @@ fun ExcludedFoldersDialog(
                         modifier = Modifier.padding(vertical = 16.dp)
                     )
                 } else {
-                    LazyColumn(modifier = Modifier.fillMaxWidth().heightIn(max = 380.dp)) {
+                    LazyColumn(modifier = Modifier.fillMaxWidth().heightIn(max = 360.dp)) {
                         items(allFolders, key = { it }) { folder ->
-                            val isExcluded = excludedFolders.contains(folder)
+                            val isChecked = if (whitelistMode) whitelistedFolders.contains(folder) else excludedFolders.contains(folder)
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .clickable { onToggleFolder(folder) }
+                                    .clickable {
+                                        if (whitelistMode) onToggleWhitelistFolder(folder) else onToggleFolder(folder)
+                                    }
                                     .padding(vertical = 8.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Checkbox(
-                                    checked = isExcluded,
-                                    onCheckedChange = { onToggleFolder(folder) }
+                                    checked = isChecked,
+                                    onCheckedChange = {
+                                        if (whitelistMode) onToggleWhitelistFolder(folder) else onToggleFolder(folder)
+                                    }
                                 )
                                 Spacer(modifier = Modifier.width(12.dp))
                                 Column(modifier = Modifier.weight(1f)) {
@@ -141,11 +170,14 @@ fun ExcludedFoldersDialog(
                                         maxLines = 1,
                                         overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                                     )
-                                    if (isExcluded) {
+                                    if (isChecked) {
                                         Text(
-                                            text = stringResource(R.string.settings_folder_excluded_badge),
+                                            text = stringResource(
+                                                if (whitelistMode) R.string.settings_folder_included_badge
+                                                else R.string.settings_folder_excluded_badge
+                                            ),
                                             style = MaterialTheme.typography.labelSmall,
-                                            color = MaterialTheme.colorScheme.error
+                                            color = if (whitelistMode) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
                                         )
                                     }
                                 }

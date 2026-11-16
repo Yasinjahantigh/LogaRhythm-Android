@@ -22,11 +22,13 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
 import androidx.compose.material.icons.automirrored.filled.PlaylistAddCheck
 import androidx.compose.material.icons.automirrored.filled.QueueMusic
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material.icons.filled.VisibilityOff
@@ -93,6 +95,15 @@ fun PlaylistDetailScreen(
     var tracksForAddToPlaylist by remember { mutableStateOf<List<Track>?>(null) }
     var selectionMode by remember { mutableStateOf(false) }
     var selectedTrackIds by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var showFilterBar by remember { mutableStateOf(false) }
+    var filterQuery by remember { mutableStateOf("") }
+    val filteredTracks = remember(tracks, filterQuery) {
+        val q = filterQuery.trim().lowercase()
+        if (q.isEmpty()) tracks
+        else tracks.filter {
+            it.title.lowercase().contains(q) || it.artist.lowercase().contains(q) || it.album.lowercase().contains(q)
+        }
+    }
     val selectedTracks = remember(tracks, selectedTrackIds) { tracks.filter { it.id in selectedTrackIds } }
 
     fun exitSelection() {
@@ -309,6 +320,10 @@ fun PlaylistDetailScreen(
                                         }
                                         DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
                                             DropdownMenuItem(
+                                                text = { Text(stringResource(R.string.list_filter_action)) },
+                                                onClick = { showMenu = false; showFilterBar = !showFilterBar; if (!showFilterBar) filterQuery = "" }
+                                            )
+                                            DropdownMenuItem(
                                                 text = { Text(stringResource(R.string.btn_rename)) },
                                                 onClick = { showMenu = false; showRenameDialog = true }
                                             )
@@ -319,23 +334,50 @@ fun PlaylistDetailScreen(
                                         }
                                     }
                                 }
-                            } else null
+                            } else {
+                                {
+                                    IconButton(onClick = { showFilterBar = !showFilterBar; if (!showFilterBar) filterQuery = "" }) {
+                                        Icon(androidx.compose.material.icons.Icons.Default.Search, contentDescription = stringResource(R.string.list_filter_action))
+                                    }
+                                }
+                            }
                         )
+                    }
+                    if (showFilterBar && tracks.isNotEmpty()) {
+                        item(key = "playlist_filter_bar") {
+                            androidx.compose.material3.OutlinedTextField(
+                                value = filterQuery,
+                                onValueChange = { filterQuery = it },
+                                placeholder = { Text(stringResource(R.string.list_filter_hint)) },
+                                singleLine = true,
+                                trailingIcon = if (filterQuery.isNotEmpty()) {
+                                    {
+                                        IconButton(onClick = { filterQuery = "" }) {
+                                            Icon(androidx.compose.material.icons.Icons.Default.Close, contentDescription = null)
+                                        }
+                                    }
+                                } else null,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp, vertical = 6.dp)
+                            )
+                        }
                     }
                 }
 
-                if (tracks.isEmpty()) {
+                if (filteredTracks.isEmpty()) {
                     item {
                         Box(modifier = Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
                             Text(text = stringResource(R.string.empty_playlist_tracks), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
                 } else {
-                    itemsIndexed(tracks, key = { _, track -> track.id }) { index, track ->
+                    itemsIndexed(filteredTracks, key = { _, track -> track.id }) { _, track ->
+                        val originalIndex = tracks.indexOfFirst { it.id == track.id }.coerceAtLeast(0)
                         TrackListItem(
                             track = track,
                             onClick = {
-                                if (selectionMode) toggleSelection(track) else viewModel.playTrackAt(index)
+                                if (selectionMode) toggleSelection(track) else viewModel.playTrackAt(originalIndex)
                             },
                             onMenuClick = { selectedTrackForMenu = track },
                             selectionMode = selectionMode,

@@ -26,8 +26,9 @@ class SaavnClient @Inject constructor(
     baseClient: OkHttpClient
 ) {
     private val client = baseClient.newBuilder()
-        .connectTimeout(15, TimeUnit.SECONDS)
-        .readTimeout(20, TimeUnit.SECONDS)
+        .connectTimeout(5, TimeUnit.SECONDS)
+        .readTimeout(7, TimeUnit.SECONDS)
+        .callTimeout(10, TimeUnit.SECONDS)
         .build()
 
     suspend fun search(query: String, limit: Int = 20): List<DownloadSearchResult> = withContext(Dispatchers.IO) {

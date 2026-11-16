@@ -14,9 +14,14 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         LyricsEntity::class,
         LyricsOffsetEntity::class,
         ResumePositionEntity::class,
-        DownloadEntity::class
+        DownloadEntity::class,
+        DownloadCatalogEntity::class,
+        FollowedArtistEntity::class,
+        ArtistReleaseEntity::class,
+        SavedQueueEntity::class,
+        DeviceEqProfileEntity::class
     ],
-    version = 10,
+    version = 12,
     exportSchema = true
 )
 abstract class MusicDatabase : RoomDatabase() {
@@ -24,6 +29,10 @@ abstract class MusicDatabase : RoomDatabase() {
     abstract fun playlistDao(): PlaylistDao
     abstract fun lyricsDao(): LyricsDao
     abstract fun downloadDao(): DownloadDao
+    abstract fun downloadCatalogDao(): DownloadCatalogDao
+    abstract fun artistFollowDao(): ArtistFollowDao
+    abstract fun savedQueueDao(): SavedQueueDao
+    abstract fun deviceEqDao(): DeviceEqDao
 
     companion object {
         val MIGRATION_1_2: Migration = object : Migration(1, 2) {
@@ -121,6 +130,66 @@ abstract class MusicDatabase : RoomDatabase() {
             }
         }
 
+        val MIGRATION_10_11: Migration = object : Migration(10, 11) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE download_history ADD COLUMN albumArtist TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE download_history ADD COLUMN trackNumber INTEGER NOT NULL DEFAULT 0")
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS download_catalog_cache (" +
+                        "cacheKey TEXT NOT NULL, kind TEXT NOT NULL, title TEXT NOT NULL, " +
+                        "subtitle TEXT NOT NULL, thumbnailUrl TEXT, payloadJson TEXT NOT NULL, " +
+                        "updatedAt INTEGER NOT NULL, PRIMARY KEY(cacheKey))"
+                )
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS index_download_catalog_cache_kind " +
+                        "ON download_catalog_cache (kind)"
+                )
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS index_download_catalog_cache_updatedAt " +
+                        "ON download_catalog_cache (updatedAt)"
+                )
+            }
+        }
+
+        val MIGRATION_11_12: Migration = object : Migration(11, 12) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS followed_artists (" +
+                        "artistKey TEXT NOT NULL, displayName TEXT NOT NULL, musicManArtistId TEXT, " +
+                        "artworkUrl TEXT, knownTrackIdsJson TEXT NOT NULL, latestTrackTitle TEXT, " +
+                        "lastCheckedAt INTEGER NOT NULL, followedAt INTEGER NOT NULL, PRIMARY KEY(artistKey))"
+                )
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_followed_artists_followedAt ON followed_artists (followedAt)")
+
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS artist_releases (" +
+                        "releaseId TEXT NOT NULL, artistKey TEXT NOT NULL, artistName TEXT NOT NULL, " +
+                        "title TEXT NOT NULL, album TEXT NOT NULL, artworkUrl TEXT, source TEXT NOT NULL, " +
+                        "sourceUrl TEXT NOT NULL, durationMs INTEGER NOT NULL, discoveredAt INTEGER NOT NULL, " +
+                        "isSeen INTEGER NOT NULL, PRIMARY KEY(releaseId))"
+                )
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_artist_releases_artistKey ON artist_releases (artistKey)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_artist_releases_discoveredAt ON artist_releases (discoveredAt)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_artist_releases_isSeen ON artist_releases (isSeen)")
+
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS saved_queues (" +
+                        "queueId TEXT NOT NULL, name TEXT NOT NULL, trackIdsJson TEXT NOT NULL, " +
+                        "currentIndex INTEGER NOT NULL, positionMs INTEGER NOT NULL, " +
+                        "shuffle INTEGER NOT NULL, updatedAt INTEGER NOT NULL, PRIMARY KEY(queueId))"
+                )
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_saved_queues_updatedAt ON saved_queues (updatedAt)")
+
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS device_eq_profiles (" +
+                        "deviceKey TEXT NOT NULL, deviceLabel TEXT NOT NULL, enabled INTEGER NOT NULL, " +
+                        "presetIndex INTEGER NOT NULL, bandLevelsCsv TEXT NOT NULL, " +
+                        "bassStrength INTEGER NOT NULL, virtualizerStrength INTEGER NOT NULL, " +
+                        "updatedAt INTEGER NOT NULL, PRIMARY KEY(deviceKey))"
+                )
+            }
+        }
+
         val ALL_MIGRATIONS: Array<Migration> = arrayOf(
             MIGRATION_1_2,
             MIGRATION_2_3,
@@ -130,7 +199,9 @@ abstract class MusicDatabase : RoomDatabase() {
             MIGRATION_6_7,
             MIGRATION_7_8,
             MIGRATION_8_9,
-            MIGRATION_9_10
+            MIGRATION_9_10,
+            MIGRATION_10_11,
+            MIGRATION_11_12
         )
     }
 }

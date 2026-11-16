@@ -1,5 +1,27 @@
 # Changelog
 
+## 2.0.0 - 2026-11-16
+
+### Release Radar & Followed Artists
+- Follow artists from any artist page and receive notifications when new tracks or albums drop (powered by MusicMan, Cloudflare Worker `/releases` edge relay with iTunes + Deezer fallback, and old-catalog date filtering)
+- Manual refresh button with VPN hint when blocked, plus a dedicated Release Radar section on Home
+
+### Pro Audio DSP & Player
+- Stereo Balance, Mono downmix, per-device Auto-EQ profiles, Pitch shift, Slowed + Reverb preset, and A–B Loop
+- Car Mode with high-contrast portrait and two-column landscape layouts
+- Double-tap left/right artwork to seek ±10s, and vinyl turntable angle preservation on pause
+- Audio Trimmer & Ringtone Maker in the track menu
+
+### Reports, Lyrics & Tag Fixer
+- Custom date-range Listening Reports with in-app 9:16 Story Card PNG preview before sharing
+- Lyric Card 9:16 quote sharing and a line-by-line LRC timestamp editor
+- Batch Tag & Cover Fixer combining fast algorithmic cleanup/matching with optional AI refinement
+
+### Downloader, Library & Customization
+- MusicMan auto-crawling for uncached tracks, playlist/album batch downloads, quality & folder picker, and faster search/downloads
+- Multiple saved queues, Private Session mode, Folder Whitelist mode, custom app fonts (Vazirmatn, Sans, Serif, Mono), and a Power Features Guide in Home & Settings
+- Support / Donate links (Daramet & GRAM/TON) in Settings → About
+
 ## 1.8.0 - 2026-10-29
 
 ### Player

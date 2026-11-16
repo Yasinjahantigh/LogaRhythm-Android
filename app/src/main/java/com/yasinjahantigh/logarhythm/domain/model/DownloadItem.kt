@@ -3,6 +3,9 @@ package com.yasinjahantigh.logarhythm.domain.model
 /** Stored in statusDetail while a network failure waits for WorkManager's automatic retry. */
 const val DOWNLOAD_NETWORK_RETRY_DETAIL = "network_retry"
 
+/** Stored in statusDetail while MusicMan server crawls & prepares an uncached track. */
+const val DOWNLOAD_CRAWLING_DETAIL = "musicman_crawling"
+
 /** Saved successfully, but the container (usually WebM) cannot carry the requested tags. */
 const val DOWNLOAD_SAVED_WITHOUT_TAGS_DETAIL = "saved_without_tags"
 
@@ -85,7 +88,22 @@ enum class DownloadErrorKind {
     }
 }
 
-/** One row returned by a yt-dlp search, labeled with its source. */
+/** Category filter for online search. */
+enum class DownloadSearchCategory {
+    ALL,
+    TRACK,
+    ALBUM,
+    ARTIST
+}
+
+/** Type of item returned in online download search. */
+enum class DownloadResultKind {
+    TRACK,
+    ALBUM,
+    ARTIST
+}
+
+/** One row returned by a search source, labeled with its source and optional collection metadata. */
 data class DownloadSearchResult(
     val id: String,
     val title: String,
@@ -93,7 +111,15 @@ data class DownloadSearchResult(
     val source: DownloadSource,
     val url: String,
     val durationMs: Long,
-    val thumbnailUrl: String?
+    val thumbnailUrl: String?,
+    val kind: DownloadResultKind = DownloadResultKind.TRACK,
+    val album: String = "",
+    val albumArtist: String = "",
+    val trackNumber: Int = 0,
+    val trackCount: Int = 0,
+    val collectionId: String? = null,
+    val artistId: String? = null,
+    val hasReadyAudio: Boolean = true
 )
 
 /** UI/worker view of a persisted download. */
@@ -102,6 +128,8 @@ data class DownloadItem(
     val title: String,
     val artist: String,
     val album: String,
+    val albumArtist: String = "",
+    val trackNumber: Int = 0,
     val durationMs: Long,
     val source: DownloadSource,
     val sourceUrl: String,

@@ -8,6 +8,7 @@ import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.workDataOf
+import com.yasinjahantigh.logarhythm.data.datastore.PreferencesManager
 import com.yasinjahantigh.logarhythm.data.download.DownloadWorker
 import com.yasinjahantigh.logarhythm.data.download.DownloadWorkspace
 import com.yasinjahantigh.logarhythm.data.room.DownloadDao
@@ -22,6 +23,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -34,7 +36,8 @@ import javax.inject.Singleton
 class DownloadRepositoryImpl @Inject constructor(
     @ApplicationContext private val context: Context,
     private val dao: DownloadDao,
-    private val workspace: DownloadWorkspace
+    private val workspace: DownloadWorkspace,
+    private val preferencesManager: PreferencesManager
 ) : DownloadRepository {
 
     init {
@@ -54,17 +57,21 @@ class DownloadRepositoryImpl @Inject constructor(
 
         val id = UUID.randomUUID().toString()
         val now = System.currentTimeMillis()
+        val qualityPref = runCatching { preferencesManager.downloadQualityPref.first() }
+            .getOrDefault(DownloadQuality.BEST.prefValue)
         dao.upsert(
             DownloadEntity(
                 id = id,
                 title = result.title,
                 artist = result.artist,
-                album = "",
+                album = result.album,
+                albumArtist = result.albumArtist.ifBlank { result.artist },
+                trackNumber = result.trackNumber,
                 durationMs = result.durationMs,
                 source = result.source.raw,
                 sourceUrl = result.url,
                 videoId = result.id,
-                quality = DownloadQuality.BEST.prefValue,
+                quality = DownloadQuality.fromPref(qualityPref).prefValue,
                 status = DownloadStatus.QUEUED.raw,
                 progress = 0,
                 etaSeconds = 0,
@@ -87,6 +94,16 @@ class DownloadRepositoryImpl @Inject constructor(
         return id
     }
 
+    override suspend fun enqueueBatch(results: List<DownloadSearchResult>): Int {
+        var queued = 0
+        for (result in results) {
+            if (dao.findActiveByUrl(result.url) != null) continue
+            enqueue(result)
+            queued++
+        }
+        return queued
+    }
+
     override suspend fun cancel(id: String) {
         dao.markCancelled(id, System.currentTimeMillis())
         runCatching { YoutubeDL.getInstance().destroyProcessById(id) }
@@ -96,6 +113,15 @@ class DownloadRepositoryImpl @Inject constructor(
     override suspend fun retry(id: String) {
         dao.markQueued(id, System.currentTimeMillis())
         enqueueWork(id, ExistingWorkPolicy.REPLACE)
+    }
+
+    override suspend fun retryAllFailed(): Int {
+        val failed = observeHistory().first().filter { it.status == DownloadStatus.FAILED }
+        for (item in failed) {
+            dao.markQueued(item.id, System.currentTimeMillis())
+            enqueueWork(item.id, ExistingWorkPolicy.REPLACE)
+        }
+        return failed.size
     }
 
     override suspend fun remove(id: String) {

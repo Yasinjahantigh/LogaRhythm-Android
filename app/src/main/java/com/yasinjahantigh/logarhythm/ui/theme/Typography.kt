@@ -31,9 +31,10 @@ private val Roomy = LineHeightStyle(
 private fun style(
     weight: FontWeight,
     size: Int,
-    line: Int
+    line: Int,
+    family: FontFamily = AppFonts.Vazirmatn
 ) = TextStyle(
-    fontFamily = AppFonts.Vazirmatn,
+    fontFamily = family,
     fontWeight = weight,
     fontSize = size.sp,
     lineHeight = line.sp,
@@ -41,20 +42,30 @@ private fun style(
     lineHeightStyle = Roomy
 )
 
-val Typography = Typography(
-    displayLarge = style(FontWeight.Bold, 48, 60),
-    displayMedium = style(FontWeight.Bold, 40, 52),
-    displaySmall = style(FontWeight.Bold, 32, 44),
-    headlineLarge = style(FontWeight.Bold, 30, 42),
-    headlineMedium = style(FontWeight.Bold, 26, 38),
-    headlineSmall = style(FontWeight.SemiBold, 22, 32),
-    titleLarge = style(FontWeight.Bold, 21, 30),
-    titleMedium = style(FontWeight.Medium, 16, 24),
-    titleSmall = style(FontWeight.Medium, 14, 22),
-    bodyLarge = style(FontWeight.Normal, 16, 26),
-    bodyMedium = style(FontWeight.Normal, 14, 22),
-    bodySmall = style(FontWeight.Normal, 12, 18),
-    labelLarge = style(FontWeight.Medium, 14, 20),
-    labelMedium = style(FontWeight.Medium, 12, 18),
-    labelSmall = style(FontWeight.Medium, 11, 16)
-)
+fun typographyForFont(appFont: String): Typography {
+    val family = when (appFont) {
+        "sans" -> FontFamily.SansSerif
+        "serif" -> FontFamily.Serif
+        "mono" -> FontFamily.Monospace
+        else -> AppFonts.Vazirmatn
+    }
+    return Typography(
+        displayLarge = style(FontWeight.Bold, 48, 60, family),
+        displayMedium = style(FontWeight.Bold, 40, 52, family),
+        displaySmall = style(FontWeight.Bold, 32, 44, family),
+        headlineLarge = style(FontWeight.Bold, 30, 42, family),
+        headlineMedium = style(FontWeight.Bold, 26, 38, family),
+        headlineSmall = style(FontWeight.SemiBold, 22, 32, family),
+        titleLarge = style(FontWeight.Bold, 21, 30, family),
+        titleMedium = style(FontWeight.Medium, 16, 24, family),
+        titleSmall = style(FontWeight.Medium, 14, 22, family),
+        bodyLarge = style(FontWeight.Normal, 16, 26, family),
+        bodyMedium = style(FontWeight.Normal, 14, 22, family),
+        bodySmall = style(FontWeight.Normal, 12, 18, family),
+        labelLarge = style(FontWeight.Medium, 14, 20, family),
+        labelMedium = style(FontWeight.Medium, 12, 18, family),
+        labelSmall = style(FontWeight.Medium, 11, 16, family)
+    )
+}
+
+val Typography = typographyForFont("default")

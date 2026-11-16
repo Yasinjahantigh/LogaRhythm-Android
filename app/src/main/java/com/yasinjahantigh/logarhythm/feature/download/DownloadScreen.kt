@@ -75,6 +75,9 @@ fun DownloadScreen(
     val history by viewModel.history.collectAsStateWithLifecycle()
     val recentSearches by viewModel.recentSearches.collectAsStateWithLifecycle()
     val sourceFilter by viewModel.sourceFilter.collectAsStateWithLifecycle()
+    val categoryFilter by viewModel.categoryFilter.collectAsStateWithLifecycle()
+    val savedCollections by viewModel.savedCollections.collectAsStateWithLifecycle()
+    val collectionDetail by viewModel.collectionDetail.collectAsStateWithLifecycle()
     val albumSummary by viewModel.albumSummary.collectAsStateWithLifecycle()
     val albumPreview by viewModel.albumPreview.collectAsStateWithLifecycle()
     val albumBusy by viewModel.albumBusy.collectAsStateWithLifecycle()
@@ -82,6 +85,11 @@ fun DownloadScreen(
     val updateState by viewModel.updateState.collectAsStateWithLifecycle()
     val version by viewModel.ytdlpVersion.collectAsStateWithLifecycle()
     val cookiesImported by viewModel.cookiesImported.collectAsStateWithLifecycle()
+    val previewState by viewModel.previewState.collectAsStateWithLifecycle()
+    val freshResults by viewModel.freshResults.collectAsStateWithLifecycle()
+    val popularResults by viewModel.popularResults.collectAsStateWithLifecycle()
+    val qualityPref by viewModel.downloadQualityPref.collectAsStateWithLifecycle()
+    val pendingShareText by viewModel.pendingShareText.collectAsStateWithLifecycle()
 
     val context = LocalContext.current
     val haptics = LocalHapticFeedback.current
@@ -128,7 +136,17 @@ fun DownloadScreen(
 
     var selectedTab by rememberSaveable { mutableIntStateOf(0) }
     var showSettings by rememberSaveable { mutableStateOf(false) }
+
+    LaunchedEffect(pendingShareText) {
+        if (pendingShareText != null) {
+            selectedTab = 0
+            viewModel.consumeSharedLink {
+                selectedTab = 1
+            }
+        }
+    }
     var pendingStart by remember { mutableStateOf<(() -> Unit)?>(null) }
+    val searchListState = androidx.compose.foundation.lazy.rememberLazyListState()
 
     val writePermissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -263,44 +281,86 @@ fun DownloadScreen(
                         .fillMaxWidth()
                         .weight(1f)
                 ) {
-                    if (selectedTab == 0) {
-                        DownloadSearchTab(
-                            query = query,
-                            onQueryChange = viewModel::onQueryChange,
-                            onSearch = { viewModel.search() },
-                            state = searchState,
-                            sourceFilter = sourceFilter,
-                            onSourceFilterChange = viewModel::setSourceFilter,
-                            recentSearches = recentSearches,
-                            onSelectRecent = viewModel::selectRecent,
-                            onRemoveRecent = viewModel::removeRecent,
-                            onClearRecent = viewModel::clearRecent,
-                            history = history,
-                            preparing = preparing,
-                            bottomPadding = bottomPadding,
-                            onResultClick = { startDownload(it) },
-                            onDownloadAlbum = viewModel::previewAlbum,
-                            onRetry = { viewModel.search() }
-                        )
-                    } else {
-                        DownloadHistoryTab(
-                            history = history,
-                            bottomPadding = bottomPadding,
-                            onPlay = viewModel::play,
-                            onOpen = { openWith(context, it) },
-                            onShare = { share(context, it) },
-                            onCancel = viewModel::cancel,
-                            onRetry = viewModel::retry,
-                            onRemove = viewModel::remove,
-                            onClearFinished = viewModel::clearFinished,
-                            onEditTags = { item ->
-                                item.mediaStoreId?.let { id -> onNavigateToTagEditor("local:$id") }
-                            }
-                        )
+                    androidx.compose.animation.AnimatedContent(
+                        targetState = selectedTab,
+                        label = "download_tab_switch"
+                    ) { tab ->
+                        if (tab == 0) {
+                            DownloadSearchTab(
+                                query = query,
+                                onQueryChange = viewModel::onQueryChange,
+                                onSearch = { viewModel.search() },
+                                state = searchState,
+                                sourceFilter = sourceFilter,
+                                onSourceFilterChange = viewModel::setSourceFilter,
+                                categoryFilter = categoryFilter,
+                                onCategoryFilterChange = viewModel::setCategoryFilter,
+                                savedCollections = savedCollections,
+                                onOpenSavedCollection = viewModel::openSavedCollection,
+                                listState = searchListState,
+                                recentSearches = recentSearches,
+                                onSelectRecent = viewModel::selectRecent,
+                                onRemoveRecent = viewModel::removeRecent,
+                                onClearRecent = viewModel::clearRecent,
+                                history = history,
+                                preparing = preparing,
+                                bottomPadding = bottomPadding,
+                                onResultClick = { item ->
+                                    if (item.kind == com.yasinjahantigh.logarhythm.domain.model.DownloadResultKind.TRACK) {
+                                        startDownload(item)
+                                    } else {
+                                        viewModel.openCollection(item)
+                                    }
+                                },
+                                onDownloadAlbum = viewModel::previewAlbum,
+                                previewState = previewState,
+                                onTogglePreview = viewModel::togglePreview,
+                                freshResults = freshResults,
+                                popularResults = popularResults,
+                                onRetry = { viewModel.search() }
+                            )
+                        } else {
+                            DownloadHistoryTab(
+                                history = history,
+                                bottomPadding = bottomPadding,
+                                onPlay = viewModel::play,
+                                onOpen = { openWith(context, it) },
+                                onShare = { share(context, it) },
+                                onCancel = viewModel::cancel,
+                                onRetry = viewModel::retry,
+                                onRetryAllFailed = viewModel::retryAllFailed,
+                                onRemove = viewModel::remove,
+                                onClearFinished = viewModel::clearFinished,
+                                onEditTags = { item ->
+                                    item.mediaStoreId?.let { id -> onNavigateToTagEditor("local:$id") }
+                                }
+                            )
+                        }
                     }
                 }
             }
         }
+    }
+
+    collectionDetail?.let { detail ->
+        val followedKeys by viewModel.followedArtistKeys.collectAsStateWithLifecycle()
+        val isFollowed = viewModel.isArtistFollowed(detail.header.title, followedKeys)
+        DownloadCollectionSheet(
+            state = detail,
+            history = history,
+            isArtistFollowed = isFollowed,
+            onToggleFollowArtist = { viewModel.toggleFollowCollectionArtist(detail.header) },
+            previewState = previewState,
+            onTogglePreview = viewModel::togglePreview,
+            onDismiss = viewModel::closeCollection,
+            onRefresh = { viewModel.openCollection(detail.header, forceRefresh = true) },
+            onDownloadAll = { tracks ->
+                viewModel.downloadAllFromCollection(detail.header.title, tracks)
+                viewModel.closeCollection()
+            },
+            onTrackClick = { track -> startDownload(track) },
+            onAlbumClick = { albumItem -> viewModel.openCollection(albumItem) }
+        )
     }
 
     if (showSettings) {
@@ -311,6 +371,8 @@ fun DownloadScreen(
             cookiesImported = cookiesImported,
             onImportCookies = { cookiePicker.launch(arrayOf("*/*")) },
             onClearCookies = viewModel::clearCookies,
+            qualityPref = qualityPref,
+            onQualityChange = viewModel::setDownloadQuality,
             onDismiss = { showSettings = false }
         )
     }

@@ -21,19 +21,31 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 import com.yasinjahantigh.logarhythm.data.ai.AiKeyStore
 import com.yasinjahantigh.logarhythm.data.ai.AiPlaylistClient
+import com.yasinjahantigh.logarhythm.data.download.ArtworkLoader
 import com.yasinjahantigh.logarhythm.domain.repository.AiPlaylistRepository
 import com.yasinjahantigh.logarhythm.data.download.metadata.MetadataResolver
+import com.yasinjahantigh.logarhythm.data.tagger.AudioFileTagWriter
 import com.yasinjahantigh.logarhythm.domain.download.DownloadMetadataMerge
+import com.yasinjahantigh.logarhythm.domain.library.MetadataNormalizer
 import com.yasinjahantigh.logarhythm.domain.library.TagSuggestionCleaner
 import com.yasinjahantigh.logarhythm.domain.model.TrackEdit
 import com.yasinjahantigh.logarhythm.domain.model.TrackEditResult
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 
-internal data class TagFixSuggestion(val track: Track, val tags: TagSuggestionCleaner.Tags)
+internal data class TagFixSuggestion(
+    val track: Track,
+    val tags: TagSuggestionCleaner.Tags,
+    val artworkUrl: String? = null
+)
 
 /** Duplicates, "missing tags", and hidden tracks views; computed off the main thread from the library. */
 @HiltViewModel
@@ -42,6 +54,8 @@ class LibraryToolsViewModel @Inject constructor(
     preferencesManager: PreferencesManager,
     private val playerController: PlayerController,
     private val metadataResolver: MetadataResolver,
+    private val artworkLoader: ArtworkLoader,
+    private val audioFileTagWriter: AudioFileTagWriter,
     private val aiPlaylistClient: AiPlaylistClient,
     private val aiKeyStore: AiKeyStore,
     private val aiPlaylistRepository: AiPlaylistRepository
@@ -95,24 +109,63 @@ class LibraryToolsViewModel @Inject constructor(
         suggestionJob = viewModelScope.launch {
             _findingFixes.value = true
             try {
-                for (track in trackRepository.getAllTracks().first().filter { it.id.startsWith("local:") }) {
-                    var tags = TagSuggestionCleaner.clean(track.title, track.artist, track.album)
-                    val missingAlbum = track.album.isBlank() || track.album.equals("Unknown Album", true)
-                    if (tags == TagSuggestionCleaner.Tags(track.title, track.artist, track.album) && !missingAlbum) continue
-                    if (tags.canLookup) {
-                        val resolved = metadataResolver.resolve(tags.title, tags.artist, track.durationMs, replaceArtist = true)
-                        if (DownloadMetadataMerge.similarity(resolved.title.orEmpty(), tags.title) >= 0.9 &&
-                            DownloadMetadataMerge.similarity(resolved.artist.orEmpty(), tags.artist) >= 0.9) {
-                            tags = tags.copy(
-                                title = resolved.title?.takeIf { it.isNotBlank() } ?: tags.title,
-                                artist = resolved.artist?.takeIf { it.isNotBlank() } ?: tags.artist,
-                                album = if (missingAlbum) resolved.album?.takeIf { it.isNotBlank() } ?: tags.album else tags.album
-                            )
+                val localTracks = trackRepository.getAllTracks().first()
+                    .filter { it.id.startsWith("local:") }
+                val semaphore = Semaphore(4)
+                coroutineScope {
+                    localTracks.take(80).map { track ->
+                        async {
+                            semaphore.withPermit {
+                                val baseline = baselineTags(track)
+                                var tags = TagSuggestionCleaner.cleanTrack(track)
+                                val missingAlbum = MetadataNormalizer.isPlaceholderField(track.album)
+                                val missingGenre = MetadataNormalizer.isPlaceholderGenre(track.genre)
+                                val missingYear = track.year == 0
+                                val missingCover = track.artworkUri.isNullOrBlank() ||
+                                    runCatching { audioFileTagWriter.readEmbeddedTags(track)?.artwork == null }.getOrDefault(false)
+
+                                val needsWork = tags != baseline || missingAlbum || missingGenre || missingYear || missingCover
+                                if (!needsWork) return@withPermit null
+
+                                var coverUrl: String? = null
+                                if (tags.canLookup) {
+                                    val resolved = metadataResolver.resolve(
+                                        title = tags.title,
+                                        artist = tags.artist,
+                                        durationMs = track.durationMs,
+                                        replaceArtist = true
+                                    )
+                                    val titleMatch = DownloadMetadataMerge.similarity(resolved.title.orEmpty(), tags.title)
+                                    val artistMatch = DownloadMetadataMerge.similarity(resolved.artist.orEmpty(), tags.artist)
+                                    if (titleMatch >= 0.72 && artistMatch >= 0.70) {
+                                        val resolvedGenre = resolved.genre
+                                            ?.let { MetadataNormalizer.canonicalizeGenre(it, "") }
+                                            ?.takeIf { it.isNotEmpty() }
+                                        val resolvedYear = resolved.year
+                                            ?.trim()
+                                            ?.take(4)
+                                            ?.toIntOrNull()
+                                            ?.takeIf { it in 1900..2100 }
+                                            ?: 0
+                                        tags = tags.copy(
+                                            title = resolved.title?.takeIf { it.isNotBlank() } ?: tags.title,
+                                            artist = resolved.artist?.takeIf { it.isNotBlank() } ?: tags.artist,
+                                            album = if (missingAlbum) resolved.album?.takeIf { it.isNotBlank() } ?: tags.album else tags.album,
+                                            genre = if (missingGenre && resolvedGenre != null) resolvedGenre else tags.genre,
+                                            year = if (missingYear && resolvedYear > 0) resolvedYear else tags.year
+                                        )
+                                        if (missingCover) {
+                                            coverUrl = resolved.artworkUrl
+                                        }
+                                    }
+                                }
+
+                                if (tags != baseline || coverUrl != null) TagFixSuggestion(track, tags, coverUrl) else null
+                            }
                         }
-                    }
-                    if (tags != TagSuggestionCleaner.Tags(track.title, track.artist, track.album)) {
-                        _suggestions.value = _suggestions.value.orEmpty() + TagFixSuggestion(track, tags)
-                    }
+                    }.awaitAll().filterNotNull()
+                }.let { suggestions ->
+                    _suggestions.value = suggestions
                 }
             } catch (cancelled: CancellationException) {
                 throw cancelled
@@ -135,25 +188,63 @@ class LibraryToolsViewModel @Inject constructor(
                 val settings = aiPlaylistRepository.observeSettings().first()
                 val allTracks = trackRepository.getAllTracks().first().filter { it.id.startsWith("local:") }
                 val candidates = allTracks.filter { t ->
-                    t.title.contains(Regex("""[\[\(\]_\-–—]|(?i)\b(feat|ft|official|remix|4k|hd|video|audio|lyrics)\b""")) ||
-                        t.artist.isBlank() || t.artist.equals("Unknown Artist", true) ||
+                    t.title.contains(Regex("""[\[\(\]_\-–—@]|(?i)\b(feat|ft|official|remix|4k|hd|video|audio|lyrics|320|128)\b|\.(?:ir|com|net)\b|دانلود""")) ||
+                        MetadataNormalizer.isPlaceholderField(t.artist) ||
+                        MetadataNormalizer.isPlaceholderField(t.album) ||
+                        MetadataNormalizer.isPlaceholderGenre(t.genre) ||
+                        t.year == 0 ||
                         t.artist.contains(Regex("""(?i)\b(feat|ft|with|&|,)\b"""))
-                }.take(30)
+                }.take(60)
                 val targetTracks = if (candidates.isNotEmpty()) candidates else allTracks.take(20)
-                val cleanedMap = aiPlaylistClient.cleanMetadataWithAi(settings, apiKey, targetTracks)
-                val newSuggestions = targetTracks.mapNotNull { track ->
-                    val cleaned = cleanedMap[track.id] ?: return@mapNotNull null
-                    val (newTitle, newArtist, newAlbum) = cleaned
-                    val tags = TagSuggestionCleaner.Tags(
-                        title = newTitle.ifBlank { track.title },
-                        artist = newArtist.ifBlank { track.artist },
-                        album = newAlbum.ifBlank { track.album }
-                    )
-                    if (tags != TagSuggestionCleaner.Tags(track.title, track.artist, track.album)) {
-                        TagFixSuggestion(track, tags)
-                    } else null
+                val collected = mutableListOf<TagFixSuggestion>()
+                val semaphore = Semaphore(4)
+                for (batch in targetTracks.chunked(20)) {
+                    val cleanedMap = aiPlaylistClient.cleanMetadataTagsWithAi(settings, apiKey, batch)
+                    val batchSuggestions = coroutineScope {
+                        batch.map { track ->
+                            async {
+                                semaphore.withPermit {
+                                    val cleaned = cleanedMap[track.id] ?: return@withPermit null
+                                    val baseline = baselineTags(track)
+                                    val missingGenre = MetadataNormalizer.isPlaceholderGenre(track.genre)
+                                    val missingCover = track.artworkUri.isNullOrBlank() ||
+                                        runCatching { audioFileTagWriter.readEmbeddedTags(track)?.artwork == null }.getOrDefault(false)
+                                    var tags = TagSuggestionCleaner.Tags(
+                                        title = cleaned.title.ifBlank { track.title },
+                                        artist = cleaned.artist.ifBlank { track.artist },
+                                        album = cleaned.album.ifBlank { track.album },
+                                        genre = when {
+                                            cleaned.genre.isBlank() -> track.genre
+                                            missingGenre -> cleaned.genre
+                                            else -> track.genre
+                                        },
+                                        year = if (cleaned.year > 0 && track.year == 0) cleaned.year else track.year,
+                                        albumArtist = track.albumArtist
+                                    )
+                                    var coverUrl: String? = null
+                                    if (tags.canLookup && (missingCover || MetadataNormalizer.isPlaceholderField(tags.album) || tags.year == 0)) {
+                                        val resolved = metadataResolver.resolve(tags.title, tags.artist, track.durationMs, replaceArtist = false)
+                                        val tSim = DownloadMetadataMerge.similarity(resolved.title.orEmpty(), tags.title)
+                                        val aSim = DownloadMetadataMerge.similarity(resolved.artist.orEmpty(), tags.artist)
+                                        if (tSim >= 0.72 && aSim >= 0.70) {
+                                            if (MetadataNormalizer.isPlaceholderField(tags.album) && !resolved.album.isNullOrBlank()) {
+                                                tags = tags.copy(album = resolved.album)
+                                            }
+                                            val rYear = resolved.year?.trim()?.take(4)?.toIntOrNull()?.takeIf { it in 1900..2100 } ?: 0
+                                            if (tags.year == 0 && rYear > 0) {
+                                                tags = tags.copy(year = rYear)
+                                            }
+                                            if (missingCover) coverUrl = resolved.artworkUrl
+                                        }
+                                    }
+                                    if (tags != baseline || coverUrl != null) TagFixSuggestion(track, tags, coverUrl) else null
+                                }
+                            }
+                        }.awaitAll().filterNotNull()
+                    }
+                    collected.addAll(batchSuggestions)
+                    _aiSuggestions.value = collected.toList()
                 }
-                _aiSuggestions.value = newSuggestions
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (_: Exception) {
@@ -163,6 +254,15 @@ class LibraryToolsViewModel @Inject constructor(
             }
         }
     }
+
+    private fun baselineTags(track: Track): TagSuggestionCleaner.Tags = TagSuggestionCleaner.Tags(
+        title = track.title,
+        artist = track.artist,
+        album = track.album,
+        genre = track.genre,
+        year = track.year,
+        albumArtist = track.albumArtist
+    )
 
     fun dismissSuggestions() {
         if (_savingFix.value != null) return
@@ -185,11 +285,7 @@ class LibraryToolsViewModel @Inject constructor(
                     _fixFailed.value = true
                     return@launch
                 }
-                val tags = suggestion.tags
-                val edit = TrackEdit(
-                    tags.title, tags.artist, tags.album, current.albumArtist, current.genre,
-                    current.year, current.trackNumber, current.discNumber, current.composer
-                )
+                val edit = buildTrackEdit(current, suggestion)
                 when (val result = trackRepository.updateTrackDetails(trackId, edit)) {
                     is TrackEditResult.Success -> {
                         playerController.updateTrackInPlayback(result.track)
@@ -216,30 +312,46 @@ class LibraryToolsViewModel @Inject constructor(
         val pool = (if (isAi) _aiSuggestions.value else _suggestions.value).orEmpty()
         if (pool.isEmpty() || _savingFix.value != null) return
         viewModelScope.launch {
-            var applied = 0
+            val appliedIds = mutableSetOf<String>()
             for (suggestion in pool) {
                 val trackId = suggestion.track.id
                 val current = trackRepository.getTrackById(trackId).first() ?: continue
-                val tags = suggestion.tags
-                val edit = TrackEdit(
-                    tags.title, tags.artist, tags.album, current.albumArtist, current.genre,
-                    current.year, current.trackNumber, current.discNumber, current.composer
-                )
+                val edit = buildTrackEdit(current, suggestion)
                 when (val result = trackRepository.updateTrackDetails(trackId, edit)) {
                     is TrackEditResult.Success -> {
                         playerController.updateTrackInPlayback(result.track)
-                        applied++
+                        appliedIds.add(trackId)
                     }
                     else -> Unit
                 }
             }
             if (isAi) {
-                _aiSuggestions.value = emptyList()
+                _aiSuggestions.value = _aiSuggestions.value.orEmpty().filterNot { it.track.id in appliedIds }
             } else {
-                _suggestions.value = emptyList()
+                _suggestions.value = _suggestions.value.orEmpty().filterNot { it.track.id in appliedIds }
             }
-            onDone(applied)
+            onDone(appliedIds.size)
         }
+    }
+
+    private suspend fun buildTrackEdit(current: Track, suggestion: TagFixSuggestion): TrackEdit {
+        val tags = suggestion.tags
+        val artworkBytes = suggestion.artworkUrl?.let { url ->
+            runCatching { artworkLoader.load(url) }.getOrNull()
+        }
+        return TrackEdit(
+            title = tags.title,
+            artist = tags.artist,
+            album = tags.album,
+            albumArtist = tags.albumArtist.ifBlank { current.albumArtist },
+            genre = tags.genre.ifBlank { current.genre },
+            year = if (tags.year > 0) tags.year else current.year,
+            trackNumber = current.trackNumber,
+            discNumber = current.discNumber,
+            composer = current.composer,
+            artwork = artworkBytes,
+            artworkMime = if (artworkBytes != null) "image/jpeg" else null
+        )
     }
 
     fun play(track: Track) = playerController.play(listOf(track), 0)

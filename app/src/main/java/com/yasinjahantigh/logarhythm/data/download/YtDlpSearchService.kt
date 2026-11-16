@@ -35,17 +35,17 @@ class YtDlpSearchService @Inject constructor(
 
     suspend fun search(query: String, sources: Set<DownloadSource>): Outcome = coroutineScope {
         val youtube = if (DownloadSource.YOUTUBE in sources) {
-            async(Dispatchers.IO) { searchSource(DownloadSource.YOUTUBE, "ytsearch10:$query") }
+            async(Dispatchers.IO) { searchSource(DownloadSource.YOUTUBE, "ytsearch6:$query") }
         } else {
             null
         }
         val soundcloud = if (DownloadSource.SOUNDCLOUD in sources) {
-            async(Dispatchers.IO) { searchSource(DownloadSource.SOUNDCLOUD, "scsearch10:$query") }
+            async(Dispatchers.IO) { searchSource(DownloadSource.SOUNDCLOUD, "scsearch6:$query") }
         } else {
             null
         }
         val bandcamp = if (DownloadSource.BANDCAMP in sources) {
-            async(Dispatchers.IO) { searchSource(DownloadSource.BANDCAMP, "bcsearch10:$query") }
+            async(Dispatchers.IO) { searchSource(DownloadSource.BANDCAMP, "bcsearch5:$query") }
         } else {
             null
         }
@@ -92,6 +92,6 @@ class YtDlpSearchService @Inject constructor(
     }
 
     private companion object {
-        const val SEARCH_TIMEOUT_MS = 90_000L
+        const val SEARCH_TIMEOUT_MS = 25_000L
     }
 }

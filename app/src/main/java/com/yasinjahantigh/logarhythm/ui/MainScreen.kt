@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -58,11 +59,20 @@ fun MainScreen(
     modifier: Modifier = Modifier,
     playerViewModel: PlayerViewModel = hiltViewModel(),
     /** Artwork-derived tint (decoded once in MainActivity, cached). Tints player chrome only. */
-    seedTint: androidx.compose.ui.graphics.Color? = null
+    seedTint: androidx.compose.ui.graphics.Color? = null,
+    shareEventSeq: Int = 0
 ) {
     val navController = rememberNavController()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
+
+    LaunchedEffect(shareEventSeq) {
+        if (shareEventSeq > 0) {
+            navController.navigate(NavDestination.ROUTE_DOWNLOAD) {
+                launchSingleTop = true
+            }
+        }
+    }
 
     val currentTrack by playerViewModel.currentTrack.collectAsStateWithLifecycle()
     val isPlaying by playerViewModel.isPlaying.collectAsStateWithLifecycle()

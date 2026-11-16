@@ -25,8 +25,9 @@ class RadioJavanClient @Inject constructor(
     baseClient: OkHttpClient
 ) {
     private val client = baseClient.newBuilder()
-        .connectTimeout(15, TimeUnit.SECONDS)
-        .readTimeout(20, TimeUnit.SECONDS)
+        .connectTimeout(5, TimeUnit.SECONDS)
+        .readTimeout(7, TimeUnit.SECONDS)
+        .callTimeout(10, TimeUnit.SECONDS)
         .build()
 
     private val apiHosts = listOf(

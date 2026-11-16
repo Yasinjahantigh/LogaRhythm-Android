@@ -2,36 +2,52 @@ package com.yasinjahantigh.logarhythm.feature.queue
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.QueueMusic
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.BookmarkAdd
 import androidx.compose.material.icons.filled.ClearAll
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Shuffle
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.InputChip
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -90,6 +106,7 @@ fun QueueScreen(
     BackHandler(onBack = onNavigateBack)
 
     val queue by viewModel.queue.collectAsStateWithLifecycle()
+    val savedQueues by viewModel.savedQueues.collectAsStateWithLifecycle()
     val currentTrack by viewModel.currentTrack.collectAsStateWithLifecycle()
     val isPlaying by viewModel.isPlaying.collectAsStateWithLifecycle()
     val shuffle by viewModel.shuffle.collectAsStateWithLifecycle()
@@ -100,6 +117,59 @@ fun QueueScreen(
     val removedMsg = stringResource(R.string.queue_item_removed)
     val undoMsg = stringResource(R.string.queue_undo)
     var showSavePlaylistDialog by remember { mutableStateOf(false) }
+    var showSaveSlotDialog by remember { mutableStateOf(false) }
+    var slotNameInput by remember { mutableStateOf("") }
+    var showFilterBar by remember { mutableStateOf(false) }
+    var filterQuery by remember { mutableStateOf("") }
+
+    val filteredEntries = remember(queue, filterQuery) {
+        val q = filterQuery.trim().lowercase()
+        queue.mapIndexed { idx, track -> idx to track }
+            .filter { (_, t) ->
+                q.isEmpty() ||
+                    t.title.lowercase().contains(q) ||
+                    t.artist.lowercase().contains(q) ||
+                    t.album.lowercase().contains(q)
+            }
+    }
+    val isFiltering = filterQuery.isNotBlank()
+
+    if (showSaveSlotDialog) {
+        AlertDialog(
+            onDismissRequest = { showSaveSlotDialog = false },
+            title = { Text(stringResource(R.string.queue_save_slot_title)) },
+            text = {
+                OutlinedTextField(
+                    value = slotNameInput,
+                    onValueChange = { slotNameInput = it },
+                    placeholder = { Text(stringResource(R.string.queue_save_slot_hint)) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val name = slotNameInput.trim().ifBlank { "Queue" }
+                        showSaveSlotDialog = false
+                        slotNameInput = ""
+                        viewModel.saveCurrentQueueAsSlot(name) {
+                            scope.launch {
+                                snackbarHostState.showSnackbar(
+                                    context.getString(R.string.queue_slot_saved, name)
+                                )
+                            }
+                        }
+                    }
+                ) { Text(stringResource(R.string.save)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showSaveSlotDialog = false }) {
+                    Text(stringResource(R.string.cancel))
+                }
+            }
+        )
+    }
 
     if (showSavePlaylistDialog) {
         CreatePlaylistDialog(
@@ -180,6 +250,12 @@ fun QueueScreen(
                     )
                 }
                 if (queue.isNotEmpty()) {
+                    IconButton(onClick = { showFilterBar = !showFilterBar; if (!showFilterBar) filterQuery = "" }) {
+                        Icon(
+                            imageVector = Icons.Default.Search,
+                            contentDescription = stringResource(R.string.list_filter_action)
+                        )
+                    }
                     IconButton(
                         onClick = { showSavePlaylistDialog = true },
                         modifier = Modifier.testTag("queue_save_playlist_button")
@@ -213,6 +289,76 @@ fun QueueScreen(
                 }
             }
 
+            if (queue.isNotEmpty() || savedQueues.isNotEmpty()) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState())
+                        .padding(horizontal = 16.dp, vertical = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    if (queue.isNotEmpty()) {
+                        AssistChip(
+                            onClick = {
+                                slotNameInput = ""
+                                showSaveSlotDialog = true
+                            },
+                            leadingIcon = { Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp)) },
+                            label = { Text(stringResource(R.string.queue_save_slot_action)) },
+                            shape = CircleShape
+                        )
+                    }
+                    savedQueues.forEach { slot ->
+                        InputChip(
+                            selected = false,
+                            onClick = {
+                                viewModel.loadSavedQueueSlot(slot) { ok ->
+                                    scope.launch {
+                                        snackbarHostState.showSnackbar(
+                                            context.getString(
+                                                if (ok) R.string.queue_slot_loaded else R.string.queue_slot_empty,
+                                                slot.name
+                                            )
+                                        )
+                                    }
+                                }
+                            },
+                            label = { Text(slot.name) },
+                            trailingIcon = {
+                                Icon(
+                                    imageVector = Icons.Default.Close,
+                                    contentDescription = stringResource(R.string.btn_delete),
+                                    modifier = Modifier
+                                        .size(16.dp)
+                                        .clickable { viewModel.deleteSavedQueueSlot(slot.queueId) }
+                                )
+                            },
+                            shape = CircleShape
+                        )
+                    }
+                }
+            }
+
+            if (showFilterBar && queue.isNotEmpty()) {
+                OutlinedTextField(
+                    value = filterQuery,
+                    onValueChange = { filterQuery = it },
+                    placeholder = { Text(stringResource(R.string.list_filter_hint)) },
+                    singleLine = true,
+                    trailingIcon = if (filterQuery.isNotEmpty()) {
+                        {
+                            IconButton(onClick = { filterQuery = "" }) {
+                                Icon(Icons.Default.Close, contentDescription = null)
+                            }
+                        }
+                    } else null,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 4.dp)
+                )
+            }
+
             if (queue.isEmpty()) {
                 LibraryEmptyHint(
                     text = stringResource(R.string.queue_empty),
@@ -233,18 +379,18 @@ fun QueueScreen(
                             .testTag("queue_list")
                     ) {
                         itemsIndexed(
-                            items = queue,
-                            key = { index, track -> "${track.id}_$index" }
-                        ) { index, track ->
+                            items = filteredEntries,
+                            key = { _, entry -> "${entry.second.id}_${entry.first}" }
+                        ) { _, (index, track) ->
                             Column {
-                                // Section labels ride on the first row of each section.
-                                if (currentIndex > 0 && index == 0) {
+                                // Section labels ride on the first row of each section when unfiltered.
+                                if (!isFiltering && currentIndex > 0 && index == 0) {
                                     QueueSectionLabel(stringResource(R.string.queue_played))
                                 }
-                                if (index == currentIndex) {
+                                if (!isFiltering && index == currentIndex) {
                                     QueueSectionLabel(stringResource(R.string.now_playing))
                                 }
-                                if (currentIndex >= 0 && index == currentIndex + 1) {
+                                if (!isFiltering && currentIndex >= 0 && index == currentIndex + 1) {
                                     QueueSectionLabel(
                                         stringResource(R.string.queue_up_next) + " · " +
                                             formatCount(queue.size - currentIndex - 1)

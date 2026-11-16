@@ -28,6 +28,7 @@ import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
 import androidx.compose.material.icons.automirrored.filled.PlaylistAddCheck
 import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.filled.Album
+import androidx.compose.material.icons.filled.ContentCut
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Edit
@@ -105,7 +106,19 @@ fun SongMenuBottomSheet(
     var showDetailsDialog by remember { mutableStateOf(false) }
     var showDeleteConfirmDialog by remember { mutableStateOf(false) }
     var showHideConfirmDialog by remember { mutableStateOf(false) }
+    var showTrimmerSheet by remember { mutableStateOf(false) }
     var artistChoices by remember { mutableStateOf<List<String>?>(null) }
+
+    if (showTrimmerSheet) {
+        AudioTrimmerSheet(
+            track = track,
+            onDismiss = {
+                showTrimmerSheet = false
+                onDismissRequest()
+            }
+        )
+        return
+    }
 
     artistChoices?.let { names ->
         AlertDialog(
@@ -364,6 +377,15 @@ fun SongMenuBottomSheet(
                     title = stringResource(R.string.action_edit_track_info),
                     tag = "menu_edit_track",
                     onClick = { onEditTrack(); onDismissRequest() }
+                )
+            }
+
+            if (track.id.startsWith("local:")) {
+                SongMenuOption(
+                    icon = Icons.Default.ContentCut,
+                    title = stringResource(R.string.trimmer_action),
+                    tag = "menu_trim_ringtone",
+                    onClick = { showTrimmerSheet = true }
                 )
             }
 

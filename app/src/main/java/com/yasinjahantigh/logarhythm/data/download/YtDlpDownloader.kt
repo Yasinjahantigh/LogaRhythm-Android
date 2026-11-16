@@ -23,11 +23,12 @@ class YtDlpDownloader @Inject constructor(
         videoId: String,
         downloadId: String,
         workspace: File,
+        qualityAbrKbps: Int? = null,
         onProgress: (Float, Long, String) -> Unit
     ): File {
         val safeId = DownloadTitleParser.sanitizeFileName(videoId)
         val request = YoutubeDLRequest(url).apply {
-            DownloadCommand.downloadOptions(workspace, safeId, cookies.path())
+            DownloadCommand.downloadOptions(workspace, safeId, cookies.path(), qualityAbrKbps)
                 .forEach { (option, argument) ->
                     if (argument == null) addOption(option) else addOption(option, argument)
                 }

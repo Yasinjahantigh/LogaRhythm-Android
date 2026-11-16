@@ -1,6 +1,8 @@
 package com.yasinjahantigh.logarhythm.download
 
 import com.yasinjahantigh.logarhythm.data.download.musicman.MusicManClient
+import com.yasinjahantigh.logarhythm.domain.model.DownloadResultKind
+import com.yasinjahantigh.logarhythm.domain.model.DownloadSearchCategory
 import com.yasinjahantigh.logarhythm.domain.model.DownloadSource
 import kotlinx.coroutines.test.runTest
 import okhttp3.OkHttpClient
@@ -59,21 +61,82 @@ class MusicManClientTest {
             )
         )
 
-        val results = client.search("saat")
+        val results = client.search("saat", DownloadSearchCategory.TRACK)
 
-        assertEquals(1, results.size)
-        val result = results.single()
+        assertEquals(2, results.size)
+        val result = results.first()
         assertEquals("42", result.id)
         assertEquals("Saat Divari", result.title)
         assertEquals("Mohsen Chavoshi", result.artist)
         assertEquals(DownloadSource.MUSICMAN, result.source)
         assertEquals(291000L, result.durationMs)
         assertEquals("musicman://track/42", result.url)
+        assertTrue(result.hasReadyAudio)
         assertTrue(result.thumbnailUrl.orEmpty().endsWith("/600x600bb.jpg"))
+        assertEquals(false, results[1].hasReadyAudio)
         val request = server.takeRequest()
         assertEquals("/mm/api/search", request.requestUrl?.encodedPath)
         assertEquals("saat", request.requestUrl?.queryParameter("term"))
         assertEquals("50", request.requestUrl?.queryParameter("limit"))
+    }
+
+    @Test
+    fun resolveAudio_prioritizesBaleMirrorOverTelegramAndRoutesToMessageIdProxy() = runTest {
+        client.proxyBase = "https://mm.3rah.ir/api/proxy"
+        server.enqueue(
+            MockResponse().setBody(
+                """
+                {"results": [{"wrapperType": "track", "trackId": "77",
+                  "attachments": {"audioUrls": [
+                    {"quality": "320", "source": "telegram", "url": "https://api.telegram.org/file/bot<token>/77"},
+                    {"quality": "192", "source": "bale", "baleMessageId": "110612", "baleFileUrl": "bale://message/110612"}
+                  ]}}]}
+                """.trimIndent()
+            )
+        )
+
+        val candidates = client.resolveAudioCandidates("77")
+
+        assertEquals(2, candidates.size)
+        assertTrue(candidates.first().isBale)
+        assertEquals("110612", candidates.first().baleMessageId)
+        assertEquals("https://mm.3rah.ir/api/proxy?message_id=110612", client.playableUrl(candidates.first()))
+    }
+
+    @Test
+    fun searchAndLookup_parsesArtistsAndAlbumsCleanly() = runTest {
+        server.enqueue(
+            MockResponse().setBody(
+                """
+                {"results": [
+                  {"wrapperType": "artist", "artistId": 1001, "artistName": "Shadmehr Aghili", "primaryGenreName": "Pop"},
+                  {"wrapperType": "collection", "collectionId": 2002, "collectionName": "Tajrobeh Kon", "artistName": "Shadmehr Aghili", "trackCount": 8, "artworkUrl100": "https://is1-ssl.mzstatic.com/image/thumb/x/100x100bb.jpg"}
+                ]}
+                """.trimIndent()
+            )
+        )
+        server.enqueue(
+            MockResponse().setBody(
+                """
+                {"results": [
+                  {"wrapperType": "collection", "collectionId": 2002, "collectionName": "Tajrobeh Kon", "artistName": "Shadmehr Aghili", "trackCount": 1},
+                  {"wrapperType": "track", "trackId": 3003, "trackName": "Tajrobeh Kon", "artistName": "Shadmehr Aghili", "collectionName": "Tajrobeh Kon", "collectionId": 2002, "trackNumber": 1, "trackTimeMillis": 240000}
+                ]}
+                """.trimIndent()
+            )
+        )
+
+        val searchItems = client.search("shadmehr", DownloadSearchCategory.ALL)
+        assertEquals(2, searchItems.size)
+        assertEquals(DownloadResultKind.ARTIST, searchItems[0].kind)
+        assertEquals(DownloadResultKind.ALBUM, searchItems[1].kind)
+        assertEquals(8, searchItems[1].trackCount)
+
+        val album = client.lookupAlbum("2002")
+        assertEquals("Tajrobeh Kon", album.header?.title)
+        assertEquals(1, album.tracks.size)
+        assertEquals("Tajrobeh Kon", album.tracks.single().album)
+        assertEquals(1, album.tracks.single().trackNumber)
     }
 
     @Test

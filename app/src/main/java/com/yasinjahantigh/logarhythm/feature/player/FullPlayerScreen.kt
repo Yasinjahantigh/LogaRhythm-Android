@@ -106,6 +106,8 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.Canvas
 import androidx.compose.animation.core.animateFloatAsState
 import android.os.Build
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.togetherWith
 import androidx.compose.animation.Crossfade
 import androidx.compose.ui.draw.blur
 import com.yasinjahantigh.logarhythm.ui.components.ArtworkImage
@@ -137,7 +139,8 @@ fun FullPlayerScreen(
     onNavigateToTagEditor: (String) -> Unit = {},
     onNavigateToArtist: ((String) -> Unit)? = null,
     lyricsViewModel: LyricsViewModel = hiltViewModel(),
-    playlistViewModel: PlaylistViewModel = hiltViewModel()
+    playlistViewModel: PlaylistViewModel = hiltViewModel(),
+    artistSplitViewModel: com.yasinjahantigh.logarhythm.feature.artist.ArtistSplitViewModel = hiltViewModel()
 ) {
     val isQueueOpen by viewModel.isQueueOpen.collectAsStateWithLifecycle()
 
@@ -166,10 +169,16 @@ fun FullPlayerScreen(
     val repeatMode by viewModel.repeatMode.collectAsStateWithLifecycle()
     val isFavorite by viewModel.isFavorite.collectAsStateWithLifecycle()
     val playbackSpeed by viewModel.playbackSpeed.collectAsStateWithLifecycle()
+    val playbackPitch by viewModel.playbackPitch.collectAsStateWithLifecycle()
+    val slowedReverb by viewModel.slowedReverb.collectAsStateWithLifecycle()
+    val abLoopStartMs by viewModel.abLoopStartMs.collectAsStateWithLifecycle()
+    val abLoopEndMs by viewModel.abLoopEndMs.collectAsStateWithLifecycle()
+    val doubleTapSeekEnabled by viewModel.doubleTapSeekEnabled.collectAsStateWithLifecycle()
     val sleepTimerRemainingMs by viewModel.sleepTimerRemainingMs.collectAsStateWithLifecycle()
     val sleepTimerRemainingTracks by viewModel.sleepTimerRemainingTracks.collectAsStateWithLifecycle()
     val isSleepTimerEndOfTrack by viewModel.isSleepTimerEndOfTrack.collectAsStateWithLifecycle()
     val playlists by playlistViewModel.playlists.collectAsStateWithLifecycle()
+    val artistSplitConfig by artistSplitViewModel.config.collectAsStateWithLifecycle()
 
     var showLyrics by remember { mutableStateOf(false) }
     var showSpeedDialog by remember { mutableStateOf(false) }
@@ -180,6 +189,7 @@ fun FullPlayerScreen(
     var isVinylMode by remember { mutableStateOf(false) }
     var showRemainingTime by remember { mutableStateOf(false) }
     var showFullArtworkDialog by remember { mutableStateOf(false) }
+    var isCarMode by remember { mutableStateOf(false) }
 
     val track = currentTrack
     val context = LocalContext.current
@@ -191,7 +201,24 @@ fun FullPlayerScreen(
         PlaybackSpeedDialog(
             currentSpeed = playbackSpeed,
             onSpeedSelected = viewModel::setPlaybackSpeed,
+            currentPitch = playbackPitch,
+            onPitchSelected = viewModel::setPlaybackPitch,
+            slowedReverbEnabled = slowedReverb,
+            onToggleSlowedReverb = viewModel::setSlowedReverb,
             onDismiss = { showSpeedDialog = false }
+        )
+    }
+
+    if (isCarMode) {
+        CarModeOverlay(
+            track = track,
+            isPlaying = isPlaying,
+            isFavorite = isFavorite,
+            onTogglePlayPause = viewModel::togglePlayPause,
+            onPrevious = viewModel::previous,
+            onNext = viewModel::next,
+            onToggleFavorite = viewModel::toggleFavorite,
+            onExit = { isCarMode = false }
         )
     }
 
@@ -287,9 +314,22 @@ fun FullPlayerScreen(
         isSleepTimerEndOfTrack -> stringResource(R.string.sleep_timer_end_of_track)
         else -> TimeUtils.formatDuration(sleepTimerRemainingMs ?: 0L)
     }
-    val speedLabel: String? = if (abs(playbackSpeed - 1.0f) > 0.01f) {
+    val speedLabel: String? = if (abs(playbackSpeed - 1.0f) > 0.01f || abs(playbackPitch - 1.0f) > 0.01f || slowedReverb) {
         String.format(Locale.US, "%.1fx", playbackSpeed)
     } else null
+
+    val abLoopStatusText: String? = when {
+        abLoopStartMs != null && abLoopEndMs != null ->
+            "${TimeUtils.formatDuration(abLoopStartMs!!)} – ${TimeUtils.formatDuration(abLoopEndMs!!)}"
+        abLoopStartMs != null ->
+            "A: ${TimeUtils.formatDuration(abLoopStartMs!!)} → B?"
+        else -> null
+    }
+    val abLoopMenuLabel: String? = when {
+        abLoopStartMs == null -> null
+        abLoopEndMs == null -> stringResource(R.string.player_ab_loop_set_b)
+        else -> stringResource(R.string.player_ab_loop_clear)
+    }
 
     val onRewind10 = { viewModel.seekTo((positionState.value - 10_000L).coerceAtLeast(0L)) }
     val onForward10 = { viewModel.seekTo((positionState.value + 10_000L).coerceAtMost(durationMs)) }
@@ -297,7 +337,18 @@ fun FullPlayerScreen(
     // The middle of the screen: big artwork, or lyrics (with a compact song row in portrait).
     val stage: @Composable (Modifier, Boolean) -> Unit = { stageModifier, compactIdentity ->
         Box(modifier = stageModifier) {
-            Crossfade(targetState = showLyrics, label = "player_stage") { lyricsOn ->
+            androidx.compose.animation.AnimatedContent(
+                targetState = showLyrics,
+                transitionSpec = {
+                    (androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(260)) +
+                        androidx.compose.animation.scaleIn(initialScale = 0.94f, animationSpec = androidx.compose.animation.core.tween(260)))
+                        .togetherWith(
+                            androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(180)) +
+                                androidx.compose.animation.scaleOut(targetScale = 0.96f, animationSpec = androidx.compose.animation.core.tween(180))
+                        )
+                },
+                label = "player_stage"
+            ) { lyricsOn ->
                 if (lyricsOn) {
                     Column(modifier = Modifier.fillMaxSize()) {
                         if (compactIdentity) {
@@ -305,6 +356,7 @@ fun FullPlayerScreen(
                                 track = track,
                                 isFavorite = isFavorite,
                                 onToggleFavorite = viewModel::toggleFavorite,
+                                artistSplitConfig = artistSplitConfig,
                                 onArtistClick = onNavigateToArtist
                             )
                         }
@@ -332,6 +384,9 @@ fun FullPlayerScreen(
                             glowColor = animatedBgColor,
                             queue = queue,
                             currentIndex = queueIndex,
+                            doubleTapSeekEnabled = doubleTapSeekEnabled,
+                            onRewind10 = onRewind10,
+                            onForward10 = onForward10,
                             onCommit = viewModel::commitCoverPeek,
                             onArtworkClick = { showFullArtworkDialog = true },
                             modifier = Modifier.size(artworkSize)
@@ -398,6 +453,9 @@ fun FullPlayerScreen(
                             }
                         },
                         onEditSongDetails = { track?.let { onNavigateToTagEditor(it.id) } },
+                        abLoopLabel = abLoopMenuLabel,
+                        onToggleAbLoop = viewModel::toggleAbLoopMarker,
+                        onOpenCarMode = { isCarMode = true },
                         onHideSong = {
                             viewModel.hideCurrentTrack { hidden ->
                                 Toast.makeText(context, context.getString(R.string.track_hidden_toast, hidden.title), Toast.LENGTH_SHORT).show()
@@ -427,6 +485,7 @@ fun FullPlayerScreen(
                                     track = track,
                                     isFavorite = isFavorite,
                                     onToggleFavorite = viewModel::toggleFavorite,
+                                    artistSplitConfig = artistSplitConfig,
                                     onArtistClick = onNavigateToArtist
                                 )
                                 PlaybackTimeline(
@@ -472,8 +531,39 @@ fun FullPlayerScreen(
                                 track = track,
                                 isFavorite = isFavorite,
                                 onToggleFavorite = viewModel::toggleFavorite,
+                                artistSplitConfig = artistSplitConfig,
                                 onArtistClick = onNavigateToArtist
                             )
+                        }
+
+                        if (abLoopStatusText != null) {
+                            Surface(
+                                shape = CircleShape,
+                                color = MaterialTheme.colorScheme.primaryContainer,
+                                onClick = viewModel::toggleAbLoopMarker,
+                                modifier = Modifier.padding(top = 6.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = "A–B · $abLoopStatusText",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Icon(
+                                        imageVector = Icons.Default.Close,
+                                        contentDescription = stringResource(R.string.player_ab_loop_clear),
+                                        modifier = Modifier
+                                            .size(14.dp)
+                                            .clickable { viewModel.clearAbLoop() },
+                                        tint = MaterialTheme.colorScheme.onPrimaryContainer
+                                    )
+                                }
+                            }
                         }
 
                         PlaybackTimeline(
@@ -579,6 +669,9 @@ private fun PlayerArtwork(
     glowColor: Color,
     queue: List<Track>,
     currentIndex: Int,
+    doubleTapSeekEnabled: Boolean,
+    onRewind10: () -> Unit,
+    onForward10: () -> Unit,
     onCommit: (Int, Int) -> Unit,
     onArtworkClick: () -> Unit,
     modifier: Modifier = Modifier
@@ -662,22 +755,59 @@ private fun PlayerArtwork(
             if (isVinylMode) {
                 VinylTurntable(track, isPlaying, Modifier.fillMaxSize(), onArtworkClick = onArtworkClick)
             } else {
-                ArtworkImage(
-                    uri = track?.artworkUri,
-                    fallbackKey = title,
-                    shape = shape,
-                    glyphSize = 96.sp,
-                    contentDescription = stringResource(R.string.cd_artwork, title),
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .shadow(
-                            elevation = 18.dp,
-                            shape = shape,
-                            ambientColor = glowColor.copy(alpha = 0.6f),
-                            spotColor = glowColor
-                        )
-                        .clickable(onClick = onArtworkClick)
-                )
+                var seekBadge by remember { mutableStateOf<String?>(null) }
+                LaunchedEffect(seekBadge) {
+                    if (seekBadge != null) {
+                        kotlinx.coroutines.delay(550)
+                        seekBadge = null
+                    }
+                }
+                Box(modifier = Modifier.fillMaxSize()) {
+                    ArtworkImage(
+                        uri = track?.artworkUri,
+                        fallbackKey = title,
+                        shape = shape,
+                        glyphSize = 96.sp,
+                        contentDescription = stringResource(R.string.cd_artwork, title),
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .shadow(
+                                elevation = 18.dp,
+                                shape = shape,
+                                ambientColor = glowColor.copy(alpha = 0.6f),
+                                spotColor = glowColor
+                            )
+                            .pointerInput(doubleTapSeekEnabled, onArtworkClick, onRewind10, onForward10) {
+                                detectTapGestures(
+                                    onTap = { onArtworkClick() },
+                                    onDoubleTap = if (doubleTapSeekEnabled) { offset ->
+                                        if (offset.x < size.width / 2f) {
+                                            onRewind10()
+                                            seekBadge = "−10s"
+                                        } else {
+                                            onForward10()
+                                            seekBadge = "+10s"
+                                        }
+                                    } else null
+                                )
+                            }
+                    )
+                    seekBadge?.let { label ->
+                        Surface(
+                            shape = CircleShape,
+                            color = Color.Black.copy(alpha = 0.72f),
+                            modifier = Modifier.align(Alignment.Center)
+                        ) {
+                            Text(
+                                text = label,
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White,
+                                modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp)
+                            )
+                        }
+                    }
+                }
             }
         }
     }
@@ -718,6 +848,7 @@ private fun CompactTrackRow(
     isFavorite: Boolean,
     onToggleFavorite: () -> Unit,
     modifier: Modifier = Modifier,
+    artistSplitConfig: com.yasinjahantigh.logarhythm.domain.library.ArtistSplitConfig = com.yasinjahantigh.logarhythm.domain.library.ArtistSplitConfig(),
     onArtistClick: ((String) -> Unit)? = null
 ) {
     val title = track?.title.cleanMetaOrNull() ?: stringResource(R.string.unknown_title)
@@ -743,17 +874,13 @@ private fun CompactTrackRow(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
-            Text(
-                text = artist,
+            com.yasinjahantigh.logarhythm.ui.components.SplitArtistText(
+                rawArtist = track?.artist,
+                displayArtist = artist,
+                artistSplitConfig = artistSplitConfig,
+                onArtistClick = onArtistClick,
                 style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.primary,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier
-                    .clip(RoundedCornerShape(6.dp))
-                    .clickable(enabled = onArtistClick != null && track?.artist?.isNotBlank() == true) {
-                        track?.artist?.let { onArtistClick?.invoke(it) }
-                    }
+                color = MaterialTheme.colorScheme.primary
             )
         }
         FavoriteButton(isFavorite = isFavorite, onToggleFavorite = onToggleFavorite)
@@ -766,6 +893,7 @@ fun TrackIdentityAndActions(
     isFavorite: Boolean,
     onToggleFavorite: () -> Unit,
     modifier: Modifier = Modifier,
+    artistSplitConfig: com.yasinjahantigh.logarhythm.domain.library.ArtistSplitConfig = com.yasinjahantigh.logarhythm.domain.library.ArtistSplitConfig(),
     onArtistClick: ((String) -> Unit)? = null
 ) {
     val displayTitle = track?.title.cleanMetaOrNull() ?: stringResource(R.string.unknown_title)
@@ -789,17 +917,13 @@ fun TrackIdentityAndActions(
                 modifier = Modifier.basicMarquee(initialDelayMillis = 1800)
             )
             Spacer(modifier = Modifier.height(2.dp))
-            Text(
-                text = displayArtist,
+            com.yasinjahantigh.logarhythm.ui.components.SplitArtistText(
+                rawArtist = track?.artist,
+                displayArtist = displayArtist,
+                artistSplitConfig = artistSplitConfig,
+                onArtistClick = onArtistClick,
                 style = MaterialTheme.typography.titleMedium,
-                color = scheme.primary,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier
-                    .clip(RoundedCornerShape(6.dp))
-                    .clickable(enabled = onArtistClick != null && track?.artist?.isNotBlank() == true) {
-                        track?.artist?.let { onArtistClick?.invoke(it) }
-                    }
+                color = scheme.primary
             )
         }
         FavoriteButton(isFavorite = isFavorite, onToggleFavorite = onToggleFavorite)

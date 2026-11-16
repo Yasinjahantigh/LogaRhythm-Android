@@ -24,5 +24,10 @@ data class EqualizerState(
     val bassBoostStrength: Short = 0,
     val virtualizerStrength: Short = 0,
     val isBassBoostSupported: Boolean = true,
-    val isVirtualizerSupported: Boolean = true
+    val isVirtualizerSupported: Boolean = true,
+    val stereoBalance: Float = 0f,
+    val monoAudio: Boolean = false,
+    val deviceAutoEqEnabled: Boolean = false,
+    val activeDeviceLabel: String = "Speaker",
+    val reverbEnabled: Boolean = false
 )

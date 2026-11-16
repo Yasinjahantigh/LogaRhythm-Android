@@ -1,5 +1,6 @@
 package com.yasinjahantigh.logarhythm.feature.stats
 
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -10,12 +11,15 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Headphones
 import androidx.compose.material.icons.filled.QueryStats
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -36,11 +40,13 @@ import com.yasinjahantigh.logarhythm.domain.model.TimeRange
 fun TimeRangeSelector(
     selectedRange: TimeRange,
     onRangeSelected: (TimeRange) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    customLabel: String? = null
 ) {
     Row(
         modifier = modifier
             .fillMaxWidth()
+            .horizontalScroll(rememberScrollState())
             .padding(horizontal = 16.dp, vertical = 8.dp)
             .testTag("time_range_selector"),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -50,7 +56,9 @@ fun TimeRangeSelector(
             val label = when (range) {
                 TimeRange.THIS_WEEK -> stringResource(R.string.stats_range_week)
                 TimeRange.THIS_MONTH -> stringResource(R.string.stats_range_month)
+                TimeRange.THIS_YEAR -> stringResource(R.string.stats_range_year)
                 TimeRange.ALL_TIME -> stringResource(R.string.stats_range_all_time)
+                TimeRange.CUSTOM -> customLabel ?: stringResource(R.string.stats_range_custom)
             }
             FilterChip(
                 selected = selectedRange == range,
@@ -65,7 +73,8 @@ fun TimeRangeSelector(
 @Composable
 fun TotalTimeCard(
     totalTimeMs: Long,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onOpenReport: (() -> Unit)? = null
 ) {
     Card(
         modifier = modifier
@@ -92,7 +101,7 @@ fun TotalTimeCard(
 
             Spacer(modifier = Modifier.width(16.dp))
 
-            Column {
+            Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = stringResource(R.string.stats_total_time),
                     style = MaterialTheme.typography.labelLarge,
@@ -105,6 +114,15 @@ fun TotalTimeCard(
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onPrimaryContainer
                 )
+            }
+
+            if (onOpenReport != null) {
+                FilledTonalIconButton(onClick = onOpenReport) {
+                    Icon(
+                        imageVector = Icons.Filled.Share,
+                        contentDescription = stringResource(R.string.stats_report_action)
+                    )
+                }
             }
         }
     }

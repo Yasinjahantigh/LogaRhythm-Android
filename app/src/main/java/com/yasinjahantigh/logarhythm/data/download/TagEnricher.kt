@@ -37,17 +37,20 @@ class TagEnricher @Inject constructor() {
         year: String? = null,
         trackNumber: Int? = null,
         discNumber: Int? = null,
-        composer: String? = null
+        composer: String? = null,
+        lyrics: String? = null
     ): TagEnrichOutcome = withContext(Dispatchers.IO) {
         try {
             val engine = TagEngines.detect(file)
                 ?: return@withContext TagEnrichOutcome(TagEnrichStatus.UNSUPPORTED)
             val current = engine.read(file)
+            val cleanLyrics = lyrics?.trim()?.takeIf { it.isNotBlank() && current.lyrics.isNullOrBlank() }
             val edit = TagEdit(
                 title = improvement(current.title, title),
                 artist = improvement(current.artist, artist),
                 album = improvement(current.album, album),
                 genre = improvement(current.genre, genre),
+                lyrics = cleanLyrics,
                 artwork = artwork?.takeIf { it.isNotEmpty() },
                 artworkMime = artwork?.takeIf { it.isNotEmpty() }?.let { "image/jpeg" },
                 year = year?.let { improvement(current.year, it) },

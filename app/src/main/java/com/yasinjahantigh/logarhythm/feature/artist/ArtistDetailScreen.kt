@@ -17,7 +17,9 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -61,6 +63,7 @@ fun ArtistDetailScreen(
     val tracks by viewModel.tracks.collectAsStateWithLifecycle()
     val currentTrack by viewModel.currentTrack.collectAsStateWithLifecycle()
     val isPlaying by viewModel.isPlaying.collectAsStateWithLifecycle()
+    val isFollowed by viewModel.isFollowed.collectAsStateWithLifecycle()
     val playlists by playlistViewModel.playlists.collectAsStateWithLifecycle()
 
     val topTracks = profile?.topTracks.orEmpty()
@@ -156,7 +159,32 @@ fun ArtistDetailScreen(
                     actionsEnabled = tracks.isNotEmpty(),
                     backTag = "artist_back_button",
                     playTag = "artist_play_button",
-                    shuffleTag = "artist_shuffle_button"
+                    shuffleTag = "artist_shuffle_button",
+                    topEndAction = {
+                        if (isFollowed) {
+                            FilledTonalButton(
+                                onClick = viewModel::toggleFollow,
+                                shape = RoundedCornerShape(50),
+                                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp)
+                            ) {
+                                Text(
+                                    text = stringResource(R.string.artist_following),
+                                    style = MaterialTheme.typography.labelLarge
+                                )
+                            }
+                        } else {
+                            OutlinedButton(
+                                onClick = viewModel::toggleFollow,
+                                shape = RoundedCornerShape(50),
+                                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp)
+                            ) {
+                                Text(
+                                    text = stringResource(R.string.artist_follow),
+                                    style = MaterialTheme.typography.labelLarge
+                                )
+                            }
+                        }
+                    }
                 )
             }
 

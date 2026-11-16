@@ -20,9 +20,11 @@ import androidx.core.view.WindowCompat
 fun LogaRhythmTheme(
     themeMode: String = "system",
     themeStyle: String = "default",
+    themePresetId: String = ThemePresets.DEFAULT_ID,
     customAccentColor: Color = Color(0xFFF4B266),
     customBase: String = "dark",
     cornerRoundness: String = "standard",
+    appFont: String = "default",
     seedArtworkColor: Color? = null,
     hasCustomBackground: Boolean = false,
     darkTheme: Boolean = when (themeMode) {
@@ -34,14 +36,17 @@ fun LogaRhythmTheme(
 ) {
     val context = LocalContext.current
     val view = LocalView.current
+    val selectedPreset = if (themeStyle == "preset") ThemePresets.byId(themePresetId) else null
     val effectiveDark = when (themeStyle) {
         "oled" -> true
+        "preset" -> selectedPreset?.isDark ?: true
         "custom" -> customBase != "light"
         else -> darkTheme
     }
     val fallback = if (effectiveDark) DarkColorScheme else LightColorScheme
     val rawColorScheme = when (themeStyle) {
         "oled" -> OledColorScheme
+        "preset" -> selectedPreset?.toColorScheme() ?: fallback
         "album_art" -> seedArtworkColor?.let { generateDynamicSchemeFromSeed(it, effectiveDark) } ?: fallback
         "wallpaper" -> if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             if (effectiveDark) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
@@ -72,7 +77,7 @@ fun LogaRhythmTheme(
 
     MaterialTheme(
         colorScheme = colorScheme,
-        typography = Typography,
+        typography = typographyForFont(appFont),
         shapes = getAppShapes(cornerRoundness),
         content = content
     )
@@ -84,7 +89,7 @@ private tailrec fun Context.findActivity(): Activity? = when (this) {
     else -> null
 }
 
-private fun ColorScheme.withBlackSurfaces(): ColorScheme = copy(
+internal fun ColorScheme.withBlackSurfaces(): ColorScheme = copy(
     background = Color.Black,
     surface = Color.Black,
     surfaceDim = Color.Black,

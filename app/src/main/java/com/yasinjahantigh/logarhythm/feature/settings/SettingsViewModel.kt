@@ -69,6 +69,14 @@ class SettingsViewModel @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0f)
     val resumeOnHeadset: StateFlow<Boolean> = preferencesManager.resumeOnHeadset
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
+    val privateSession: StateFlow<Boolean> = preferencesManager.privateSession
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+    val doubleTapSeek: StateFlow<Boolean> = preferencesManager.doubleTapSeek
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
+    val folderWhitelistMode: StateFlow<Boolean> = preferencesManager.folderWhitelistMode
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+    val whitelistedFolders: StateFlow<Set<String>> = preferencesManager.whitelistedFolders
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptySet())
     val splitArtists: StateFlow<Boolean> = preferencesManager.splitArtists
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
     val artistSeparators: StateFlow<List<String>> = preferencesManager.artistSeparators
@@ -343,6 +351,30 @@ class SettingsViewModel @Inject constructor(
     fun toggleExcludedFolder(folder: String) {
         viewModelScope.launch {
             preferencesManager.toggleExcludedFolder(folder)
+            trackRepository.refreshTracks()
+        }
+    }
+
+    fun setPrivateSession(enabled: Boolean) {
+        viewModelScope.launch { preferencesManager.setPrivateSession(enabled) }
+    }
+
+    fun setDoubleTapSeek(enabled: Boolean) {
+        viewModelScope.launch { preferencesManager.setDoubleTapSeek(enabled) }
+    }
+
+    fun setFolderWhitelistMode(enabled: Boolean) {
+        viewModelScope.launch {
+            preferencesManager.setFolderWhitelistMode(enabled)
+            trackRepository.refreshTracks()
+        }
+    }
+
+    fun toggleWhitelistedFolder(folder: String) {
+        viewModelScope.launch {
+            val current = whitelistedFolders.value
+            val next = if (folder in current) current - folder else current + folder
+            preferencesManager.setWhitelistedFolders(next)
             trackRepository.refreshTracks()
         }
     }

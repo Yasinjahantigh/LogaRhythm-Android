@@ -16,20 +16,8 @@ abstract class MusicWidgetReceiverBase : GlanceAppWidgetReceiver() {
     }
 }
 
-class MusicWidgetSmallReceiver : MusicWidgetReceiverBase() {
-    override val glanceAppWidget: GlanceAppWidget = MusicWidgetSmall()
-}
-
-class MusicWidgetStripReceiver : MusicWidgetReceiverBase() {
-    override val glanceAppWidget: GlanceAppWidget = MusicWidgetStrip()
-}
-
 class MusicWidgetMediumReceiver : MusicWidgetReceiverBase() {
     override val glanceAppWidget: GlanceAppWidget = MusicWidgetMedium()
-}
-
-class MusicWidgetLargeReceiver : MusicWidgetReceiverBase() {
-    override val glanceAppWidget: GlanceAppWidget = MusicWidgetLarge()
 }
 
 class MusicWidgetPlayerReceiver : MusicWidgetReceiverBase() {

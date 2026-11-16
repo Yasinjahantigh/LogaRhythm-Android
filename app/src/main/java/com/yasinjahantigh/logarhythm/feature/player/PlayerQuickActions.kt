@@ -93,9 +93,15 @@ private fun QuickAction(
         targetValue = if (active) scheme.primaryContainer else scheme.primaryContainer.copy(alpha = 0f),
         label = "quick_action_container"
     )
+    val scale by androidx.compose.animation.core.animateFloatAsState(
+        targetValue = if (active) 1.04f else 1f,
+        animationSpec = androidx.compose.animation.core.spring(dampingRatio = 0.65f, stiffness = 360f),
+        label = "quick_action_scale"
+    )
     val tint = if (active) scheme.onPrimaryContainer else scheme.onSurfaceVariant
     Column(
         modifier = modifier
+            .then(Modifier)
             .clip(RoundedCornerShape(24.dp))
             .background(container)
             .clickable(onClick = onClick)

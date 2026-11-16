@@ -84,26 +84,28 @@ fun SwipeToPlayNext(
                 )
             }
     ) {
-        Row(
-            modifier = Modifier
-                .matchParentSize()
-                .padding(start = 22.dp)
-                .graphicsLayer { alpha = (offset / threshold).coerceIn(0f, 1f) },
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(
-                imageVector = Icons.AutoMirrored.Filled.QueueMusic,
-                contentDescription = null,
-                tint = onAccent,
-                modifier = Modifier.size(22.dp)
-            )
-            Spacer(modifier = Modifier.size(8.dp))
-            Text(
-                text = playNextLabel,
-                style = MaterialTheme.typography.labelLarge,
-                fontWeight = FontWeight.SemiBold,
-                color = onAccent
-            )
+        if (offset > 0f) {
+            Row(
+                modifier = Modifier
+                    .matchParentSize()
+                    .padding(start = 22.dp)
+                    .graphicsLayer { alpha = (offset / threshold).coerceIn(0f, 1f) },
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.QueueMusic,
+                    contentDescription = null,
+                    tint = onAccent,
+                    modifier = Modifier.size(22.dp)
+                )
+                Spacer(modifier = Modifier.size(8.dp))
+                Text(
+                    text = playNextLabel,
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    color = onAccent
+                )
+            }
         }
 
         Box(

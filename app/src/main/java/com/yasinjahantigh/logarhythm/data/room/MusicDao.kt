@@ -197,6 +197,15 @@ interface MusicDao {
     @Query("SELECT COALESCE(SUM(listenedMs), 0) FROM play_events WHERE timestamp >= :sinceTimestamp")
     fun getTotalListenTimeMs(sinceTimestamp: Long): Flow<Long>
 
+    @Query("SELECT COALESCE(SUM(listenedMs), 0) FROM play_events WHERE timestamp >= :sinceTimestamp AND timestamp <= :untilTimestamp")
+    fun getTotalListenTimeMsInRange(sinceTimestamp: Long, untilTimestamp: Long): Flow<Long>
+
+    @Query("SELECT COUNT(*) FROM play_events WHERE timestamp >= :sinceTimestamp AND timestamp <= :untilTimestamp AND skipped = 0")
+    fun getCompletedPlayCountInRange(sinceTimestamp: Long, untilTimestamp: Long): Flow<Int>
+
+    @Query("SELECT timestamp FROM play_events WHERE timestamp >= :sinceTimestamp AND timestamp <= :untilTimestamp AND skipped = 0")
+    fun getPlayTimestampsInRange(sinceTimestamp: Long, untilTimestamp: Long): Flow<List<Long>>
+
     /** Completed plays per track; used for library sorting, artist top tracks and smart mixes. */
     @Query("""
         SELECT trackId, COUNT(*) AS playCount, MAX(timestamp) AS lastPlayedAt
@@ -220,6 +229,19 @@ interface MusicDao {
     fun getTopTracks(sinceTimestamp: Long, limit: Int = 50): Flow<List<TrackStatQueryResult>>
 
     @Query("""
+        SELECT t.id, t.title, t.artist, t.album, t.durationMs, t.artworkUri, t.sourceType, t.uri, t.dateModified, t.folder, t.genre, t.dateAdded,
+               COUNT(pe.id) AS playCount,
+               COALESCE(SUM(pe.listenedMs), 0) AS totalListenedMs
+        FROM play_events pe
+        INNER JOIN tracks t ON pe.trackId = t.id
+        WHERE pe.timestamp >= :sinceTimestamp AND pe.timestamp <= :untilTimestamp AND pe.skipped = 0
+        GROUP BY pe.trackId
+        ORDER BY playCount DESC, totalListenedMs DESC
+        LIMIT :limit
+    """)
+    fun getTopTracksInRange(sinceTimestamp: Long, untilTimestamp: Long, limit: Int = 50): Flow<List<TrackStatQueryResult>>
+
+    @Query("""
         SELECT t.artist,
                COUNT(pe.id) AS playCount,
                COALESCE(SUM(pe.listenedMs), 0) AS totalListenedMs,
@@ -232,6 +254,20 @@ interface MusicDao {
         LIMIT :limit
     """)
     fun getTopArtists(sinceTimestamp: Long, limit: Int = 50): Flow<List<ArtistStatQueryResult>>
+
+    @Query("""
+        SELECT t.artist,
+               COUNT(pe.id) AS playCount,
+               COALESCE(SUM(pe.listenedMs), 0) AS totalListenedMs,
+               COUNT(DISTINCT t.id) AS trackCount
+        FROM play_events pe
+        INNER JOIN tracks t ON pe.trackId = t.id
+        WHERE pe.timestamp >= :sinceTimestamp AND pe.timestamp <= :untilTimestamp AND pe.skipped = 0 AND t.artist != ''
+        GROUP BY t.artist
+        ORDER BY playCount DESC, totalListenedMs DESC
+        LIMIT :limit
+    """)
+    fun getTopArtistsInRange(sinceTimestamp: Long, untilTimestamp: Long, limit: Int = 50): Flow<List<ArtistStatQueryResult>>
 
     @Query("""
         SELECT t.album,
@@ -248,6 +284,22 @@ interface MusicDao {
         LIMIT :limit
     """)
     fun getTopAlbums(sinceTimestamp: Long, limit: Int = 50): Flow<List<AlbumStatQueryResult>>
+
+    @Query("""
+        SELECT t.album,
+               COALESCE(NULLIF(t.albumArtist, ''), t.artist) AS artist,
+               MIN(t.artworkUri) AS artworkUri,
+               COUNT(pe.id) AS playCount,
+               COALESCE(SUM(pe.listenedMs), 0) AS totalListenedMs,
+               COUNT(DISTINCT t.id) AS trackCount
+        FROM play_events pe
+        INNER JOIN tracks t ON pe.trackId = t.id
+        WHERE pe.timestamp >= :sinceTimestamp AND pe.timestamp <= :untilTimestamp AND pe.skipped = 0 AND t.album != ''
+        GROUP BY t.album, COALESCE(NULLIF(t.albumArtist, ''), t.artist)
+        ORDER BY playCount DESC, totalListenedMs DESC
+        LIMIT :limit
+    """)
+    fun getTopAlbumsInRange(sinceTimestamp: Long, untilTimestamp: Long, limit: Int = 50): Flow<List<AlbumStatQueryResult>>
 
     @Query("""
         SELECT t.*

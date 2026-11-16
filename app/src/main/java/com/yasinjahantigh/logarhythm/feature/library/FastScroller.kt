@@ -7,7 +7,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.offset
@@ -31,6 +30,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntOffset
@@ -39,6 +39,11 @@ import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
+/**
+ * Scrollbar with quick-jump letter bubble.
+ * Reads [LazyListState.firstVisibleItemIndex] strictly inside the layout/offset lambda so
+ * scrolling never triggers recomposition of the wrapped LazyColumn.
+ */
 @Composable
 fun FastScroller(
     listState: LazyListState,
@@ -48,7 +53,6 @@ fun FastScroller(
     content: @Composable () -> Unit
 ) {
     if (itemCount < 10) {
-        // No fast scroll needed for tiny lists
         Box(modifier = modifier.fillMaxSize()) {
             content()
         }
@@ -59,25 +63,27 @@ fun FastScroller(
     var isDragging by remember { mutableStateOf(false) }
     var currentLetter by remember { mutableStateOf("") }
     var thumbPositionRatio by remember { mutableFloatStateOf(0f) }
+    var maxHeightPx by remember { mutableFloatStateOf(1f) }
+    val thumbHeightDp = 44.dp
+    val thumbHeightPx = with(LocalDensity.current) { thumbHeightDp.toPx() }
 
-    BoxWithConstraints(modifier = modifier.fillMaxSize()) {
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .onSizeChanged { maxHeightPx = it.height.toFloat().coerceAtLeast(1f) }
+    ) {
         content()
 
-        val maxHeightPx = with(LocalDensity.current) { maxHeight.toPx() }
-        val thumbHeightDp = 44.dp
-        val thumbHeightPx = with(LocalDensity.current) { thumbHeightDp.toPx() }
-        val availableTrackHeight = (maxHeightPx - thumbHeightPx).coerceAtLeast(1f)
+        fun computeThumbOffsetPx(): Float {
+            val availableTrackHeight = (maxHeightPx - thumbHeightPx).coerceAtLeast(1f)
+            val ratio = if (isDragging) {
+                thumbPositionRatio
+            } else {
+                (listState.firstVisibleItemIndex.toFloat() / itemCount.toFloat()).coerceIn(0f, 1f)
+            }
+            return ratio * availableTrackHeight
+        }
 
-        // Calculate thumb position based on scroll state when not dragging
-        val visibleItemIndex = listState.firstVisibleItemIndex
-        val derivedRatio = if (itemCount > 0) {
-            (visibleItemIndex.toFloat() / itemCount.toFloat()).coerceIn(0f, 1f)
-        } else 0f
-
-        val effectiveRatio = if (isDragging) thumbPositionRatio else derivedRatio
-        val thumbOffsetPx = effectiveRatio * availableTrackHeight
-
-        // Drag bar container on the end side
         Box(
             modifier = Modifier
                 .align(Alignment.CenterEnd)
@@ -121,11 +127,10 @@ fun FastScroller(
                     )
                 }
         ) {
-            // Thumb pill
             Box(
                 modifier = Modifier
                     .align(Alignment.TopEnd)
-                    .offset { IntOffset(0, thumbOffsetPx.roundToInt()) }
+                    .offset { IntOffset(0, computeThumbOffsetPx().roundToInt()) }
                     .size(width = 6.dp, height = thumbHeightDp)
                     .clip(RoundedCornerShape(3.dp))
                     .background(
@@ -135,7 +140,6 @@ fun FastScroller(
             )
         }
 
-        // Alphabet Bubble Indicator
         AnimatedVisibility(
             visible = isDragging && currentLetter.isNotBlank(),
             enter = fadeIn(),
@@ -145,7 +149,8 @@ fun FastScroller(
                 .offset {
                     IntOffset(
                         x = -72,
-                        y = (thumbOffsetPx - 16).roundToInt().coerceIn(20, (maxHeightPx - 80).roundToInt())
+                        y = (computeThumbOffsetPx() - 16).roundToInt()
+                            .coerceIn(20, (maxHeightPx - 80).roundToInt().coerceAtLeast(20))
                     )
                 }
         ) {

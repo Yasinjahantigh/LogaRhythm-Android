@@ -40,6 +40,7 @@ fun rememberMediaStoreConsent(): MediaStoreConsentActions {
         val approved = result.resultCode == Activity.RESULT_OK
         when (val pending = holder.take()) {
             is Pending.Write -> if (approved) pending.onApproved() else pending.onCancelled()
+            is Pending.WriteMultiple -> if (approved) pending.onApproved(pending.tracks) else pending.onCancelled(pending.tracks)
             is Pending.Delete -> if (approved) pending.onApproved(pending.track) else pending.onCancelled(pending.track)
             is Pending.DeleteMultiple -> if (approved) pending.onApproved(pending.tracks) else pending.onCancelled(pending.tracks)
             else -> Unit
@@ -140,6 +141,33 @@ fun rememberMediaStoreConsent(): MediaStoreConsentActions {
                     }
                 }
             }
+        },
+        requestWriteMultiple = { tracks, onApproved, onCancelled ->
+            when {
+                holder.busy -> onCancelled(tracks)
+                tracks.isEmpty() -> onApproved(tracks)
+                Build.VERSION.SDK_INT < Build.VERSION_CODES.R ->
+                    withLegacyAccess({ onApproved(tracks) }, { onCancelled(tracks) })
+                else -> scope.launch {
+                    val uris = tracks.mapNotNull { libraryUri(it) }
+                        .distinct()
+                        .filterNot { hasWriteGrant(context, it) }
+                    if (uris.isEmpty()) {
+                        onApproved(tracks)
+                    } else {
+                        val sender = runCatching {
+                            MediaStore.createWriteRequest(context.contentResolver, uris).intentSender
+                        }.getOrNull()
+                        if (sender == null) {
+                            onCancelled(tracks)
+                        } else {
+                            holder.pending = Pending.WriteMultiple(tracks, onApproved, onCancelled)
+                            runCatching { senderLauncher.launch(IntentSenderRequest.Builder(sender).build()) }
+                                .onFailure { holder.take(); onCancelled(tracks) }
+                        }
+                    }
+                }
+            }
         }
     )
 }
@@ -152,6 +180,7 @@ private class PendingHolder {
 
 private sealed interface Pending {
     class Write(val onApproved: () -> Unit, val onCancelled: () -> Unit) : Pending
+    class WriteMultiple(val tracks: List<Track>, val onApproved: (List<Track>) -> Unit, val onCancelled: (List<Track>) -> Unit) : Pending
     class Delete(val track: Track, val onApproved: (Track) -> Unit, val onCancelled: (Track) -> Unit) : Pending
     class DeleteMultiple(val tracks: List<Track>, val onApproved: (List<Track>) -> Unit, val onCancelled: (List<Track>) -> Unit) : Pending
     class Permission(val onGranted: () -> Unit, val onDenied: () -> Unit) : Pending
@@ -178,10 +207,14 @@ private fun hasWriteGrant(context: Context, uri: Uri): Boolean = try {
 class MediaStoreConsentActions internal constructor(
     private val requestWrite: (Track, () -> Unit, () -> Unit) -> Unit,
     private val requestDelete: (Track, (Track) -> Unit, (Track) -> Unit) -> Unit,
-    private val requestDeleteMultiple: (List<Track>, (List<Track>) -> Unit, (List<Track>) -> Unit) -> Unit
+    private val requestDeleteMultiple: (List<Track>, (List<Track>) -> Unit, (List<Track>) -> Unit) -> Unit,
+    private val requestWriteMultiple: (List<Track>, (List<Track>) -> Unit, (List<Track>) -> Unit) -> Unit
 ) {
     fun write(track: Track, onApproved: () -> Unit, onCancelled: () -> Unit = {}) =
         requestWrite(track, onApproved, onCancelled)
+
+    fun writeTracks(tracks: List<Track>, onApproved: (List<Track>) -> Unit, onCancelled: (List<Track>) -> Unit = {}) =
+        requestWriteMultiple(tracks, onApproved, onCancelled)
 
     fun delete(track: Track, onApproved: (Track) -> Unit, onCancelled: (Track) -> Unit = {}) =
         requestDelete(track, onApproved, onCancelled)

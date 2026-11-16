@@ -12,9 +12,13 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Album
 import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -35,6 +39,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.yasinjahantigh.logarhythm.R
 import com.yasinjahantigh.logarhythm.domain.model.DownloadItem
+import com.yasinjahantigh.logarhythm.domain.model.DownloadResultKind
 import com.yasinjahantigh.logarhythm.domain.model.DownloadSearchResult
 import com.yasinjahantigh.logarhythm.domain.model.DownloadStatus
 import com.yasinjahantigh.logarhythm.ui.components.ArtworkImage
@@ -45,6 +50,9 @@ fun DownloadResultCard(
     activeItem: DownloadItem?,
     onClick: () -> Unit,
     onDownloadAlbum: (() -> Unit)? = null,
+    isPreviewLoading: Boolean = false,
+    isPreviewPlaying: Boolean = false,
+    onTogglePreview: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     Card(
@@ -65,7 +73,12 @@ fun DownloadResultCard(
                 uri = result.thumbnailUrl,
                 fallbackKey = result.title,
                 modifier = Modifier.size(56.dp),
-                shape = RoundedCornerShape(14.dp),
+                shape = if (result.kind == DownloadResultKind.ARTIST) CircleShape else RoundedCornerShape(14.dp),
+                icon = when (result.kind) {
+                    DownloadResultKind.ARTIST -> Icons.Filled.Person
+                    DownloadResultKind.ALBUM -> Icons.Filled.Album
+                    else -> null
+                },
                 contentDescription = stringResource(R.string.cd_artwork, result.title)
             )
             Spacer(modifier = Modifier.width(12.dp))
@@ -80,6 +93,23 @@ fun DownloadResultCard(
                 Spacer(modifier = Modifier.padding(top = 3.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     SourceBadge(result)
+                    if (result.source == com.yasinjahantigh.logarhythm.domain.model.DownloadSource.MUSICMAN &&
+                        result.kind == DownloadResultKind.TRACK &&
+                        !result.hasReadyAudio
+                    ) {
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Surface(
+                            shape = CircleShape,
+                            color = MaterialTheme.colorScheme.tertiaryContainer,
+                            contentColor = MaterialTheme.colorScheme.onTertiaryContainer
+                        ) {
+                            Text(
+                                text = stringResource(R.string.download_crawl_badge),
+                                style = MaterialTheme.typography.labelSmall,
+                                modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp)
+                            )
+                        }
+                    }
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
                         text = result.artist.ifBlank { stringResource(R.string.unknown_artist) },
@@ -123,33 +153,61 @@ fun DownloadResultCard(
                 }
             }
             Spacer(modifier = Modifier.width(8.dp))
-            if (onDownloadAlbum != null && activeItem?.isActive != true) {
-                FilledTonalIconButton(onClick = onDownloadAlbum) {
+            if (result.kind != com.yasinjahantigh.logarhythm.domain.model.DownloadResultKind.TRACK) {
+                FilledTonalIconButton(onClick = onClick) {
                     Icon(
-                        imageVector = Icons.Filled.Album,
-                        contentDescription = stringResource(R.string.download_album)
+                        imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                        contentDescription = result.title
                     )
                 }
-                Spacer(modifier = Modifier.width(6.dp))
-            }
-            when {
-                activeItem?.isActive == true -> CircularProgressIndicator(
-                    modifier = Modifier.size(24.dp),
-                    strokeWidth = 2.dp
-                )
-                activeItem?.status == DownloadStatus.SAVED -> Icon(
-                    imageVector = Icons.Filled.CheckCircle,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary
-                )
-                else -> FilledIconButton(
-                    onClick = onClick,
-                    modifier = Modifier.testTag("download_action_${result.source.raw}_${result.id}")
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.Download,
-                        contentDescription = stringResource(R.string.cd_download_item, result.title)
+            } else {
+                if (onTogglePreview != null) {
+                    FilledTonalIconButton(onClick = onTogglePreview) {
+                        when {
+                            isPreviewLoading -> CircularProgressIndicator(
+                                modifier = Modifier.size(18.dp),
+                                strokeWidth = 2.dp
+                            )
+                            isPreviewPlaying -> Icon(
+                                imageVector = Icons.Filled.Pause,
+                                contentDescription = stringResource(R.string.cd_pause)
+                            )
+                            else -> Icon(
+                                imageVector = Icons.Filled.PlayArrow,
+                                contentDescription = stringResource(R.string.download_preview_action)
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.width(6.dp))
+                }
+                if (onDownloadAlbum != null && activeItem?.isActive != true) {
+                    FilledTonalIconButton(onClick = onDownloadAlbum) {
+                        Icon(
+                            imageVector = Icons.Filled.Album,
+                            contentDescription = stringResource(R.string.download_album)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(6.dp))
+                }
+                when {
+                    activeItem?.isActive == true -> CircularProgressIndicator(
+                        modifier = Modifier.size(24.dp),
+                        strokeWidth = 2.dp
                     )
+                    activeItem?.status == DownloadStatus.SAVED -> Icon(
+                        imageVector = Icons.Filled.CheckCircle,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                    else -> FilledIconButton(
+                        onClick = onClick,
+                        modifier = Modifier.testTag("download_action_${result.source.raw}_${result.id}")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Download,
+                            contentDescription = stringResource(R.string.cd_download_item, result.title)
+                        )
+                    }
                 }
             }
         }

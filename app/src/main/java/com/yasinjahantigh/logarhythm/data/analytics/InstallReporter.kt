@@ -23,10 +23,9 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Sends one anonymous install record the first time the app runs, so installs from Telegram or
- * any other mirror are counted too. The record is stored once: app updates keep the same
- * preference, so updating never counts as another install. Also queries the total install count
- * across all devices and platforms.
+ * Sends an anonymous install / heartbeat ping (deduplicated by persistent installId)
+ * so installs from GitHub, Telegram, APK shares, etc. are all counted accurately,
+ * along with active user counts (without double-counting app updates or debug builds).
  */
 @Singleton
 class InstallReporter @Inject constructor(
@@ -38,7 +37,9 @@ class InstallReporter @Inject constructor(
         const val PREFS = "install_stats"
         const val KEY_INSTALL_ID = "install_id"
         const val KEY_REPORTED = "reported"
+        const val KEY_LAST_PING_AT = "last_ping_at"
         const val KEY_CACHED_TOTAL = "cached_total_installs"
+        const val HEARTBEAT_INTERVAL_MS = 24L * 60 * 60 * 1000
         const val MAX_FIELD = 48
         const val DEFAULT_HIT_ENDPOINT = "https://logarhythm-installs.yasinjahantigh.workers.dev/hit"
     }
@@ -59,20 +60,23 @@ class InstallReporter @Inject constructor(
     )
     val totalInstalls: StateFlow<Long?> = _totalInstalls.asStateFlow()
 
-    // Robolectric unit tests build and run the real Application; without this guard every CI run
-    // would report a few dozen fake installs.
     private val isTestRuntime: Boolean =
         Build.MODEL.orEmpty().contains("robolectric", ignoreCase = true) ||
             Build.FINGERPRINT.orEmpty().contains("robolectric", ignoreCase = true)
 
     fun reportOnce() {
-        if (!isConfigured || isTestRuntime) return
+        if (!isConfigured || isTestRuntime || BuildConfig.DEBUG) return
         val reported = prefs.getBoolean(KEY_REPORTED, false)
+        val lastPingAt = prefs.getLong(KEY_LAST_PING_AT, 0L)
+        val now = System.currentTimeMillis()
+        val needsPing = !reported || (now - lastPingAt >= HEARTBEAT_INTERVAL_MS)
+
         val installId = prefs.getString(KEY_INSTALL_ID, null) ?: UUID.randomUUID().toString().also {
             prefs.edit().putString(KEY_INSTALL_ID, it).apply()
         }
+
         scope.launch {
-            if (!reported) {
+            if (needsPing) {
                 val payload = JSONObject().apply {
                     put("installId", installId)
                     put("version", BuildConfig.VERSION_NAME)
@@ -90,7 +94,12 @@ class InstallReporter @Inject constructor(
                 val delivered = runCatching {
                     client.newCall(request).execute().use { it.isSuccessful }
                 }.getOrDefault(false)
-                if (delivered) prefs.edit().putBoolean(KEY_REPORTED, true).apply()
+                if (delivered) {
+                    prefs.edit()
+                        .putBoolean(KEY_REPORTED, true)
+                        .putLong(KEY_LAST_PING_AT, now)
+                        .apply()
+                }
             }
             fetchTotalInstalls()
         }

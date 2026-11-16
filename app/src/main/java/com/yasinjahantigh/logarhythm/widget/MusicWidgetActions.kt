@@ -31,7 +31,7 @@ internal fun startPlaybackAction(context: Context, action: String) {
  * The service applies the change asynchronously, so the widget is refreshed after a short beat to
  * make sure it renders the new state instead of the one captured before the action.
  */
-private suspend fun refreshAfterAction(context: Context, delayMillis: Long = 450L) {
+private suspend fun refreshAfterAction(context: Context, delayMillis: Long = 150L) {
     delay(delayMillis)
     MusicWidgetUpdater.refresh(context)
 }
@@ -89,9 +89,17 @@ class PlayQueueWidgetAction : ActionCallback {
     override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
         val index = parameters[indexKey] ?: return
         val trackId = parameters[trackIdKey] ?: return
+        val entryPoint = MusicWidgetActions.entryPoint(context)
+        val controller = entryPoint.playerController()
+        val restored = if (controller.queue.value.isEmpty()) {
+            entryPoint.queuePersistenceManager().restoreQueue()
+        } else null
         withContext(Dispatchers.Main) {
-            val controller = MusicWidgetActions.entryPoint(context).playerController()
-            if (controller.queue.value.getOrNull(index)?.id == trackId) controller.playQueueItem(index)
+            if (controller.queue.value.getOrNull(index)?.id == trackId) {
+                controller.playQueueItem(index)
+            } else if (restored != null && restored.tracks.getOrNull(index)?.id == trackId) {
+                controller.play(restored.tracks, index)
+            }
         }
         refreshAfterAction(context)
     }
@@ -105,24 +113,22 @@ class PlayQueueWidgetAction : ActionCallback {
 class PlayTrackWidgetAction : ActionCallback {
     override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
         val trackId = parameters[trackIdKey] ?: return
+        val entryPoint = MusicWidgetActions.entryPoint(context)
+        val controller = entryPoint.playerController()
+        val restored = if (controller.queue.value.isEmpty()) {
+            entryPoint.queuePersistenceManager().restoreQueue()
+        } else null
         withContext(Dispatchers.Main) {
-            val entryPoint = MusicWidgetActions.entryPoint(context)
-            val controller = entryPoint.playerController()
-            val sortedTracks = MusicWidgetUpdater.currentSortedTracks(context)
-            val index = sortedTracks.indexOfFirst { it.id == trackId }
-            if (index >= 0) {
-                controller.play(sortedTracks, index)
+            val queue = controller.queue.value
+            val qIndex = queue.indexOfFirst { it.id == trackId }
+            if (qIndex >= 0) {
+                controller.playQueueItem(qIndex)
+            } else if (restored != null) {
+                val rIndex = restored.tracks.indexOfFirst { it.id == trackId }
+                if (rIndex >= 0) controller.play(restored.tracks, rIndex)
             } else {
-                val queue = controller.queue.value
-                val qIndex = queue.indexOfFirst { it.id == trackId }
-                if (qIndex >= 0) {
-                    controller.playQueueItem(qIndex)
-                } else {
-                    val track = entryPoint.trackRepository().getTrackById(trackId).first()
-                    if (track != null) {
-                        controller.play(listOf(track), 0)
-                    }
-                }
+                val track = entryPoint.trackRepository().getTrackById(trackId).first()
+                if (track != null) controller.play(listOf(track), 0)
             }
         }
         refreshAfterAction(context)

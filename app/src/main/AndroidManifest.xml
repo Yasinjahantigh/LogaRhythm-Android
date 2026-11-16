@@ -30,12 +30,18 @@
         <activity
             android:name="com.yasinjahantigh.logarhythm.MainActivity"
             android:exported="true"
+            android:launchMode="singleTop"
             android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboard|keyboardHidden|navigation|uiMode|density|fontScale|layoutDirection"
             android:theme="@style/Theme.LogaRhythm">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
 
                 <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
             </intent-filter>
         </activity>
 
@@ -50,26 +56,6 @@
         </service>
 
         <receiver
-            android:name="com.yasinjahantigh.logarhythm.widget.MusicWidgetSmallReceiver"
-            android:exported="false">
-            <intent-filter>
-                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
-            </intent-filter>
-            <meta-data
-                android:name="android.appwidget.provider"
-                android:resource="@xml/music_widget_small_info" />
-        </receiver>
-        <receiver
-            android:name="com.yasinjahantigh.logarhythm.widget.MusicWidgetStripReceiver"
-            android:exported="false">
-            <intent-filter>
-                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
-            </intent-filter>
-            <meta-data
-                android:name="android.appwidget.provider"
-                android:resource="@xml/music_widget_strip_info" />
-        </receiver>
-        <receiver
             android:name="com.yasinjahantigh.logarhythm.widget.MusicWidgetMediumReceiver"
             android:exported="false">
             <intent-filter>
@@ -78,16 +64,6 @@
             <meta-data
                 android:name="android.appwidget.provider"
                 android:resource="@xml/music_widget_medium_info" />
-        </receiver>
-        <receiver
-            android:name="com.yasinjahantigh.logarhythm.widget.MusicWidgetLargeReceiver"
-            android:exported="false">
-            <intent-filter>
-                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
-            </intent-filter>
-            <meta-data
-                android:name="android.appwidget.provider"
-                android:resource="@xml/music_widget_large_info" />
         </receiver>
         <receiver
             android:name="com.yasinjahantigh.logarhythm.widget.MusicWidgetPlayerReceiver"
@@ -130,6 +106,10 @@
 
         <receiver
             android:name="com.yasinjahantigh.logarhythm.data.download.DownloadActionReceiver"
+            android:exported="false" />
+
+        <receiver
+            android:name="com.yasinjahantigh.logarhythm.data.radar.ReleaseRadarActionReceiver"
             android:exported="false" />
 
         <provider

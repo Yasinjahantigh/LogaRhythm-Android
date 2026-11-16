@@ -11,8 +11,11 @@ object DownloadCommand {
         add("--no-warnings" to null)
         add("--ignore-errors" to null)
         add("--no-playlist" to null)
-        add("--socket-timeout" to "15")
-        add("--extractor-args" to "youtube:player_client=android,web")
+        add("--no-check-certificates" to null)
+        add("--geo-bypass" to null)
+        add("--no-cache-dir" to null)
+        add("--socket-timeout" to "10")
+        add("--extractor-args" to "youtube:player_client=android_vr,ios")
         if (cookiesPath != null) add("--cookies" to cookiesPath)
     }
 
@@ -20,9 +23,15 @@ object DownloadCommand {
     fun downloadOptions(
         workspace: File,
         videoId: String,
-        cookiesPath: String? = null
+        cookiesPath: String? = null,
+        qualityAbrKbps: Int? = null
     ): List<Pair<String, String?>> = buildList {
-        add("-f" to "bestaudio[ext=m4a]/bestaudio[ext=mp3]/bestaudio/best")
+        val formatExpr = if (qualityAbrKbps != null && qualityAbrKbps > 0) {
+            "bestaudio[abr<=${qualityAbrKbps + 20}][ext=m4a]/bestaudio[abr<=${qualityAbrKbps + 20}]/bestaudio[ext=m4a]/bestaudio/best"
+        } else {
+            "bestaudio[ext=m4a]/bestaudio[ext=mp3]/bestaudio/best"
+        }
+        add("-f" to formatExpr)
         add("--newline" to null)
         add("--continue" to null)
         add("--no-playlist" to null)
@@ -33,7 +42,7 @@ object DownloadCommand {
         add("--buffer-size" to "64k")
         add("--http-chunk-size" to "10M")
         add("--concurrent-fragments" to "4")
-        add("--extractor-args" to "youtube:player_client=android,web")
+        add("--extractor-args" to "youtube:player_client=android_vr,android,ios")
         add("--paths" to workspace.absolutePath)
         add("--output" to "$videoId.%(ext)s")
         if (cookiesPath != null) add("--cookies" to cookiesPath)

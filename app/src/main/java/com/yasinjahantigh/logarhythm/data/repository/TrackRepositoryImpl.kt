@@ -20,6 +20,8 @@ import com.yasinjahantigh.logarhythm.data.tagger.engine.TagEdit
 import com.yasinjahantigh.logarhythm.domain.library.ArtistIndex
 import com.yasinjahantigh.logarhythm.domain.library.ArtistSplitConfig
 import com.yasinjahantigh.logarhythm.domain.library.ArtistSplitter
+import com.yasinjahantigh.logarhythm.domain.library.MetadataNormalizer
+import com.yasinjahantigh.logarhythm.domain.library.TagSuggestionCleaner
 import com.yasinjahantigh.logarhythm.domain.model.Album
 import com.yasinjahantigh.logarhythm.domain.model.Artist
 import com.yasinjahantigh.logarhythm.domain.model.ArtistProfile
@@ -286,10 +288,14 @@ class TrackRepositoryImpl @Inject constructor(
         } else {
             preferencesManager.excludedFolders.first()
         }
+        val whitelistMode = preferencesManager.folderWhitelistMode.first()
+        val whitelistedFolders = preferencesManager.whitelistedFolders.first()
         val scanned = localMusicSource.scanTracks(
             minDurationMs = minSec * 1000L,
             excludedFolders = excludedFolders,
-            showSystemAudio = showSystemAudio
+            showSystemAudio = showSystemAudio,
+            whitelistMode = whitelistMode,
+            whitelistedFolders = whitelistedFolders
         )
         val existing = musicDao.getTracksBySourceType(SourceType.LOCAL.prefix)
         val existingMap = existing.associateBy { it.id }
@@ -306,20 +312,19 @@ class TrackRepositoryImpl @Inject constructor(
             if (current == null) {
                 toInsert.add(newEntity)
             } else if (current != newEntity) {
-                // If file timestamp hasn't changed externally, preserve user's edited tags
-                val isStaleScan = current.dateModified == newEntity.dateModified &&
-                        (current.title != newEntity.title || current.artist != newEntity.artist || current.album != newEntity.album)
-                if (isStaleScan) {
+                // If file timestamp hasn't changed externally, preserve user's manual edits
+                // unless this rescan auto-cleaned placeholder/dirty tags or populated missing fields.
+                if (current.dateModified == newEntity.dateModified && !isAutoCleanedUpgrade(current, newEntity)) {
                     val preservedEntity = newEntity.copy(
                         title = current.title,
                         artist = current.artist,
                         album = current.album,
-                        genre = current.genre,
-                        albumArtist = current.albumArtist,
-                        year = current.year,
-                        trackNumber = current.trackNumber,
-                        discNumber = current.discNumber,
-                        composer = current.composer
+                        genre = resolvePreservedGenre(current.genre, newEntity.genre),
+                        albumArtist = current.albumArtist.ifBlank { newEntity.albumArtist },
+                        year = if (current.year == 0 && newEntity.year > 0) newEntity.year else current.year,
+                        trackNumber = if (current.trackNumber == 0 && newEntity.trackNumber > 0) newEntity.trackNumber else current.trackNumber,
+                        discNumber = if (current.discNumber == 0 && newEntity.discNumber > 0) newEntity.discNumber else current.discNumber,
+                        composer = current.composer.ifBlank { newEntity.composer }
                     )
                     if (current != preservedEntity) {
                         toUpdate.add(preservedEntity)
@@ -333,6 +338,45 @@ class TrackRepositoryImpl @Inject constructor(
         val toDeleteIds = existing.map { it.id }.filter { it !in seenIds }
 
         musicDao.syncLocalTracks(toInsert, toUpdate, toDeleteIds)
+    }
+
+    private fun isAutoCleanedUpgrade(current: TrackEntity, newEntity: TrackEntity): Boolean {
+        val cleaned = TagSuggestionCleaner.clean(
+            title = current.title,
+            artist = current.artist,
+            album = current.album,
+            genre = current.genre,
+            year = current.year,
+            albumArtist = current.albumArtist
+        )
+        val upgradedPlaceholder =
+            (MetadataNormalizer.isPlaceholderField(current.title) && !MetadataNormalizer.isPlaceholderField(newEntity.title)) ||
+                (MetadataNormalizer.isPlaceholderField(current.artist) && !MetadataNormalizer.isPlaceholderField(newEntity.artist)) ||
+                (MetadataNormalizer.isPlaceholderField(current.album) && !MetadataNormalizer.isPlaceholderField(newEntity.album))
+
+        val matchesCleanedText =
+            (current.title == newEntity.title ||
+                MetadataNormalizer.normalizeForComparison(cleaned.title) == MetadataNormalizer.normalizeForComparison(newEntity.title)) &&
+                (current.artist == newEntity.artist ||
+                    MetadataNormalizer.normalizeForComparison(cleaned.artist) == MetadataNormalizer.normalizeForComparison(newEntity.artist)) &&
+                (current.album == newEntity.album ||
+                    MetadataNormalizer.normalizeForComparison(cleaned.album) == MetadataNormalizer.normalizeForComparison(newEntity.album))
+
+        val textActuallyImproved =
+            current.title != newEntity.title ||
+                current.artist != newEntity.artist ||
+                current.album != newEntity.album
+
+        return upgradedPlaceholder || (textActuallyImproved && matchesCleanedText)
+    }
+
+    private fun resolvePreservedGenre(currentGenre: String, scannedGenre: String): String {
+        val canonicalCurrent = MetadataNormalizer.canonicalizeGenre(currentGenre, "Unknown Genre")
+        return if (MetadataNormalizer.isPlaceholderGenre(canonicalCurrent) && !MetadataNormalizer.isPlaceholderGenre(scannedGenre)) {
+            scannedGenre
+        } else {
+            canonicalCurrent
+        }
     }
 
     override suspend fun updateTrackMetadata(

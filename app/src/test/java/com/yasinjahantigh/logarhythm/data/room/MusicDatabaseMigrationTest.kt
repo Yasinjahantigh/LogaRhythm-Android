@@ -16,12 +16,33 @@ import org.robolectric.annotation.Config
 class MusicDatabaseMigrationTest {
 
     @Test
-    fun testAllMigrationsArray_hasNineMigrations() {
-        assertEquals(9, MusicDatabase.ALL_MIGRATIONS.size)
+    fun testAllMigrationsArray_hasElevenMigrations() {
+        assertEquals(11, MusicDatabase.ALL_MIGRATIONS.size)
         assertEquals(1, MusicDatabase.ALL_MIGRATIONS[0].startVersion)
         assertEquals(2, MusicDatabase.ALL_MIGRATIONS[0].endVersion)
-        assertEquals(9, MusicDatabase.ALL_MIGRATIONS[8].startVersion)
-        assertEquals(10, MusicDatabase.ALL_MIGRATIONS[8].endVersion)
+        assertEquals(11, MusicDatabase.ALL_MIGRATIONS[10].startVersion)
+        assertEquals(12, MusicDatabase.ALL_MIGRATIONS[10].endVersion)
+    }
+
+    @Test
+    fun testV12TablesExist() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val db = Room.inMemoryDatabaseBuilder(context, MusicDatabase::class.java)
+            .addMigrations(*MusicDatabase.ALL_MIGRATIONS)
+            .allowMainThreadQueries()
+            .build()
+
+        val sqliteDb: SupportSQLiteDatabase = db.openHelper.writableDatabase
+        val tables = mutableSetOf<String>()
+        sqliteDb.query("SELECT name FROM sqlite_master WHERE type='table'").use { cursor ->
+            while (cursor.moveToNext()) tables.add(cursor.getString(0))
+        }
+        assertTrue(tables.contains("download_catalog_cache"))
+        assertTrue(tables.contains("followed_artists"))
+        assertTrue(tables.contains("artist_releases"))
+        assertTrue(tables.contains("saved_queues"))
+        assertTrue(tables.contains("device_eq_profiles"))
+        db.close()
     }
 
     @Test

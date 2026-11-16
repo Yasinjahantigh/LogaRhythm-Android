@@ -67,16 +67,40 @@ class StatsRepositoryImpl @Inject constructor(
         }
     }
 
-    override fun getTotalListenTimeMs(sinceTimestamp: Long): Flow<Long> {
-        return if (sinceTimestamp <= 0L) {
-            musicDao.getTotalListenTimeMs()
-        } else {
-            musicDao.getTotalListenTimeMs(sinceTimestamp)
+    override fun getTotalListenTimeMs(sinceTimestamp: Long, untilTimestamp: Long): Flow<Long> {
+        return when {
+            sinceTimestamp <= 0L && untilTimestamp == Long.MAX_VALUE -> musicDao.getTotalListenTimeMs()
+            untilTimestamp == Long.MAX_VALUE -> musicDao.getTotalListenTimeMs(sinceTimestamp)
+            else -> musicDao.getTotalListenTimeMsInRange(sinceTimestamp, untilTimestamp)
         }
     }
 
-    override fun getTopTracks(sinceTimestamp: Long, limit: Int): Flow<List<TrackStat>> {
-        return musicDao.getTopTracks(sinceTimestamp, limit).map { list ->
+    override fun getCompletedPlayCount(sinceTimestamp: Long, untilTimestamp: Long): Flow<Int> =
+        musicDao.getCompletedPlayCountInRange(sinceTimestamp, untilTimestamp)
+
+    override fun getPeakHour(sinceTimestamp: Long, untilTimestamp: Long): Flow<Int?> =
+        musicDao.getPlayTimestampsInRange(sinceTimestamp, untilTimestamp).map { timestamps ->
+            if (timestamps.isEmpty()) return@map null
+            val counts = IntArray(24)
+            val cal = java.util.Calendar.getInstance()
+            for (ts in timestamps) {
+                cal.timeInMillis = ts
+                counts[cal.get(java.util.Calendar.HOUR_OF_DAY)]++
+            }
+            var bestHour = 0
+            for (h in 1 until 24) {
+                if (counts[h] > counts[bestHour]) bestHour = h
+            }
+            bestHour
+        }
+
+    override fun getTopTracks(sinceTimestamp: Long, limit: Int, untilTimestamp: Long): Flow<List<TrackStat>> {
+        val source = if (untilTimestamp == Long.MAX_VALUE) {
+            musicDao.getTopTracks(sinceTimestamp, limit)
+        } else {
+            musicDao.getTopTracksInRange(sinceTimestamp, untilTimestamp, limit)
+        }
+        return source.map { list ->
             list.map { query ->
                 TrackStat(
                     track = Track(
@@ -104,7 +128,7 @@ class StatsRepositoryImpl @Inject constructor(
         }
     }
 
-    override fun getTopArtists(sinceTimestamp: Long, limit: Int): Flow<List<ArtistStat>> {
+    override fun getTopArtists(sinceTimestamp: Long, limit: Int, untilTimestamp: Long): Flow<List<ArtistStat>> {
         val configFlow = combine(
             preferencesManager.splitArtists,
             preferencesManager.artistSeparators,
@@ -120,8 +144,13 @@ class StatsRepositoryImpl @Inject constructor(
                 ArtistSplitConfig.OFF
             }
         }
+        val source = if (untilTimestamp == Long.MAX_VALUE) {
+            musicDao.getTopArtists(sinceTimestamp, limit * 3)
+        } else {
+            musicDao.getTopArtistsInRange(sinceTimestamp, untilTimestamp, limit * 3)
+        }
         // Read extra raw rows so collaborations can merge into both artists after splitting.
-        return combine(musicDao.getTopArtists(sinceTimestamp, limit * 3), configFlow) { list, config ->
+        return combine(source, configFlow) { list, config ->
             if (!config.enabled) {
                 return@combine list.take(limit).map { query ->
                     ArtistStat(
@@ -164,8 +193,13 @@ class StatsRepositoryImpl @Inject constructor(
         }
     }
 
-    override fun getTopAlbums(sinceTimestamp: Long, limit: Int): Flow<List<AlbumStat>> {
-        return musicDao.getTopAlbums(sinceTimestamp, limit).map { list ->
+    override fun getTopAlbums(sinceTimestamp: Long, limit: Int, untilTimestamp: Long): Flow<List<AlbumStat>> {
+        val source = if (untilTimestamp == Long.MAX_VALUE) {
+            musicDao.getTopAlbums(sinceTimestamp, limit)
+        } else {
+            musicDao.getTopAlbumsInRange(sinceTimestamp, untilTimestamp, limit)
+        }
+        return source.map { list ->
             list.map { query ->
                 AlbumStat(
                     album = query.album,

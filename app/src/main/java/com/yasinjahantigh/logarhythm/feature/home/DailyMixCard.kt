@@ -41,6 +41,7 @@ import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.yasinjahantigh.logarhythm.R
 import com.yasinjahantigh.logarhythm.domain.model.DailyMix
+import com.yasinjahantigh.logarhythm.domain.model.MixTrackReason
 import com.yasinjahantigh.logarhythm.domain.model.Track
 
 import androidx.compose.foundation.layout.heightIn
@@ -361,13 +362,31 @@ fun DailyMixDetailBottomSheet(
                             )
                         },
                         supportingContent = {
-                            Text(
-                                text = track.artist,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
+                            val reason = mix.trackReasons[track.id]
+                            Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                                Text(
+                                    text = track.artist,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                if (reason != null) {
+                                    Surface(
+                                        shape = RoundedCornerShape(6.dp),
+                                        color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.7f)
+                                    ) {
+                                        Text(
+                                            text = mixTrackReasonLabel(reason),
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                        )
+                                    }
+                                }
+                            }
                         },
                         trailingContent = {
                             Text(
@@ -381,4 +400,14 @@ fun DailyMixDetailBottomSheet(
             }
         }
     }
+}
+
+@Composable
+private fun mixTrackReasonLabel(reason: MixTrackReason): String = when (reason) {
+    MixTrackReason.FAVORITE -> stringResource(R.string.daily_mix_reason_favorite)
+    MixTrackReason.HEAVY_ROTATION -> stringResource(R.string.daily_mix_reason_rotation)
+    MixTrackReason.ARTIST_AFFINITY -> stringResource(R.string.daily_mix_reason_artist)
+    MixTrackReason.GENRE_MOOD_MATCH -> stringResource(R.string.daily_mix_reason_genre)
+    MixTrackReason.REDISCOVER_GEM -> stringResource(R.string.daily_mix_reason_rediscover)
+    MixTrackReason.FRESH_ADDITION -> stringResource(R.string.daily_mix_reason_fresh)
 }

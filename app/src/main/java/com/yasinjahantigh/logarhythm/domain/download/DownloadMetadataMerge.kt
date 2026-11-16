@@ -1,5 +1,7 @@
 package com.yasinjahantigh.logarhythm.domain.download
 
+import com.yasinjahantigh.logarhythm.domain.library.MetadataNormalizer
+
 /** Merge helpers for the Deezer → MusicBrainz → yt-dlp metadata chain. */
 object DownloadMetadataMerge {
 
@@ -8,10 +10,13 @@ object DownloadMetadataMerge {
     )
 
     fun isPlaceholder(value: String?): Boolean =
-        value == null || value.trim().lowercase() in placeholderValues
+        value == null ||
+            value.trim().lowercase() in placeholderValues ||
+            MetadataNormalizer.isPlaceholderField(value)
 
     fun pick(vararg candidates: String?): String? =
-        candidates.firstOrNull { !isPlaceholder(it) }?.trim()
+        candidates.firstOrNull { !isPlaceholder(it) }?.let { MetadataNormalizer.cleanDisplayText(it) }
+            ?.takeIf { it.isNotEmpty() }
 
     /**
      * Keeps the artist that came from the video itself unless a close provider match exists.
@@ -19,11 +24,12 @@ object DownloadMetadataMerge {
      * that only knows the lead artist must not erase the featured artists from the source tag.
      */
     fun preferSourceArtist(sourceArtist: String?, vararg providerArtists: String?): String? {
-        val source = sourceArtist?.trim()?.takeUnless { isPlaceholder(it) }
+        val source = sourceArtist?.let { MetadataNormalizer.cleanDisplayText(it) }
+            ?.takeUnless { isPlaceholder(it) }
             ?: return pick(*providerArtists)
         val best = providerArtists
             .filter { !isPlaceholder(it) }
-            .map { it!!.trim() }
+            .map { MetadataNormalizer.cleanDisplayText(it!!) }
             .maxByOrNull { similarity(it, source) }
             ?: return source
 
@@ -48,9 +54,7 @@ object DownloadMetadataMerge {
     private val COLLABORATION_WORDS = setOf("feat", "ft", "featuring", "and", "with", "x", "vs")
 
     fun normalize(value: String): String =
-        value.lowercase()
-            .replace(Regex("""[^\p{L}\p{N}]+"""), " ")
-            .trim()
+        MetadataNormalizer.normalizeForComparison(value)
 
     /** Token Jaccard with a containment boost, enough to reject unrelated covers/songs. */
     fun similarity(a: String, b: String): Double {
