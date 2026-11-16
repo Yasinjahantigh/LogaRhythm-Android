@@ -1,6 +1,7 @@
 package com.yasinjahantigh.logarhythm
 
 import android.content.Context
+import android.content.Intent
 import android.content.res.Configuration
 import android.os.Bundle
 import android.widget.Toast
@@ -29,6 +30,7 @@ import coil.compose.AsyncImage
 import com.yasinjahantigh.logarhythm.core.library.LibrarySync
 import com.yasinjahantigh.logarhythm.core.utils.ArtworkColorExtractor
 import com.yasinjahantigh.logarhythm.data.datastore.PreferencesManager
+import com.yasinjahantigh.logarhythm.data.download.ShareLinkResolver
 import com.yasinjahantigh.logarhythm.data.update.UpdateManager
 import com.yasinjahantigh.logarhythm.feature.onboarding.OnboardingScreen
 import com.yasinjahantigh.logarhythm.feature.update.UpdateDialogHost
@@ -55,6 +57,27 @@ class MainActivity : ComponentActivity() {
 
     @Inject
     lateinit var updateManager: UpdateManager
+
+    @Inject
+    lateinit var shareLinkResolver: ShareLinkResolver
+
+    private var shareEventSeq by mutableStateOf(0)
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleIncomingShare(intent)
+    }
+
+    private fun handleIncomingShare(intent: Intent?) {
+        if (intent?.action == Intent.ACTION_SEND && intent.type == "text/plain") {
+            val shared = intent.getStringExtra(Intent.EXTRA_TEXT)
+            if (!shared.isNullOrBlank()) {
+                shareLinkResolver.submitIncomingText(shared)
+                shareEventSeq++
+            }
+        }
+    }
 
     override fun onStart() {
         super.onStart()
@@ -98,6 +121,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        handleIncomingShare(intent)
         enableEdgeToEdge()
         // Synchronous SharedPreferences mirror written by PreferencesManager, so the first
         // composed frame already knows whether onboarding is done.
@@ -107,11 +131,15 @@ class MainActivity : ComponentActivity() {
         setContent {
             val themeMode by preferencesManager.themeMode.collectAsStateWithLifecycle(initialValue = "system")
             val themeStyle by preferencesManager.themeStyle.collectAsStateWithLifecycle(initialValue = "default")
+            val themePresetId by preferencesManager.themePresetId.collectAsStateWithLifecycle(
+                initialValue = com.yasinjahantigh.logarhythm.ui.theme.ThemePresets.DEFAULT_ID
+            )
             val customAccent by preferencesManager.customAccentColor.collectAsStateWithLifecycle(initialValue = 0xFFF4B266)
             val customBase by preferencesManager.customBase.collectAsStateWithLifecycle(initialValue = "dark")
             val cornerRoundness by preferencesManager.cornerRoundness.collectAsStateWithLifecycle(initialValue = "standard")
             val customBackgroundUri by preferencesManager.customBackgroundUri.collectAsStateWithLifecycle(initialValue = null)
             val customBackgroundAlpha by preferencesManager.customBackgroundAlpha.collectAsStateWithLifecycle(initialValue = 0.35f)
+            val appFont by preferencesManager.appFont.collectAsStateWithLifecycle(initialValue = "default")
             val isOnboardingCompleted by preferencesManager.isOnboardingCompleted.collectAsStateWithLifecycle(
                 initialValue = onboardingBootstrap
             )
@@ -152,9 +180,11 @@ class MainActivity : ComponentActivity() {
             LogaRhythmTheme(
                 themeMode = themeMode,
                 themeStyle = themeStyle,
+                themePresetId = themePresetId,
                 customAccentColor = Color(customAccent),
                 customBase = customBase,
                 cornerRoundness = cornerRoundness,
+                appFont = appFont,
                 seedArtworkColor = seedArtworkColor,
                 hasCustomBackground = customBackgroundUri != null && isOnboardingCompleted
             ) {
@@ -199,7 +229,10 @@ class MainActivity : ComponentActivity() {
                                     }
                                 )
                             } else {
-                                MainScreen(seedTint = seedArtworkColor)
+                                MainScreen(
+                                    seedTint = seedArtworkColor,
+                                    shareEventSeq = shareEventSeq
+                                )
                             }
                         }
                     }

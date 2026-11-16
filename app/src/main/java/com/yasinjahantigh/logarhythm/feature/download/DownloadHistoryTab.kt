@@ -71,6 +71,7 @@ fun DownloadHistoryTab(
     onRemove: (DownloadItem) -> Unit,
     onClearFinished: () -> Unit,
     modifier: Modifier = Modifier,
+    onRetryAllFailed: (() -> Unit)? = null,
     onEditTags: ((DownloadItem) -> Unit)? = null
 ) {
     if (history.isEmpty()) {
@@ -99,12 +100,19 @@ fun DownloadHistoryTab(
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.Bold
                 )
-                if (history.any { it.isFinished }) {
-                    TextButton(
-                        onClick = onClearFinished,
-                        modifier = Modifier.testTag("download_clear_finished_button")
-                    ) {
-                        Text(text = stringResource(R.string.download_history_clear))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (onRetryAllFailed != null && history.any { it.status == DownloadStatus.FAILED }) {
+                        TextButton(onClick = onRetryAllFailed) {
+                            Text(text = stringResource(R.string.download_retry_all_failed))
+                        }
+                    }
+                    if (history.any { it.isFinished }) {
+                        TextButton(
+                            onClick = onClearFinished,
+                            modifier = Modifier.testTag("download_clear_finished_button")
+                        ) {
+                            Text(text = stringResource(R.string.download_history_clear))
+                        }
                     }
                 }
             }

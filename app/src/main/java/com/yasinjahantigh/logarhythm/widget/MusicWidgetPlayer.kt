@@ -2,12 +2,14 @@ package com.yasinjahantigh.logarhythm.widget
 
 import android.content.Context
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.glance.GlanceId
 import androidx.glance.GlanceModifier
 import androidx.glance.Image
 import androidx.glance.ImageProvider
+import androidx.glance.LocalSize
 import androidx.glance.action.actionStartActivity
 import androidx.glance.action.clickable
 import androidx.glance.appwidget.GlanceAppWidget
@@ -34,13 +36,18 @@ import androidx.glance.text.TextStyle
 import androidx.media3.common.Player
 import com.yasinjahantigh.logarhythm.MainActivity
 import com.yasinjahantigh.logarhythm.R
-import com.yasinjahantigh.logarhythm.core.utils.TimeUtils
 
 /**
- * 4x4 Immersive Large Player widget with blurred backdrop, artwork card, progress, and full controls.
+ * Consolidated Rich Artwork Player widget with blurred backdrop, responsive artwork card,
+ * live progress, full transport controls, and Up Next teaser.
  */
 class MusicWidgetPlayer : GlanceAppWidget() {
-    override val sizeMode = SizeMode.Single
+    override val sizeMode = SizeMode.Responsive(
+        setOf(
+            DpSize(250.dp, 180.dp),
+            DpSize(250.dp, 260.dp)
+        )
+    )
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         provideContent {
@@ -53,6 +60,8 @@ class MusicWidgetPlayer : GlanceAppWidget() {
 @Composable
 private fun PlayerWidgetContent(state: MusicWidgetSnapshot) {
     val track = state.track ?: return
+    val size = LocalSize.current
+    val isTall = size.height >= 240.dp
 
     Box(
         modifier = GlanceModifier
@@ -158,32 +167,7 @@ private fun PlayerWidgetContent(state: MusicWidgetSnapshot) {
                 maxLines = 1
             )
 
-            Spacer(modifier = GlanceModifier.height(8.dp))
-
-            // Progress Bar & Timestamps
-            val progress = if (state.duration > 0L) state.position.toFloat() / state.duration.toFloat() else 0f
-            Column(modifier = GlanceModifier.fillMaxWidth()) {
-                LinearProgressBar(
-                    progress = progress,
-                    height = 4,
-                    trackColor = ArtProgressTrack,
-                    progressColor = WidgetAccent
-                )
-                Spacer(modifier = GlanceModifier.height(3.dp))
-                Row(modifier = GlanceModifier.fillMaxWidth()) {
-                    Text(
-                        text = TimeUtils.formatDuration(state.position),
-                        style = TextStyle(color = ArtSecondaryText, fontSize = 10.sp)
-                    )
-                    Spacer(modifier = GlanceModifier.defaultWeight())
-                    Text(
-                        text = TimeUtils.formatDuration(state.duration),
-                        style = TextStyle(color = ArtSecondaryText, fontSize = 10.sp)
-                    )
-                }
-            }
-
-            Spacer(modifier = GlanceModifier.height(8.dp))
+            Spacer(modifier = GlanceModifier.height(14.dp))
 
             // Transport Controls Row
             Row(
@@ -259,6 +243,32 @@ private fun PlayerWidgetContent(state: MusicWidgetSnapshot) {
                     iconSize = 20,
                     surface = ArtControlSurface
                 )
+            }
+
+            val nextTrack = state.upcoming.firstOrNull()?.value
+            if (isTall && nextTrack != null) {
+                Spacer(modifier = GlanceModifier.height(10.dp))
+                Row(
+                    modifier = GlanceModifier
+                        .fillMaxWidth()
+                        .cornerRadius(12.dp)
+                        .background(ArtControlSurface)
+                        .padding(horizontal = 10.dp, vertical = 6.dp)
+                        .clickable(actionRunCallback<NextActionCallback>()),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = LocalString(R.string.cd_skip_next).uppercase(),
+                        style = TextStyle(color = WidgetAccent, fontSize = 9.5.sp, fontWeight = FontWeight.Bold)
+                    )
+                    Spacer(modifier = GlanceModifier.width(8.dp))
+                    Text(
+                        text = "${nextTrack.title} · ${nextTrack.artist}",
+                        style = TextStyle(color = ArtText, fontSize = 11.5.sp),
+                        maxLines = 1,
+                        modifier = GlanceModifier.defaultWeight()
+                    )
+                }
             }
         }
     }

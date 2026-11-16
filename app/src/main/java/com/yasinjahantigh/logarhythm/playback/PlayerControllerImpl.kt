@@ -8,6 +8,7 @@ import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
+import com.yasinjahantigh.logarhythm.data.datastore.PreferencesManager
 import com.yasinjahantigh.logarhythm.domain.model.Track
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
@@ -17,6 +18,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -28,7 +30,8 @@ class PlayerControllerImpl @Inject constructor(
     private val queuePersistenceManager: QueuePersistenceManager,
     private val playScrobbler: PlayScrobbler,
     private val sleepTimerManager: SleepTimerManager,
-    private val equalizerManager: EqualizerManager
+    private val equalizerManager: EqualizerManager,
+    private val preferencesManager: PreferencesManager
 ) : PlayerController {
 
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
@@ -67,6 +70,18 @@ class PlayerControllerImpl @Inject constructor(
 
     private val _playbackSpeed = MutableStateFlow(1.0f)
     override val playbackSpeed: StateFlow<Float> = _playbackSpeed.asStateFlow()
+
+    private val _playbackPitch = MutableStateFlow(1.0f)
+    override val playbackPitch: StateFlow<Float> = _playbackPitch.asStateFlow()
+
+    private val _slowedReverb = MutableStateFlow(false)
+    override val slowedReverb: StateFlow<Boolean> = _slowedReverb.asStateFlow()
+
+    private val _abLoopStartMs = MutableStateFlow<Long?>(null)
+    override val abLoopStartMs: StateFlow<Long?> = _abLoopStartMs.asStateFlow()
+
+    private val _abLoopEndMs = MutableStateFlow<Long?>(null)
+    override val abLoopEndMs: StateFlow<Long?> = _abLoopEndMs.asStateFlow()
 
     override val sleepTimerRemainingMs: StateFlow<Long?> = sleepTimerManager.remainingMs
     override val sleepTimerRemainingTracks: StateFlow<Int?> = sleepTimerManager.remainingTracks
@@ -129,7 +144,10 @@ class PlayerControllerImpl @Inject constructor(
                 _isPlaying.value = controller.isPlaying
                 if (controller.duration > 0L) _duration.value = controller.duration
             }
-            override fun onRepeatModeChanged(mode: Int) { _repeatMode.value = mode }
+            override fun onRepeatModeChanged(mode: Int) {
+                _repeatMode.value = mode
+                com.yasinjahantigh.logarhythm.widget.MusicWidgetUpdater.requestUpdate(context)
+            }
             override fun onPlaybackParametersChanged(parameters: PlaybackParameters) {
                 _playbackSpeed.value = parameters.speed
             }
@@ -145,6 +163,19 @@ class PlayerControllerImpl @Inject constructor(
 
         if (controller.mediaItemCount == 0) {
             restoreSavedQueue(controller)
+        }
+        scope.launch {
+            val savedPitch = preferencesManager.playbackPitch.first().coerceIn(0.5f, 2.0f)
+            val savedSlowed = preferencesManager.slowedReverbEnabled.first()
+            _playbackPitch.value = savedPitch
+            _slowedReverb.value = savedSlowed
+            if (savedSlowed) {
+                _playbackSpeed.value = 0.85f
+                controller.playbackParameters = PlaybackParameters(0.85f, savedPitch)
+                equalizerManager.setReverbEnabled(true)
+            } else if (savedPitch != 1.0f) {
+                controller.playbackParameters = PlaybackParameters(_playbackSpeed.value, savedPitch)
+            }
         }
     }
 
@@ -173,8 +204,15 @@ class PlayerControllerImpl @Inject constructor(
                 val controller = mediaController ?: continue
                 val playing = controller.isPlaying
                 _isPlaying.value = playing
-                _position.value = controller.currentPosition.coerceAtLeast(0L)
+                val pos = controller.currentPosition.coerceAtLeast(0L)
+                _position.value = pos
                 if (controller.duration > 0L) _duration.value = controller.duration
+                val loopStart = _abLoopStartMs.value
+                val loopEnd = _abLoopEndMs.value
+                if (playing && loopStart != null && loopEnd != null && loopEnd > loopStart && pos >= loopEnd) {
+                    controller.seekTo(loopStart)
+                    _position.value = loopStart
+                }
                 playScrobbler.onTick(playing, _currentTrack.value, _duration.value)
             }
         }
@@ -187,7 +225,10 @@ class PlayerControllerImpl @Inject constructor(
         if (track != null && track.durationMs > 0L) _duration.value = track.durationMs
         // setMediaItems can emit a transition for the same seed track during radio/queue restore.
         // Preserve its seek position; only a genuinely different track starts at zero.
-        if (isDifferentTrack) _position.value = 0L
+        if (isDifferentTrack) {
+            _position.value = 0L
+            clearAbLoop()
+        }
         playScrobbler.onTrackChanged(track?.id)
         com.yasinjahantigh.logarhythm.widget.MusicWidgetUpdater.requestUpdate(context)
     }
@@ -355,6 +396,7 @@ class PlayerControllerImpl @Inject constructor(
         }
         it.repeatMode = next
         _repeatMode.value = next
+        com.yasinjahantigh.logarhythm.widget.MusicWidgetUpdater.requestUpdate(context)
     }
 
     override fun setRepeatMode(mode: Int) = execute {
@@ -364,6 +406,7 @@ class PlayerControllerImpl @Inject constructor(
         }
         it.repeatMode = safeMode
         _repeatMode.value = safeMode
+        com.yasinjahantigh.logarhythm.widget.MusicWidgetUpdater.requestUpdate(context)
     }
 
     override fun playNext(track: Track) {
@@ -441,7 +484,54 @@ class PlayerControllerImpl @Inject constructor(
     override fun setPlaybackSpeed(speed: Float) {
         val clamped = speed.coerceIn(0.5f, 2.0f)
         _playbackSpeed.value = clamped
-        execute { it.setPlaybackSpeed(clamped) }
+        execute { it.playbackParameters = PlaybackParameters(clamped, _playbackPitch.value) }
+    }
+
+    override fun setPlaybackPitch(pitch: Float) {
+        val clamped = pitch.coerceIn(0.5f, 2.0f)
+        _playbackPitch.value = clamped
+        scope.launch { preferencesManager.setPlaybackPitch(clamped) }
+        execute { it.playbackParameters = PlaybackParameters(_playbackSpeed.value, clamped) }
+    }
+
+    override fun setSlowedReverb(enabled: Boolean) {
+        _slowedReverb.value = enabled
+        val newSpeed = if (enabled) 0.85f else 1.0f
+        val newPitch = if (enabled) 0.88f else 1.0f
+        _playbackSpeed.value = newSpeed
+        _playbackPitch.value = newPitch
+        equalizerManager.setReverbEnabled(enabled)
+        scope.launch {
+            preferencesManager.setSlowedReverbEnabled(enabled)
+            preferencesManager.setPlaybackPitch(newPitch)
+        }
+        execute { it.playbackParameters = PlaybackParameters(newSpeed, newPitch) }
+    }
+
+    override fun toggleAbLoopMarker() {
+        val pos = _position.value.coerceAtLeast(0L)
+        val a = _abLoopStartMs.value
+        val b = _abLoopEndMs.value
+        when {
+            a == null -> {
+                _abLoopStartMs.value = pos
+                _abLoopEndMs.value = null
+            }
+            b == null -> {
+                if (pos > a + 500L) {
+                    _abLoopEndMs.value = pos
+                    seekTo(a)
+                } else {
+                    clearAbLoop()
+                }
+            }
+            else -> clearAbLoop()
+        }
+    }
+
+    override fun clearAbLoop() {
+        _abLoopStartMs.value = null
+        _abLoopEndMs.value = null
     }
 
     override fun setSleepTimer(minutes: Int) = sleepTimerManager.startTimer(minutes)
@@ -457,6 +547,12 @@ class PlayerControllerImpl @Inject constructor(
         equalizerManager.setBassBoostStrength(strength)
     override fun setVirtualizerStrength(strength: Short) =
         equalizerManager.setVirtualizerStrength(strength)
+    override fun setStereoBalance(balance: Float) =
+        equalizerManager.setStereoBalance(balance)
+    override fun setMonoAudio(enabled: Boolean) =
+        equalizerManager.setMonoAudio(enabled)
+    override fun setDeviceAutoEqEnabled(enabled: Boolean) =
+        equalizerManager.setDeviceAutoEqEnabled(enabled)
     override fun resetEqualizer() = equalizerManager.resetEqualizer()
 
     override fun updateTrackInPlayback(updatedTrack: Track) {

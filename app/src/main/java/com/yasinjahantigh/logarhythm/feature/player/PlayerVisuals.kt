@@ -120,19 +120,19 @@ fun VinylTurntable(
     modifier: Modifier = Modifier,
     onArtworkClick: (() -> Unit)? = null
 ) {
-    val rotation by if (isPlaying) {
-        val infiniteTransition = rememberInfiniteTransition(label = "vinyl_transition")
-        infiniteTransition.animateFloat(
-            initialValue = 0f,
-            targetValue = 360f,
-            animationSpec = infiniteRepeatable(
-                animation = tween(8000, easing = LinearEasing),
-                repeatMode = RepeatMode.Restart
-            ),
-            label = "vinyl_spin"
-        )
-    } else {
-        remember { mutableFloatStateOf(0f) }
+    val rotation = remember { androidx.compose.animation.core.Animatable(0f) }
+    androidx.compose.runtime.LaunchedEffect(isPlaying) {
+        while (isPlaying) {
+            val current = rotation.value % 360f
+            if (current != rotation.value) rotation.snapTo(current)
+            val remaining = 360f - current
+            val duration = ((remaining / 360f) * 8000f).toInt().coerceAtLeast(16)
+            rotation.animateTo(
+                targetValue = current + remaining,
+                animationSpec = tween(durationMillis = duration, easing = LinearEasing)
+            )
+            rotation.snapTo(0f)
+        }
     }
 
     val tonearmAngle by animateFloatAsState(
@@ -158,7 +158,7 @@ fun VinylTurntable(
         Canvas(
             modifier = Modifier
                 .fillMaxSize(0.96f)
-                .rotate(if (isPlaying) rotation else 0f)
+                .rotate(rotation.value)
         ) {
             val center = Offset(size.width / 2f, size.height / 2f)
             val maxR = size.minDimension / 2f
@@ -195,7 +195,7 @@ fun VinylTurntable(
         Box(
             modifier = Modifier
                 .fillMaxSize(0.44f)
-                .rotate(if (isPlaying) rotation else 0f)
+                .rotate(rotation.value)
                 .clip(CircleShape)
                 .border(3.dp, Color(0xFF26262B), CircleShape)
                 .clickable(enabled = onArtworkClick != null) { onArtworkClick?.invoke() },

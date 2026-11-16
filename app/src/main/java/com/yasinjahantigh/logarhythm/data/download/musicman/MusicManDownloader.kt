@@ -5,9 +5,11 @@ import com.yasinjahantigh.logarhythm.data.download.AudioFileProbe
 import com.yasinjahantigh.logarhythm.domain.download.DownloadPipelineException
 import com.yasinjahantigh.logarhythm.domain.download.DownloadTitleParser
 import com.yasinjahantigh.logarhythm.domain.model.DownloadErrorKind
+import com.yasinjahantigh.logarhythm.domain.model.DownloadQuality
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
@@ -26,9 +28,9 @@ class MusicManDownloader @Inject constructor(
 ) {
 
     private val audioClient = client.newBuilder()
-        .connectTimeout(20, TimeUnit.SECONDS)
-        .readTimeout(60, TimeUnit.SECONDS)
-        .callTimeout(30, TimeUnit.MINUTES)
+        .connectTimeout(15, TimeUnit.SECONDS)
+        .readTimeout(45, TimeUnit.SECONDS)
+        .callTimeout(20, TimeUnit.MINUTES)
         .build()
 
     private val runningCalls = ConcurrentHashMap<String, okhttp3.Call>()
@@ -37,34 +39,59 @@ class MusicManDownloader @Inject constructor(
         trackId: String,
         downloadId: String,
         workspace: File,
+        preferredQuality: DownloadQuality = DownloadQuality.BEST,
         onProgress: (Float, Long, String) -> Unit
     ): File = withContext(Dispatchers.IO) {
-        val audio = api.resolveAudio(trackId) { _, stage ->
-            if (stage == "musicman_queued") onProgress(0f, 0L, "[download] MusicMan queued")
+        val candidates = api.resolveAudioCandidates(trackId, preferredQuality) { percent, stage ->
+            val msg = if (stage == "musicman_queued") "[crawl] MusicMan queued" else "[crawl] MusicMan crawling $percent%"
+            onProgress(percent.coerceIn(0, 99).toFloat(), 0L, msg)
         }
-        val direct = api.playableUrl(audio)
-        val proxied = api.proxied(audio.url)
-        val target = File(workspace, "${DownloadTitleParser.sanitizeFileName(trackId)}.part")
+        val safeId = DownloadTitleParser.sanitizeFileName(trackId)
+        val target = File(workspace, "$safeId.part")
         target.delete()
 
+        var chosenAudio: MusicManClient.Audio? = null
+        var lastError: DownloadPipelineException? = null
+
         try {
-            try {
-                downloadTo(target, direct, downloadId, onProgress)
-            } catch (pipeline: DownloadPipelineException) {
-                if (pipeline.kind != DownloadErrorKind.NETWORK || direct == proxied) throw pipeline
-                target.delete()
-                downloadTo(target, proxied, downloadId, onProgress)
+            for (audio in candidates) {
+                val urlsToTry = buildList {
+                    val primary = api.playableUrl(audio)
+                    add(primary)
+                    if (!audio.isBale) {
+                        val proxied = api.proxied(audio.url)
+                        if (proxied != primary) add(proxied)
+                    }
+                }
+                for (url in urlsToTry) {
+                    target.delete()
+                    try {
+                        downloadWithRetry(target, url, downloadId, onProgress)
+                        if (AudioFileProbe.isUsable(target)) {
+                            chosenAudio = audio
+                            lastError = null
+                            break
+                        }
+                        lastError = DownloadPipelineException(
+                            DownloadErrorKind.CONTENT,
+                            "MusicMan returned a file that is not playable audio."
+                        )
+                    } catch (cancelled: CancellationException) {
+                        throw cancelled
+                    } catch (pipeline: DownloadPipelineException) {
+                        lastError = pipeline
+                    }
+                }
+                if (chosenAudio != null) break
             }
 
-            if (!AudioFileProbe.isUsable(target)) {
-                target.delete()
-                throw DownloadPipelineException(
-                    DownloadErrorKind.CONTENT,
-                    "MusicMan returned a file that is not playable audio."
-                )
-            }
-            val extension = resolveExtension(target, audio)
-            val result = File(workspace, "${DownloadTitleParser.sanitizeFileName(trackId)}.$extension")
+            val finalAudio = chosenAudio ?: throw (lastError ?: DownloadPipelineException(
+                DownloadErrorKind.CONTENT,
+                "MusicMan returned no playable audio."
+            ))
+
+            val extension = resolveExtension(target, finalAudio)
+            val result = File(workspace, "$safeId.$extension")
             result.delete()
             if (!target.renameTo(result)) {
                 target.copyTo(result, overwrite = true)
@@ -82,6 +109,30 @@ class MusicManDownloader @Inject constructor(
 
     fun cancel(downloadId: String) {
         runningCalls.remove(downloadId)?.cancel()
+    }
+
+    private suspend fun downloadWithRetry(
+        target: File,
+        url: String,
+        downloadId: String,
+        onProgress: (Float, Long, String) -> Unit
+    ) {
+        var attempt = 0
+        while (true) {
+            try {
+                downloadTo(target, url, downloadId, onProgress)
+                return
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (pipeline: DownloadPipelineException) {
+                if (pipeline.kind != DownloadErrorKind.NETWORK || attempt >= MAX_ATTEMPTS - 1) {
+                    throw pipeline
+                }
+                attempt++
+                target.delete()
+                delay(450L * attempt)
+            }
+        }
     }
 
     private suspend fun downloadTo(
@@ -192,6 +243,7 @@ class MusicManDownloader @Inject constructor(
 
     private companion object {
         const val BUFFER_BYTES = 64 * 1024
+        const val MAX_ATTEMPTS = 2
         val AUDIO_EXTENSIONS = setOf("mp3", "m4a", "aac", "ogg", "oga", "opus", "flac")
     }
 }

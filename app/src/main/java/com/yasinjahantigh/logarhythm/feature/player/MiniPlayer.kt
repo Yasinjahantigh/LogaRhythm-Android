@@ -1,5 +1,7 @@
 package com.yasinjahantigh.logarhythm.feature.player
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.BorderStroke
@@ -141,37 +143,52 @@ fun MiniPlayerContent(
             .testTag("mini_player"),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        ArtworkImage(
-            uri = track.artworkUri,
-            fallbackKey = title,
-            modifier = Modifier.size(artSize),
-            shape = RoundedCornerShape(if (isCompact) 12.dp else 16.dp),
-            contentDescription = stringResource(R.string.cd_artwork, title)
-        )
-
-        Spacer(modifier = Modifier.width(12.dp))
-
-        Column(modifier = Modifier.weight(1f).padding(end = 4.dp)) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.SemiBold,
-                color = scheme.onSurface,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.basicMarquee(
-                    iterations = Int.MAX_VALUE,
-                    initialDelayMillis = 1500,
-                    spacing = MarqueeSpacing(24.dp)
+        androidx.compose.animation.AnimatedContent(
+            targetState = track,
+            contentKey = { it.id },
+            transitionSpec = {
+                androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(220))
+                    .togetherWith(androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(160)))
+            },
+            modifier = Modifier.weight(1f),
+            label = "mini_player_track"
+        ) { targetTrack ->
+            val targetTitle = targetTrack.title.cleanMetaOrNull() ?: stringResource(R.string.unknown_title)
+            val targetArtist = targetTrack.artist.cleanMetaOrNull() ?: stringResource(R.string.unknown_artist)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                ArtworkImage(
+                    uri = targetTrack.artworkUri,
+                    fallbackKey = targetTitle,
+                    modifier = Modifier.size(artSize),
+                    shape = RoundedCornerShape(if (isCompact) 12.dp else 16.dp),
+                    contentDescription = stringResource(R.string.cd_artwork, targetTitle)
                 )
-            )
-            Text(
-                text = artist,
-                style = MaterialTheme.typography.bodySmall,
-                color = scheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
+
+                Spacer(modifier = Modifier.width(12.dp))
+
+                Column(modifier = Modifier.weight(1f).padding(end = 4.dp)) {
+                    Text(
+                        text = targetTitle,
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = scheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.basicMarquee(
+                            iterations = Int.MAX_VALUE,
+                            initialDelayMillis = 1500,
+                            spacing = MarqueeSpacing(24.dp)
+                        )
+                    )
+                    Text(
+                        text = targetArtist,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = scheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
         }
 
         // Transport keeps a fixed left-to-right order in every language.
@@ -218,11 +235,24 @@ fun MiniPlayerContent(
                             contentColor = scheme.onPrimary
                         )
                     ) {
-                        Icon(
-                            imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                            contentDescription = stringResource(if (isPlaying) R.string.cd_pause else R.string.cd_play),
-                            modifier = Modifier.size(24.dp)
-                        )
+                        androidx.compose.animation.AnimatedContent(
+                            targetState = isPlaying,
+                            transitionSpec = {
+                                (androidx.compose.animation.scaleIn(initialScale = 0.72f) +
+                                    androidx.compose.animation.fadeIn())
+                                    .togetherWith(
+                                        androidx.compose.animation.scaleOut(targetScale = 0.72f) +
+                                            androidx.compose.animation.fadeOut()
+                                    )
+                            },
+                            label = "mini_play_pause_icon"
+                        ) { playing ->
+                            Icon(
+                                imageVector = if (playing) Icons.Default.Pause else Icons.Default.PlayArrow,
+                                contentDescription = stringResource(if (playing) R.string.cd_pause else R.string.cd_play),
+                                modifier = Modifier.size(24.dp)
+                            )
+                        }
                     }
                 }
                 IconButton(

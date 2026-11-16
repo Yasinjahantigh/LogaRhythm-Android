@@ -84,11 +84,13 @@ fun ThemeScreen(
     viewModel: ThemeViewModel = hiltViewModel()
 ) {
     val themeStyle by viewModel.themeStyle.collectAsStateWithLifecycle()
+    val themePresetId by viewModel.themePresetId.collectAsStateWithLifecycle()
     val themeMode by viewModel.themeMode.collectAsStateWithLifecycle()
     val customAccent by viewModel.customAccent.collectAsStateWithLifecycle()
     val customBase by viewModel.customBase.collectAsStateWithLifecycle()
     val customBackgroundUri by viewModel.customBackgroundUri.collectAsStateWithLifecycle()
     val customBackgroundAlpha by viewModel.customBackgroundAlpha.collectAsStateWithLifecycle()
+    val appFont by viewModel.appFont.collectAsStateWithLifecycle()
 
     val context = androidx.compose.ui.platform.LocalContext.current
     val imagePickerLauncher = rememberLauncherForActivityResult(
@@ -160,6 +162,29 @@ fun ThemeScreen(
         ) {
             item {
                 ThemePreviewCard(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
+            }
+
+            item {
+                SectionTitle(stringResource(R.string.theme_curated_title))
+                Text(
+                    text = stringResource(R.string.theme_curated_subtitle),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 10.dp)
+                )
+                LazyRow(
+                    contentPadding = PaddingValues(horizontal = 16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    items(com.yasinjahantigh.logarhythm.ui.theme.ThemePresets.all, key = { it.id }) { curated ->
+                        CuratedThemeCard(
+                            preset = curated,
+                            selected = themeStyle == "preset" && themePresetId == curated.id,
+                            onSelect = { viewModel.applyCuratedPreset(curated) },
+                            onCustomize = { viewModel.customizeFromPreset(curated) }
+                        )
+                    }
+                }
             }
 
             item {
@@ -299,6 +324,28 @@ fun ThemeScreen(
             }
 
             item {
+                SectionTitle(stringResource(R.string.theme_font_title))
+                LazyRow(
+                    contentPadding = PaddingValues(horizontal = 16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    val fonts = listOf(
+                        "default" to R.string.theme_font_vazirmatn,
+                        "sans" to R.string.theme_font_sans,
+                        "serif" to R.string.theme_font_serif,
+                        "mono" to R.string.theme_font_mono
+                    )
+                    items(fonts, key = { it.first }) { (key, labelRes) ->
+                        FilterChip(
+                            selected = appFont == key,
+                            onClick = { viewModel.setAppFont(key) },
+                            label = { Text(stringResource(labelRes)) }
+                        )
+                    }
+                }
+            }
+
+            item {
                 Text(
                     text = stringResource(R.string.theme_album_wallpaper_note),
                     style = MaterialTheme.typography.bodySmall,
@@ -379,6 +426,124 @@ private fun ThemePreviewCard(modifier: Modifier = Modifier) {
                     )
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun CuratedThemeCard(
+    preset: com.yasinjahantigh.logarhythm.ui.theme.CuratedThemePreset,
+    selected: Boolean,
+    onSelect: () -> Unit,
+    onCustomize: () -> Unit
+) {
+    val primary = Color(preset.primaryHex)
+    val secondary = Color(preset.secondaryHex)
+    val surface = Color(preset.surfaceHex)
+    val textColor = if (preset.isDark) Color(0xFFF3F4F6) else Color(0xFF18181B)
+    val cardColor = if (preset.isDark) Color.White.copy(alpha = 0.08f) else Color.Black.copy(alpha = 0.05f)
+
+    Surface(
+        modifier = Modifier
+            .width(156.dp)
+            .clip(RoundedCornerShape(20.dp))
+            .clickable(onClick = onSelect),
+        shape = RoundedCornerShape(20.dp),
+        color = surface,
+        border = BorderStroke(
+            width = if (selected) 2.dp else 1.dp,
+            color = if (selected) primary else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)
+        )
+    ) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                    Box(modifier = Modifier.size(14.dp).clip(CircleShape).background(primary))
+                    Box(modifier = Modifier.size(14.dp).clip(CircleShape).background(secondary))
+                }
+                if (selected) {
+                    Box(
+                        modifier = Modifier
+                            .size(20.dp)
+                            .clip(CircleShape)
+                            .background(primary),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Check,
+                            contentDescription = null,
+                            tint = if (preset.isDark) Color.Black else Color.White,
+                            modifier = Modifier.size(13.dp)
+                        )
+                    }
+                }
+            }
+            Spacer(modifier = Modifier.height(10.dp))
+            // Miniature UI card preview
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(cardColor)
+                    .padding(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(26.dp)
+                        .clip(CircleShape)
+                        .background(primary),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.PlayArrow,
+                        contentDescription = null,
+                        tint = if (preset.isDark) Color.Black else Color.White,
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.width(8.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth(0.85f)
+                            .height(6.dp)
+                            .clip(RoundedCornerShape(3.dp))
+                            .background(textColor.copy(alpha = 0.85f))
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth(0.55f)
+                            .height(5.dp)
+                            .clip(RoundedCornerShape(3.dp))
+                            .background(secondary.copy(alpha = 0.8f))
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.height(10.dp))
+            Text(
+                text = stringResource(preset.nameRes),
+                style = MaterialTheme.typography.labelLarge,
+                color = textColor,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = stringResource(R.string.theme_curated_customize),
+                style = MaterialTheme.typography.labelSmall,
+                color = primary,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(6.dp))
+                    .clickable(onClick = onCustomize)
+                    .padding(vertical = 2.dp)
+            )
         }
     }
 }

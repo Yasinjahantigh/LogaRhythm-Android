@@ -1,5 +1,6 @@
 package com.yasinjahantigh.logarhythm.data.ai
 
+import com.yasinjahantigh.logarhythm.domain.library.MetadataNormalizer
 import com.yasinjahantigh.logarhythm.domain.model.AiFailure
 import com.yasinjahantigh.logarhythm.domain.model.MagicPlaylist
 import com.yasinjahantigh.logarhythm.domain.model.MagicPlaylistResult
@@ -65,7 +66,8 @@ class AiPlaylistClient @Inject constructor(
         apiKey: String,
         prompt: String,
         trackCount: Int,
-        catalog: List<Track>
+        catalog: List<Track>,
+        tasteSummary: String = ""
     ): MagicPlaylistResult = withContext(Dispatchers.IO) {
         if (catalog.isEmpty()) return@withContext MagicPlaylistResult.Failure(AiFailure.NO_TRACKS)
         val count = trackCount.coerceIn(1, catalog.size)
@@ -73,7 +75,7 @@ class AiPlaylistClient @Inject constructor(
             settings = settings,
             apiKey = apiKey,
             system = SYSTEM_PROMPT,
-            user = buildUserPrompt(prompt, count, catalog),
+            user = buildUserPrompt(prompt, count, catalog, tasteSummary),
             byId = catalog.associateBy { it.id },
             count = count
         )
@@ -87,7 +89,8 @@ class AiPlaylistClient @Inject constructor(
         mixName: String,
         baseTracks: List<Track>,
         candidates: List<Track>,
-        additions: Int
+        additions: Int,
+        tasteSummary: String = ""
     ): MagicPlaylistResult = withContext(Dispatchers.IO) {
         if (candidates.isEmpty()) return@withContext MagicPlaylistResult.Failure(AiFailure.NO_TRACKS)
         val count = additions.coerceIn(1, candidates.size)
@@ -95,7 +98,7 @@ class AiPlaylistClient @Inject constructor(
             settings = settings,
             apiKey = apiKey,
             system = MIX_SYSTEM_PROMPT,
-            user = buildMixUserPrompt(prompt, baseTracks, candidates, count),
+            user = buildMixUserPrompt(prompt, baseTracks, candidates, count, tasteSummary),
             byId = candidates.associateBy { it.id },
             count = count
         )
@@ -115,30 +118,57 @@ class AiPlaylistClient @Inject constructor(
         )
     }
 
+    data class AiTagFix(
+        val title: String,
+        val artist: String,
+        val album: String,
+        val genre: String = "",
+        val year: Int = 0
+    )
+
     suspend fun cleanMetadataWithAi(
         settings: AiSettings,
         apiKey: String,
         tracks: List<Track>
-    ): Map<String, Triple<String, String, String>> = withContext(Dispatchers.IO) {
+    ): Map<String, Triple<String, String, String>> =
+        cleanMetadataTagsWithAi(settings, apiKey, tracks).mapValues { (_, v) ->
+            Triple(v.title, v.artist, v.album)
+        }
+
+    suspend fun cleanMetadataTagsWithAi(
+        settings: AiSettings,
+        apiKey: String,
+        tracks: List<Track>
+    ): Map<String, AiTagFix> = withContext(Dispatchers.IO) {
         if (tracks.isEmpty()) return@withContext emptyMap()
         val userPrompt = buildString {
-            appendLine("Clean and standardize these music tracks. Extract the correct artist and title. Remove YouTube noise like [Official Video], (Audio), [4K], ft., etc. Return a JSON object with a key 'items' containing an array of objects: {\"id\": \"track_id\", \"title\": \"clean title\", \"artist\": \"clean artist\", \"album\": \"clean album\"}.")
+            appendLine(
+                "Clean and standardize these music tracks (English or Persian). Extract clean title and artist, " +
+                    "remove noise ([Official Video], (Audio), [320], @channel, website URLs, download prefixes, " +
+                    "leading track numbers), fix Persian ک/ی script, keep missing album blank if unsure, and infer " +
+                    "concise genre (e.g. Pop, Persian Pop, Rap, Rock, Traditional, Electronic, Soundtrack) and " +
+                    "4-digit release year (or 0 if unsure) whenever missing or Unknown."
+            )
+            appendLine("Format: id | title | artist | album | genre | year")
             tracks.forEach {
-                appendLine("${it.id} | ${it.title} | ${it.artist} | ${it.album}")
+                appendLine("${it.id} | ${it.title} | ${it.artist} | ${it.album} | ${it.genre} | ${it.year}")
             }
         }
+        val tagSystem =
+            "You are a professional music tag cleaner and discography assistant. Output only valid JSON with shape: " +
+                "{\"items\": [{\"id\":\"...\",\"title\":\"...\",\"artist\":\"...\",\"album\":\"...\",\"genre\":\"...\",\"year\":2022}]}"
         val request = when (settings.provider) {
             AiProvider.OPENAI_COMPATIBLE -> openAiRequest(
                 settings = settings,
                 apiKey = apiKey,
-                system = "You are a professional music tag cleaner. Output only valid JSON with format: {\"items\": [{\"id\":\"...\",\"title\":\"...\",\"artist\":\"...\",\"album\":\"...\"}]}",
+                system = tagSystem,
                 user = userPrompt,
                 jsonMode = true
             )
             AiProvider.GEMINI -> geminiRequest(
                 settings = settings,
                 apiKey = apiKey,
-                system = "You are a professional music tag cleaner. Output only valid JSON with format: {\"items\": [{\"id\":\"...\",\"title\":\"...\",\"artist\":\"...\",\"album\":\"...\"}]}",
+                system = tagSystem,
                 user = userPrompt
             )
         }
@@ -149,14 +179,19 @@ class AiPlaylistClient @Inject constructor(
                 val jsonStr = extractJsonObject(text) ?: return@withContext emptyMap()
                 val obj = JSONObject(jsonStr)
                 val items = obj.optJSONArray("items") ?: return@withContext emptyMap()
-                val result = mutableMapOf<String, Triple<String, String, String>>()
+                val result = mutableMapOf<String, AiTagFix>()
                 for (i in 0 until items.length()) {
                     val item = items.optJSONObject(i) ?: continue
                     val id = item.optString("id").takeIf { it.isNotBlank() } ?: continue
-                    val title = item.optString("title").takeIf { it.isNotBlank() } ?: continue
-                    val artist = item.optString("artist").takeIf { it.isNotBlank() } ?: continue
-                    val album = item.optString("album").orEmpty()
-                    result[id] = Triple(title, artist, album)
+                    val title = MetadataNormalizer.cleanDisplayText(item.optString("title")).takeIf { it.isNotBlank() } ?: continue
+                    val artist = MetadataNormalizer.cleanDisplayText(item.optString("artist")).takeIf { it.isNotBlank() } ?: continue
+                    val album = MetadataNormalizer.cleanDisplayText(item.optString("album"))
+                    val rawGenre = item.optString("genre")
+                    val genre = MetadataNormalizer.canonicalizeGenre(rawGenre, fallback = "")
+                    val year = item.optInt("year", 0).takeIf { it in 1900..2100 }
+                        ?: item.optString("year").trim().take(4).toIntOrNull()?.takeIf { it in 1900..2100 }
+                        ?: 0
+                    result[id] = AiTagFix(title, artist, album, genre, year)
                 }
                 result
             }
@@ -282,9 +317,17 @@ class AiPlaylistClient @Inject constructor(
             .build()
     }
 
-    internal fun buildUserPrompt(prompt: String, count: Int, catalog: List<Track>): String = buildString {
+    internal fun buildUserPrompt(
+        prompt: String,
+        count: Int,
+        catalog: List<Track>,
+        tasteSummary: String = ""
+    ): String = buildString {
         appendLine("Create a playlist from this specific music library. Choose exactly $count songs if possible.")
         appendLine("Request: ${prompt.trim()}")
+        if (tasteSummary.isNotBlank()) {
+            appendLine("Listener profile: ${tasteSummary.trim()}")
+        }
         appendLine("Catalog format: id | title | artist | genre | year | seconds")
         catalog.forEach { track ->
             appendLine(compactLine(track, includeDuration = true))
@@ -295,10 +338,14 @@ class AiPlaylistClient @Inject constructor(
         prompt: String,
         baseTracks: List<Track>,
         candidates: List<Track>,
-        count: Int
+        count: Int,
+        tasteSummary: String = ""
     ): String = buildString {
         appendLine("Rebuild an existing playlist. Keep its direction and add exactly $count new songs if possible.")
         appendLine("Request: ${prompt.trim()}")
+        if (tasteSummary.isNotBlank()) {
+            appendLine("Listener profile: ${tasteSummary.trim()}")
+        }
         appendLine("Existing playlist (never return these ids, they stay in the mix):")
         appendLine("id | title | artist | genre | year")
         baseTracks.take(MAX_PROMPT_BASE_TRACKS).forEach { appendLine(compactLine(it, includeDuration = false)) }
@@ -424,8 +471,10 @@ class AiPlaylistClient @Inject constructor(
 
         const val SYSTEM_PROMPT =
             "You curate playlists for a personal music library. Pick songs only from the catalog " +
-                "provided by the user. Never invent ids. Reply with strict JSON only, no prose and " +
-                "no code fences, using this shape: " +
+                "provided by the user. Never invent ids. Order selected trackIds with smooth energy " +
+                "and mood flow, spread artists out instead of clumping one artist repeatedly, and " +
+                "use the listener profile when compatible with the request. Reply with strict JSON only, " +
+                "no prose and no code fences, using this shape: " +
                 "{\"name\": \"short playlist name\", \"description\": \"one sentence\", " +
                 "\"trackIds\": [\"exact ids from the catalog\"]}. " +
                 "Respect the requested mood and language whenever the catalog allows it."
@@ -433,8 +482,9 @@ class AiPlaylistClient @Inject constructor(
         const val MIX_SYSTEM_PROMPT =
             "You rebuild an existing daily mix for a personal music library. The existing songs " +
                 "always stay; pick additional songs only from the candidate ids. Never invent ids " +
-                "and never return ids from the existing playlist. Reply with strict JSON only, no " +
-                "prose and no code fences, using this shape: " +
+                "and never return ids from the existing playlist. Keep energy transitions smooth, " +
+                "avoid repeating too many songs from the same artist, and consider the listener profile. " +
+                "Reply with strict JSON only, no prose and no code fences, using this shape: " +
                 "{\"name\": \"short mix name\", \"description\": \"one sentence\", " +
                 "\"trackIds\": [\"candidate ids\"]}. Match the requested direction and keep the " +
                 "mix varied."

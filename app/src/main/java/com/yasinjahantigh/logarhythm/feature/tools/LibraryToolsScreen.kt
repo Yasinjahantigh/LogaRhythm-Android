@@ -46,12 +46,14 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.foundation.shape.RoundedCornerShape
 import com.yasinjahantigh.logarhythm.R
 import com.yasinjahantigh.logarhythm.domain.model.Track
 import com.yasinjahantigh.logarhythm.feature.library.TrackListItem
 import com.yasinjahantigh.logarhythm.feature.playlist.AddToPlaylistDialog
 import com.yasinjahantigh.logarhythm.feature.playlist.PlaylistViewModel
 import com.yasinjahantigh.logarhythm.feature.playlist.SongMenuBottomSheet
+import com.yasinjahantigh.logarhythm.ui.components.ArtworkImage
 import com.yasinjahantigh.logarhythm.ui.designsystem.LocalPlaybackBottomPadding
 
 @Composable
@@ -276,7 +278,7 @@ fun LibraryToolsScreen(
                             Button(
                                 onClick = {
                                     val tracksToConsent = list.map { it.track }
-                                    mediaStoreConsent.deleteTracks(tracksToConsent, onApproved = {
+                                    mediaStoreConsent.writeTracks(tracksToConsent, onApproved = {
                                         viewModel.applyAllSuggestions(isAi = false) { count ->
                                             android.widget.Toast.makeText(context, "$count updated", android.widget.Toast.LENGTH_SHORT).show()
                                         }
@@ -289,24 +291,16 @@ fun LibraryToolsScreen(
                     }
                 }
                 list?.let { items(it, key = { s -> "fix_" + s.track.id }) { suggestion ->
-                    Card(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp)) {
-                        Column(Modifier.padding(12.dp)) {
-                            Text(suggestion.track.title, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            FixDiff(stringResource(R.string.tag_editor_field_title), suggestion.track.title, suggestion.tags.title)
-                            FixDiff(stringResource(R.string.tag_editor_field_artist), suggestion.track.artist, suggestion.tags.artist)
-                            FixDiff(stringResource(R.string.tag_editor_field_album), suggestion.track.album, suggestion.tags.album)
-                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                                TextButton(
-                                    enabled = savingFix == null,
-                                    onClick = {
-                                        mediaStoreConsent.write(suggestion.track, onApproved = {
-                                            viewModel.applySuggestion(suggestion.track.id, isAi = false)
-                                        })
-                                    }
-                                ) { Text(stringResource(R.string.btn_apply)) }
-                            }
+                    TagSuggestionCard(
+                        suggestion = suggestion,
+                        isAi = false,
+                        saving = savingFix != null,
+                        onApply = {
+                            mediaStoreConsent.write(suggestion.track, onApproved = {
+                                viewModel.applySuggestion(suggestion.track.id, isAi = false)
+                            })
                         }
-                    }
+                    )
                 } }
             } else if (tab == 4) {
                 if (!viewModel.isAiConfigured) {
@@ -390,7 +384,7 @@ fun LibraryToolsScreen(
                                 Button(
                                     onClick = {
                                         val tracksToConsent = aiList.map { it.track }
-                                        mediaStoreConsent.deleteTracks(tracksToConsent, onApproved = {
+                                        mediaStoreConsent.writeTracks(tracksToConsent, onApproved = {
                                             viewModel.applyAllSuggestions(isAi = true) { count ->
                                                 android.widget.Toast.makeText(context, "$count updated", android.widget.Toast.LENGTH_SHORT).show()
                                             }
@@ -403,28 +397,16 @@ fun LibraryToolsScreen(
                         }
                     }
                     aiList?.let { items(it, key = { s -> "ai_fix_" + s.track.id }) { suggestion ->
-                        Card(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp)) {
-                            Column(Modifier.padding(12.dp)) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(Icons.Filled.AutoAwesome, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text(suggestion.track.title, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                }
-                                FixDiff(stringResource(R.string.tag_editor_field_title), suggestion.track.title, suggestion.tags.title)
-                                FixDiff(stringResource(R.string.tag_editor_field_artist), suggestion.track.artist, suggestion.tags.artist)
-                                FixDiff(stringResource(R.string.tag_editor_field_album), suggestion.track.album, suggestion.tags.album)
-                                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                                    TextButton(
-                                        enabled = savingFix == null,
-                                        onClick = {
-                                            mediaStoreConsent.write(suggestion.track, onApproved = {
-                                                viewModel.applySuggestion(suggestion.track.id, isAi = true)
-                                            })
-                                        }
-                                    ) { Text(stringResource(R.string.btn_apply)) }
-                                }
+                        TagSuggestionCard(
+                            suggestion = suggestion,
+                            isAi = true,
+                            saving = savingFix != null,
+                            onApply = {
+                                mediaStoreConsent.write(suggestion.track, onApproved = {
+                                    viewModel.applySuggestion(suggestion.track.id, isAi = true)
+                                })
                             }
-                        }
+                        )
                     } }
                 }
             }
@@ -450,6 +432,65 @@ private fun TrackRow(
         onMenuClick = { onMenu(track) },
         onPlayNext = { onPlayNext(track) }
     )
+}
+
+@Composable
+private fun TagSuggestionCard(
+    suggestion: TagFixSuggestion,
+    isAi: Boolean,
+    saving: Boolean,
+    onApply: () -> Unit
+) {
+    Card(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp)) {
+        Column(Modifier.padding(12.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                ArtworkImage(
+                    uri = suggestion.artworkUrl ?: suggestion.track.artworkUri,
+                    fallbackKey = suggestion.tags.title,
+                    modifier = Modifier.size(44.dp),
+                    shape = RoundedCornerShape(10.dp),
+                    contentDescription = suggestion.tags.title
+                )
+                Spacer(modifier = Modifier.width(10.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        if (isAi) {
+                            Icon(Icons.Filled.AutoAwesome, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(15.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                        }
+                        Text(
+                            text = suggestion.track.title,
+                            style = MaterialTheme.typography.titleSmall,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                    if (suggestion.artworkUrl != null) {
+                        Text(
+                            text = stringResource(R.string.tools_new_cover_found),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+            }
+            Spacer(modifier = Modifier.height(6.dp))
+            FixDiff(stringResource(R.string.tag_editor_field_title), suggestion.track.title, suggestion.tags.title)
+            FixDiff(stringResource(R.string.tag_editor_field_artist), suggestion.track.artist, suggestion.tags.artist)
+            FixDiff(stringResource(R.string.tag_editor_field_album), suggestion.track.album, suggestion.tags.album)
+            FixDiff(stringResource(R.string.tag_editor_field_genre), suggestion.track.genre, suggestion.tags.genre)
+            FixDiff(
+                stringResource(R.string.tag_editor_field_year),
+                if (suggestion.track.year > 0) suggestion.track.year.toString() else "—",
+                if (suggestion.tags.year > 0) suggestion.tags.year.toString() else "—"
+            )
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                TextButton(enabled = !saving, onClick = onApply) {
+                    Text(stringResource(R.string.btn_apply))
+                }
+            }
+        }
+    }
 }
 
 @Composable

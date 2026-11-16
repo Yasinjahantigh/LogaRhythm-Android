@@ -10,7 +10,10 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.DefaultLoadControl
+import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.audio.AudioSink
+import androidx.media3.exoplayer.audio.DefaultAudioSink
 import androidx.media3.exoplayer.analytics.AnalyticsListener
 import androidx.media3.session.CommandButton
 import androidx.media3.session.DefaultMediaNotificationProvider
@@ -79,6 +82,12 @@ class PlaybackService : MediaSessionService() {
     @Inject
     lateinit var musicDao: MusicDao
 
+    @Inject
+    lateinit var queuePersistenceManager: QueuePersistenceManager
+
+    @Inject
+    lateinit var stereoBalanceAudioProcessor: StereoBalanceAudioProcessor
+
     private var mediaSession: MediaSession? = null
     private var enhancer: PlaybackEnhancer? = null
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
@@ -134,7 +143,19 @@ class PlaybackService : MediaSessionService() {
             .setBufferDurationsMs(10_000, 20_000, 1_000, 2_000)
             .build()
 
-        val player = ExoPlayer.Builder(this)
+        val renderersFactory = object : DefaultRenderersFactory(this) {
+            override fun buildAudioSink(
+                context: android.content.Context,
+                enableFloatOutput: Boolean,
+                enableAudioTrackPlaybackParams: Boolean
+            ): AudioSink {
+                return DefaultAudioSink.Builder(context)
+                    .setAudioProcessors(arrayOf(stereoBalanceAudioProcessor))
+                    .build()
+            }
+        }
+
+        val player = ExoPlayer.Builder(this, renderersFactory)
             .setAudioAttributes(audioAttributes, true)
             .setHandleAudioBecomingNoisy(true)
             .setLoadControl(loadControl)
@@ -142,6 +163,13 @@ class PlaybackService : MediaSessionService() {
             .setWakeMode(C.WAKE_MODE_LOCAL)
             .build()
         livePlayer = player
+
+        scope.launch {
+            preferencesManager.stereoBalance.collect { stereoBalanceAudioProcessor.setStereoBalance(it) }
+        }
+        scope.launch {
+            preferencesManager.monoAudio.collect { stereoBalanceAudioProcessor.setMonoAudio(it) }
+        }
 
         enhancer = PlaybackEnhancer(this, player, preferencesManager, musicDao, sleepTimerManager)
             .also { it.start() }
@@ -158,16 +186,18 @@ class PlaybackService : MediaSessionService() {
             override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
                 com.yasinjahantigh.logarhythm.widget.MusicWidgetUpdater.requestUpdate(this@PlaybackService)
             }
+
+            override fun onRepeatModeChanged(repeatMode: Int) {
+                com.yasinjahantigh.logarhythm.widget.MusicWidgetUpdater.requestUpdate(this@PlaybackService)
+            }
+
+            override fun onTimelineChanged(timeline: androidx.media3.common.Timeline, reason: Int) {
+                com.yasinjahantigh.logarhythm.widget.MusicWidgetUpdater.requestUpdate(this@PlaybackService)
+            }
         })
 
-        scope.launch {
-            while (isActive) {
-                delay(10_000L)
-                if (player.isPlaying) {
-                    com.yasinjahantigh.logarhythm.widget.MusicWidgetUpdater.requestProgressUpdate(this@PlaybackService)
-                }
-            }
-        }
+        // Widgets now focus on crisp static metadata + controls without lagging seconds/bars,
+        // so updates are driven cleanly by playback/queue/mode transitions instead of 10s timers.
 
         // Attach Equalizer to player audio session and observe changes
         player.addAnalyticsListener(object : AnalyticsListener {
@@ -258,6 +288,29 @@ class PlaybackService : MediaSessionService() {
             // has to be posted before the foreground service start deadline runs out.
             mediaSession?.let { onUpdateNotification(it, true) }
         }
+        if (player != null && player.mediaItemCount == 0 &&
+            (action == ACTION_PLAY_PAUSE || action == ACTION_NEXT || action == ACTION_PREVIOUS)
+        ) {
+            scope.launch(Dispatchers.Main) {
+                val restored = queuePersistenceManager.restoreQueue()
+                if (restored != null && player.mediaItemCount == 0) {
+                    player.setMediaItems(
+                        restored.tracks.map(MediaItemMapper::toMediaItem),
+                        restored.currentIndex,
+                        restored.positionMs
+                    )
+                    player.prepare()
+                }
+                executePlayerAction(player, action)
+                com.yasinjahantigh.logarhythm.widget.MusicWidgetUpdater.requestUpdate(this@PlaybackService)
+            }
+            return super.onStartCommand(intent, flags, startId)
+        }
+        executePlayerAction(player, action)
+        return super.onStartCommand(intent, flags, startId)
+    }
+
+    private fun executePlayerAction(player: Player?, action: String?) {
         when (action) {
             ACTION_PLAY_PAUSE -> {
                 if (player != null) {
@@ -279,7 +332,6 @@ class PlaybackService : MediaSessionService() {
                 }
             }
         }
-        return super.onStartCommand(intent, flags, startId)
     }
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? {

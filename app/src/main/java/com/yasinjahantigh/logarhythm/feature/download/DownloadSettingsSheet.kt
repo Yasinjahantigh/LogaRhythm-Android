@@ -1,5 +1,6 @@
 package com.yasinjahantigh.logarhythm.feature.download
 
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -18,6 +19,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -48,6 +50,8 @@ fun DownloadSettingsSheet(
     cookiesImported: Boolean,
     onImportCookies: () -> Unit,
     onClearCookies: () -> Unit,
+    qualityPref: String = "best",
+    onQualityChange: (String) -> Unit = {},
     onDismiss: () -> Unit
 ) {
     val updating = updateState is YtdlpUpdateState.Updating
@@ -77,11 +81,27 @@ fun DownloadSettingsSheet(
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.Bold
             )
+            Spacer(modifier = Modifier.height(6.dp))
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                listOf(
+                    "best" to stringResource(R.string.download_quality_best),
+                    "320" to "320 kbps",
+                    "192" to "192 kbps",
+                    "128" to "128 kbps"
+                ).forEach { (pref, label) ->
+                    FilterChip(
+                        selected = qualityPref == pref,
+                        onClick = { onQualityChange(pref) },
+                        label = { Text(label) }
+                    )
+                }
+            }
             Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = stringResource(R.string.download_settings_audio_value),
-                style = MaterialTheme.typography.bodyMedium
-            )
             Text(
                 text = stringResource(R.string.download_settings_audio_desc),
                 style = MaterialTheme.typography.bodySmall,

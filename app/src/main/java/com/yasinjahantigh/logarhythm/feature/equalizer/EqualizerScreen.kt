@@ -403,6 +403,100 @@ fun EqualizerScreen(
                 )
             }
 
+            HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
+
+            Text(
+                text = stringResource(R.string.eq_pro_dsp_title),
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.primary,
+                fontWeight = FontWeight.Bold
+            )
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // Stereo Balance Slider (-1f..+1f)
+            Column(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = stringResource(R.string.eq_stereo_balance),
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Medium
+                    )
+                    val balPct = (state.stereoBalance * 100).toInt()
+                    val balText = when {
+                        balPct < -2 -> stringResource(R.string.eq_balance_left, -balPct)
+                        balPct > 2 -> stringResource(R.string.eq_balance_right, balPct)
+                        else -> stringResource(R.string.eq_balance_center)
+                    }
+                    Text(
+                        text = balText,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+                Slider(
+                    value = state.stereoBalance,
+                    onValueChange = viewModel::setStereoBalance,
+                    valueRange = -1f..1f,
+                    modifier = Modifier.fillMaxWidth().testTag("stereo_balance_slider")
+                )
+            }
+
+            // Mono Audio Switch
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
+                    Text(
+                        text = stringResource(R.string.eq_mono_audio),
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Medium
+                    )
+                    Text(
+                        text = stringResource(R.string.eq_mono_audio_desc),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Switch(
+                    checked = state.monoAudio,
+                    onCheckedChange = viewModel::setMonoAudio
+                )
+            }
+
+            // Device Auto-EQ Switch
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
+                    Text(
+                        text = stringResource(R.string.eq_device_auto_title),
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Medium
+                    )
+                    Text(
+                        text = stringResource(R.string.eq_device_auto_desc, state.activeDeviceLabel),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Switch(
+                    checked = state.deviceAutoEqEnabled,
+                    onCheckedChange = viewModel::setDeviceAutoEqEnabled
+                )
+            }
+
             Spacer(modifier = Modifier.height(24.dp))
         }
     }

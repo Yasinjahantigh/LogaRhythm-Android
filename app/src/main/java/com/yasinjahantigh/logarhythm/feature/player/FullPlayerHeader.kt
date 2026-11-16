@@ -11,12 +11,14 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Album
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.OpenInBrowser
+import androidx.compose.material.icons.filled.Repeat
 import androidx.compose.material.icons.automirrored.filled.PlaylistAddCheck
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.VisibilityOff
@@ -60,6 +62,9 @@ fun FullPlayerHeader(
     onShareSong: () -> Unit,
     onEditSongDetails: () -> Unit,
     modifier: Modifier = Modifier,
+    abLoopLabel: String? = null,
+    onToggleAbLoop: () -> Unit = {},
+    onOpenCarMode: () -> Unit = {},
     onHideSong: (() -> Unit)? = null
 ) {
     var showMoreMenu by remember { mutableStateOf(false) }
@@ -156,6 +161,20 @@ fun FullPlayerHeader(
                     text = { Text(stringResource(R.string.action_edit_track_info)) },
                     leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null) },
                     onClick = { showMoreMenu = false; onEditSongDetails() }
+                )
+                DropdownMenuItem(
+                    text = {
+                        Text(
+                            abLoopLabel ?: stringResource(R.string.player_ab_loop_action)
+                        )
+                    },
+                    leadingIcon = { Icon(Icons.Default.Repeat, contentDescription = null) },
+                    onClick = { showMoreMenu = false; onToggleAbLoop() }
+                )
+                DropdownMenuItem(
+                    text = { Text(stringResource(R.string.player_car_mode)) },
+                    leadingIcon = { Icon(Icons.Default.DirectionsCar, contentDescription = null) },
+                    onClick = { showMoreMenu = false; onOpenCarMode() }
                 )
                 DropdownMenuItem(
                     text = { Text(stringResource(R.string.action_search_lyrics_google)) },

@@ -54,10 +54,12 @@ import androidx.compose.foundation.layout.WindowInsets
 import com.yasinjahantigh.logarhythm.ui.components.DetailHero
 import com.yasinjahantigh.logarhythm.R
 import com.yasinjahantigh.logarhythm.domain.model.Track
+import com.yasinjahantigh.logarhythm.feature.artist.ArtistSplitViewModel
 import com.yasinjahantigh.logarhythm.feature.library.TrackListItem
 import com.yasinjahantigh.logarhythm.feature.playlist.AddToPlaylistDialog
 import com.yasinjahantigh.logarhythm.feature.playlist.PlaylistViewModel
 import com.yasinjahantigh.logarhythm.feature.playlist.SongMenuBottomSheet
+import com.yasinjahantigh.logarhythm.ui.components.rememberArtistNavigationHandler
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -66,13 +68,16 @@ fun AlbumDetailScreen(
     modifier: Modifier = Modifier,
     onNavigateToArtist: ((String) -> Unit)? = null,
     viewModel: AlbumDetailViewModel = hiltViewModel(),
-    playlistViewModel: PlaylistViewModel = hiltViewModel()
+    playlistViewModel: PlaylistViewModel = hiltViewModel(),
+    artistSplitViewModel: ArtistSplitViewModel = hiltViewModel()
 ) {
     val album by viewModel.album.collectAsStateWithLifecycle()
     val tracks by viewModel.tracks.collectAsStateWithLifecycle()
     val currentTrack by viewModel.currentTrack.collectAsStateWithLifecycle()
     val isPlaying by viewModel.isPlaying.collectAsStateWithLifecycle()
     val playlists by playlistViewModel.playlists.collectAsStateWithLifecycle()
+    val artistSplitConfig by artistSplitViewModel.config.collectAsStateWithLifecycle()
+    val safeNavigateToArtist = rememberArtistNavigationHandler(artistSplitConfig, onNavigateToArtist)
 
     var selectedTrackForMenu by remember { mutableStateOf<Track?>(null) }
     var showAddToPlaylistDialog by remember { mutableStateOf(false) }
@@ -157,7 +162,7 @@ fun AlbumDetailScreen(
                 DetailHero(
                     title = displayAlbumName,
                     subtitle = displayArtistName,
-                    onSubtitleClick = onNavigateToArtist?.let { nav -> { nav(displayArtistName) } },
+                    onSubtitleClick = safeNavigateToArtist?.let { nav -> { nav(rawArtistName.ifBlank { displayArtistName }) } },
                     meta = if ((album?.year ?: 0) > 0) {
                         "${album!!.year} • ${stringResource(R.string.album_track_count, tracks.size)}"
                     } else {

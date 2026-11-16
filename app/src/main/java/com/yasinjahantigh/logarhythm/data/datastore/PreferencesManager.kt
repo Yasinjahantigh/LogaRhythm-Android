@@ -64,6 +64,7 @@ class PreferencesManager @Inject constructor(
     private val keyThemeMode = stringPreferencesKey("key_theme_mode")
     private val keyColorSource = stringPreferencesKey("key_color_source")
     private val keyThemeStyle = stringPreferencesKey("key_theme_style")
+    private val keyThemePresetId = stringPreferencesKey("key_theme_preset_id")
     private val keyCustomAccent = longPreferencesKey("key_custom_accent")
     private val keyCustomBase = stringPreferencesKey("key_custom_base")
     private val keyCustomBackgroundUri = stringPreferencesKey("key_custom_background_uri")
@@ -185,8 +186,16 @@ class PreferencesManager @Inject constructor(
         preferences[keyCustomBase] ?: "dark"
     }
 
+    val themePresetId: Flow<String> = dataStore.data.map { preferences ->
+        preferences[keyThemePresetId] ?: com.yasinjahantigh.logarhythm.ui.theme.ThemePresets.DEFAULT_ID
+    }
+
+    suspend fun setThemePresetId(presetId: String) {
+        dataStore.edit { preferences -> preferences[keyThemePresetId] = presetId }
+    }
+
     suspend fun setThemeStyle(style: String) {
-        val normalized = style.takeIf { it in setOf("default", "oled", "album_art", "wallpaper", "custom") }
+        val normalized = style.takeIf { it in setOf("default", "oled", "album_art", "wallpaper", "custom", "preset") }
             ?: "default"
         dataStore.edit { preferences -> preferences[keyThemeStyle] = normalized }
     }
@@ -568,6 +577,8 @@ class PreferencesManager @Inject constructor(
     companion object {
         const val BOOTSTRAP_PREFS = "music_settings"
         const val BOOTSTRAP_ONBOARDING_KEY = "onboarding_completed_bootstrap"
+        private const val MIX_EXPOSURE_RETENTION_DAYS = 14L
+        private const val MAX_MIX_EXPOSURE_ENTRIES = 400
     }
 
     // ---- Playback quality -------------------------------------------------------------------
@@ -592,6 +603,63 @@ class PreferencesManager @Inject constructor(
     suspend fun setReplayGainMode(mode: String) { dataStore.edit { it[keyReplayGain] = mode } }
     suspend fun setReplayGainPreampDb(db: Float) { dataStore.edit { it[keyReplayGainPreamp] = db.coerceIn(-6f, 6f) } }
     suspend fun setResumeOnHeadset(enabled: Boolean) { dataStore.edit { it[keyResumeOnHeadset] = enabled } }
+
+    // ---- Pro Audio, Privacy, Whitelist, Radar & Download Quality --------------------------
+
+    private val keyPrivateSession = booleanPreferencesKey("key_private_session")
+    private val keyDoubleTapSeek = booleanPreferencesKey("key_double_tap_seek")
+    private val keyFolderWhitelistMode = booleanPreferencesKey("key_folder_whitelist_mode")
+    private val keyWhitelistedFolders = stringPreferencesKey("key_whitelisted_folders")
+    private val keyAppFont = stringPreferencesKey("key_app_font")
+    private val keyDownloadQuality = stringPreferencesKey("key_download_quality")
+    private val keyReleaseRadarEnabled = booleanPreferencesKey("key_release_radar_enabled")
+    private val keyPlaybackPitch = floatPreferencesKey("key_playback_pitch")
+    private val keySlowedReverb = booleanPreferencesKey("key_slowed_reverb")
+    private val keyStereoBalance = floatPreferencesKey("key_stereo_balance")
+    private val keyMonoAudio = booleanPreferencesKey("key_mono_audio")
+    private val keyDeviceAutoEq = booleanPreferencesKey("key_device_auto_eq")
+
+    val privateSession: Flow<Boolean> = dataStore.data.map { it[keyPrivateSession] ?: false }
+    val doubleTapSeek: Flow<Boolean> = dataStore.data.map { it[keyDoubleTapSeek] ?: true }
+    val folderWhitelistMode: Flow<Boolean> = dataStore.data.map { it[keyFolderWhitelistMode] ?: false }
+    val whitelistedFolders: Flow<Set<String>> = dataStore.data.map { prefs ->
+        prefs[keyWhitelistedFolders].orEmpty()
+            .split("\n")
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+            .toSet()
+    }
+    /** "default" | "sans" | "serif" | "mono". */
+    val appFont: Flow<String> = dataStore.data.map { it[keyAppFont] ?: "default" }
+    /** "best" | "320" | "192" | "128". */
+    val downloadQualityPref: Flow<String> = dataStore.data.map { it[keyDownloadQuality] ?: "best" }
+    val releaseRadarEnabled: Flow<Boolean> = dataStore.data.map { it[keyReleaseRadarEnabled] ?: true }
+    val playbackPitch: Flow<Float> = dataStore.data.map { it[keyPlaybackPitch] ?: 1f }
+    val slowedReverbEnabled: Flow<Boolean> = dataStore.data.map { it[keySlowedReverb] ?: false }
+    val stereoBalance: Flow<Float> = dataStore.data.map { it[keyStereoBalance] ?: 0f }
+    val monoAudio: Flow<Boolean> = dataStore.data.map { it[keyMonoAudio] ?: false }
+    val deviceAutoEqEnabled: Flow<Boolean> = dataStore.data.map { it[keyDeviceAutoEq] ?: true }
+
+    suspend fun setPrivateSession(enabled: Boolean) { dataStore.edit { it[keyPrivateSession] = enabled } }
+    suspend fun setDoubleTapSeek(enabled: Boolean) { dataStore.edit { it[keyDoubleTapSeek] = enabled } }
+    suspend fun setFolderWhitelistMode(enabled: Boolean) { dataStore.edit { it[keyFolderWhitelistMode] = enabled } }
+    suspend fun setWhitelistedFolders(folders: Set<String>) {
+        dataStore.edit { it[keyWhitelistedFolders] = folders.joinToString("\n") }
+    }
+    suspend fun setAppFont(font: String) {
+        val safe = font.takeIf { it in setOf("default", "sans", "serif", "mono") } ?: "default"
+        dataStore.edit { it[keyAppFont] = safe }
+    }
+    suspend fun setDownloadQualityPref(quality: String) {
+        val safe = quality.takeIf { it in setOf("best", "320", "192", "128") } ?: "best"
+        dataStore.edit { it[keyDownloadQuality] = safe }
+    }
+    suspend fun setReleaseRadarEnabled(enabled: Boolean) { dataStore.edit { it[keyReleaseRadarEnabled] = enabled } }
+    suspend fun setPlaybackPitch(pitch: Float) { dataStore.edit { it[keyPlaybackPitch] = pitch.coerceIn(0.5f, 1.5f) } }
+    suspend fun setSlowedReverbEnabled(enabled: Boolean) { dataStore.edit { it[keySlowedReverb] = enabled } }
+    suspend fun setStereoBalance(balance: Float) { dataStore.edit { it[keyStereoBalance] = balance.coerceIn(-1f, 1f) } }
+    suspend fun setMonoAudio(enabled: Boolean) { dataStore.edit { it[keyMonoAudio] = enabled } }
+    suspend fun setDeviceAutoEqEnabled(enabled: Boolean) { dataStore.edit { it[keyDeviceAutoEq] = enabled } }
 
     // ---- Library intelligence ---------------------------------------------------------------
 
@@ -746,6 +814,64 @@ class PreferencesManager @Inject constructor(
             preferences[keyAiProvider] = provider
             preferences[keyAiBaseUrl] = baseUrl
             preferences[keyAiModel] = model
+        }
+    }
+
+    // ---- Smart Mix & AI anti-repetition exposure history (trackId -> epochDay) ---------------
+
+    private val keyMixExposureHistory = stringPreferencesKey("mix_exposure_history")
+
+    val mixExposureHistory: Flow<Map<String, Long>> = dataStore.data.map { preferences ->
+        parseMixExposure(preferences[keyMixExposureHistory])
+    }
+
+    suspend fun recordMixExposure(trackIds: Collection<String>, seedDate: Long) {
+        val cleanIds = trackIds.filter { it.isNotBlank() }
+        if (cleanIds.isEmpty()) return
+        dataStore.edit { preferences ->
+            val current = parseMixExposure(preferences[keyMixExposureHistory]).toMutableMap()
+            val minKeepDay = seedDate - MIX_EXPOSURE_RETENTION_DAYS
+            current.entries.removeAll { it.value < minKeepDay }
+            var changed = false
+            for (id in cleanIds) {
+                if (current[id] != seedDate) {
+                    current[id] = seedDate
+                    changed = true
+                }
+            }
+            if (!changed && current.size <= MAX_MIX_EXPOSURE_ENTRIES) return@edit
+            val trimmed = if (current.size > MAX_MIX_EXPOSURE_ENTRIES) {
+                current.entries
+                    .sortedByDescending { it.value }
+                    .take(MAX_MIX_EXPOSURE_ENTRIES)
+                    .associate { it.key to it.value }
+            } else {
+                current
+            }
+            val obj = org.json.JSONObject()
+            for ((id, day) in trimmed) {
+                obj.put(id, day)
+            }
+            preferences[keyMixExposureHistory] = obj.toString()
+        }
+    }
+
+    private fun parseMixExposure(raw: String?): Map<String, Long> {
+        if (raw.isNullOrBlank()) return emptyMap()
+        return try {
+            val obj = org.json.JSONObject(raw)
+            val result = HashMap<String, Long>(obj.length())
+            val keys = obj.keys()
+            while (keys.hasNext()) {
+                val key = keys.next()
+                val day = obj.optLong(key, -1L)
+                if (key.isNotBlank() && day >= 0L) {
+                    result[key] = day
+                }
+            }
+            result
+        } catch (_: Exception) {
+            emptyMap()
         }
     }
 }

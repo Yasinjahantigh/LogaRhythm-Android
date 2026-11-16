@@ -92,6 +92,19 @@ class MusicWidgetTest {
     }
 
     @Test
+    fun buildQueueDisplayWindow_reflectsDynamicQueueOrderFromCurrentTrack() {
+        val t0 = createTrack("0", "Intro", "Artist")
+        val t1 = createTrack("1", "Current Song", "Artist")
+        val t2 = createTrack("2", "Play Next Song", "Artist")
+        val t3 = createTrack("3", "Last Song", "Artist")
+
+        val window = MusicWidgetUpdater.buildQueueDisplayWindow(listOf(t0, t1, t2, t3), currentIndex = 1)
+
+        assertEquals(listOf(1, 2, 3, 0), window.map { it.index })
+        assertEquals(listOf("Current Song", "Play Next Song", "Last Song", "Intro"), window.map { it.value.title })
+    }
+
+    @Test
     fun sortTracks_byDuration_ascending() {
         val tracks = listOf(
             createTrack("1", "Long", "Artist", durationMs = 300000L),
@@ -129,6 +142,6 @@ class MusicWidgetTest {
         assertEquals(0, snapshot.repeatMode)
         assertFalse(snapshot.favorite)
         assertTrue(snapshot.upcoming.isEmpty())
-        assertNotNull(snapshot.sortedTracks)
+        assertNotNull(snapshot.queueItems)
     }
 }

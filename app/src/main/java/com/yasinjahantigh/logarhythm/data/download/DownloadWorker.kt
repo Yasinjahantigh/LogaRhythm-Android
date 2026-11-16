@@ -7,18 +7,25 @@ import androidx.work.WorkerParameters
 import com.yasinjahantigh.logarhythm.R
 import com.yasinjahantigh.logarhythm.core.library.LibrarySync
 import com.yasinjahantigh.logarhythm.data.download.metadata.MetadataResolver
+import com.yasinjahantigh.logarhythm.data.download.musicman.MusicManClient
 import com.yasinjahantigh.logarhythm.data.download.musicman.MusicManDownloader
+import com.yasinjahantigh.logarhythm.data.download.saavn.SaavnClient
 import com.yasinjahantigh.logarhythm.data.room.DownloadDao
+import com.yasinjahantigh.logarhythm.data.sources.LrclibLyricsSource
 import com.yasinjahantigh.logarhythm.data.download.TagEnrichStatus
+import com.yasinjahantigh.logarhythm.domain.lyrics.LrcParser
+import com.yasinjahantigh.logarhythm.domain.lyrics.LyricsQuery
 import com.yasinjahantigh.logarhythm.domain.download.DownloadErrorClassifier
 import com.yasinjahantigh.logarhythm.domain.download.DownloadMetadataMerge
 import com.yasinjahantigh.logarhythm.domain.download.DownloadPipelineException
 import com.yasinjahantigh.logarhythm.domain.download.DownloadTitleParser
 import com.yasinjahantigh.logarhythm.domain.model.DownloadErrorKind
 import com.yasinjahantigh.logarhythm.domain.model.DownloadItem
+import com.yasinjahantigh.logarhythm.domain.model.DownloadSearchCategory
 import com.yasinjahantigh.logarhythm.domain.model.DownloadSearchResult
 import com.yasinjahantigh.logarhythm.domain.model.DownloadSource
 import com.yasinjahantigh.logarhythm.domain.model.DownloadStatus
+import com.yasinjahantigh.logarhythm.domain.model.DOWNLOAD_CRAWLING_DETAIL
 import com.yasinjahantigh.logarhythm.domain.model.DOWNLOAD_NETWORK_RETRY_DETAIL
 import com.yasinjahantigh.logarhythm.domain.model.DOWNLOAD_SAVED_WITHOUT_TAGS_DETAIL
 import com.yasinjahantigh.logarhythm.domain.model.DOWNLOAD_TAG_WRITE_FAILED_DETAIL
@@ -31,10 +38,13 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import java.io.File
 import kotlin.math.abs
 
@@ -46,7 +56,9 @@ class DownloadWorker @AssistedInject constructor(
     private val runtime: YtDlpRuntime,
     private val searchService: YtDlpSearchService,
     private val downloader: YtDlpDownloader,
+    private val musicManClient: MusicManClient,
     private val musicManDownloader: MusicManDownloader,
+    private val saavnClient: SaavnClient,
     private val saavnDownloader: com.yasinjahantigh.logarhythm.data.download.saavn.SaavnDownloader,
     private val radioJavanClient: com.yasinjahantigh.logarhythm.data.download.radiojavan.RadioJavanClient,
     private val radioJavanDownloader: com.yasinjahantigh.logarhythm.data.download.radiojavan.RadioJavanDownloader,
@@ -58,7 +70,8 @@ class DownloadWorker @AssistedInject constructor(
     private val workspace: DownloadWorkspace,
     private val notifications: DownloadNotifications,
     private val librarySync: LibrarySync,
-    private val events: DownloadEvents
+    private val events: DownloadEvents,
+    private val lrclibLyricsSource: LrclibLyricsSource
 ) : CoroutineWorker(appContext, params) {
 
     private val downloadId: String
@@ -123,56 +136,80 @@ class DownloadWorker @AssistedInject constructor(
         }
 
         val parsed = DownloadTitleParser.parse(item.title, item.artist, item.artist)
-        val resolved = metadataResolver.resolve(parsed.second, parsed.first, item.durationMs)
-        val title = resolved.title ?: parsed.second
-        val artist = resolved.artist ?: parsed.first
-        val album = resolved.album.orEmpty()
-        val artwork = resolved.artworkUrl ?: item.artworkUrl
-        dao.updateMetadata(id, title, artist, album, artwork, now())
+        val initialTitle = item.title.ifBlank { parsed.second }
+        val initialArtist = item.artist.ifBlank { parsed.first }
 
         val progressChannel = Channel<ProgressEvent>(Channel.CONFLATED)
         val progressJob = CoroutineScope(SupervisorJob() + Dispatchers.Default).launch {
-            pumpProgress(id, title, progressChannel)
+            pumpProgress(id, initialTitle, progressChannel)
         }
 
-        val outcome = try {
-            performDownload(item, title, artist, artwork, progressChannel)
-        } catch (cancelled: CancellationException) {
-            stopProgressNow(progressChannel, progressJob)
-            downloader.cancel(id)
-            throw cancelled
-        } catch (pipeline: DownloadPipelineException) {
-            stopProgressAndJoin(progressChannel, progressJob)
-            if (pipeline.kind == DownloadErrorKind.NETWORK && runAttemptCount < MAX_NETWORK_RETRIES) {
-                dao.updateProgress(
-                    id,
-                    DownloadStatus.QUEUED.raw,
-                    0,
-                    0,
-                    DOWNLOAD_NETWORK_RETRY_DETAIL,
-                    now()
-                )
-                updateForeground(item.title, 0, 0, DownloadStatus.QUEUED)
-                return Result.retry()
+        // Resolve metadata concurrently so audio streaming starts immediately without waiting.
+        val (outcome, resolved) = coroutineScope {
+            val metadataJob = async(Dispatchers.IO) {
+                runCatching {
+                    withTimeoutOrNull(8_000L) {
+                        metadataResolver.resolve(parsed.second, parsed.first, item.durationMs)
+                    }
+                }.getOrNull()
             }
-            return fail(item, pipeline.kind, pipeline.message)
-        } catch (throwable: Throwable) {
-            stopProgressNow(progressChannel, progressJob)
-            throw throwable
+
+            val dlOutcome = try {
+                performDownload(item, initialTitle, initialArtist, item.artworkUrl, progressChannel)
+            } catch (cancelled: CancellationException) {
+                metadataJob.cancel()
+                stopProgressNow(progressChannel, progressJob)
+                downloader.cancel(id)
+                throw cancelled
+            } catch (pipeline: DownloadPipelineException) {
+                metadataJob.cancel()
+                stopProgressAndJoin(progressChannel, progressJob)
+                if (pipeline.kind == DownloadErrorKind.NETWORK && runAttemptCount < MAX_NETWORK_RETRIES) {
+                    dao.updateProgress(
+                        id,
+                        DownloadStatus.QUEUED.raw,
+                        0,
+                        0,
+                        DOWNLOAD_NETWORK_RETRY_DETAIL,
+                        now()
+                    )
+                    updateForeground(item.title, 0, 0, DownloadStatus.QUEUED)
+                    return@coroutineScope null to null
+                }
+                throw pipeline
+            } catch (throwable: Throwable) {
+                metadataJob.cancel()
+                stopProgressNow(progressChannel, progressJob)
+                throw throwable
+            }
+
+            dlOutcome to metadataJob.await()
         }
+
+        if (outcome == null) return Result.retry()
 
         stopProgressAndJoin(progressChannel, progressJob)
+
+        val finalTitle = resolved?.title ?: outcome.title
+        val finalArtist = resolved?.artist ?: outcome.artist
+        val finalAlbum = item.album.ifBlank { resolved?.album.orEmpty() }
+        val finalArtwork = resolved?.artworkUrl ?: outcome.artworkUrl ?: item.artworkUrl
+        val finalTrackNumber = item.trackNumber.takeIf { it > 0 } ?: resolved?.trackNumber
 
         return try {
             completeDownload(
                 item = item,
-                outcome = outcome,
-                album = album,
-                genre = resolved.genre,
-                year = resolved.year,
-                trackNumber = resolved.trackNumber,
-                discNumber = resolved.discNumber,
-                composer = resolved.composer
+                outcome = outcome.copy(
+                    title = finalTitle,
+                    artist = finalArtist,
+                    artworkUrl = finalArtwork
+                ),
+                album = finalAlbum,
+                genre = resolved?.genre,
+                year = resolved?.year,
+                trackNumber = finalTrackNumber,
+                discNumber = resolved?.discNumber,
+                composer = resolved?.composer
             )
         } catch (pipeline: DownloadPipelineException) {
             fail(item, pipeline.kind, pipeline.message)
@@ -200,8 +237,40 @@ class DownloadWorker @AssistedInject constructor(
             }
             return DownloadOutcome(file, false, title, artist, artwork)
         } else if (item.source == DownloadSource.DEEZER) {
-            // When user picks Deezer, match audio via Radio Javan (for Persian) or YouTube/SoundCloud
+            // Prioritize MusicMan Bale endpoint first (fast & VPN-free), then Saavn, RadioJavan, yt-dlp.
             val query = "$title $artist".trim()
+            val mmMatch = runCatching {
+                musicManClient.search(query, DownloadSearchCategory.TRACK, 5).firstOrNull { it.hasReadyAudio }
+            }.getOrNull()
+            if (mmMatch != null) {
+                try {
+                    val file = musicManDownloader.download(
+                        trackId = mmMatch.id,
+                        downloadId = item.id,
+                        workspace = dir,
+                        preferredQuality = item.quality
+                    ) { progress, eta, line ->
+                        channel.trySend(ProgressEvent(progress, eta, line))
+                    }
+                    return DownloadOutcome(file, false, title, artist, artwork)
+                } catch (_: Exception) {
+                }
+            }
+            val saavnMatch = runCatching { saavnClient.search(query, 3).firstOrNull() }.getOrNull()
+            if (saavnMatch != null) {
+                try {
+                    val file = saavnDownloader.download(
+                        downloadUrl = saavnMatch.url,
+                        songId = saavnMatch.id,
+                        downloadId = item.id,
+                        workspace = dir
+                    ) { progress, eta, line ->
+                        channel.trySend(ProgressEvent(progress, eta, line))
+                    }
+                    return DownloadOutcome(file, true, title, artist, artwork)
+                } catch (_: Exception) {
+                }
+            }
             val rjMatches = runCatching { radioJavanClient.search(query, 3) }.getOrNull().orEmpty()
             val rjBest = rjMatches.firstOrNull()
             if (rjBest != null) {
@@ -234,24 +303,45 @@ class DownloadWorker @AssistedInject constructor(
                 val file = musicManDownloader.download(
                     trackId = trackId,
                     downloadId = item.id,
-                    workspace = dir
+                    workspace = dir,
+                    preferredQuality = item.quality
                 ) { progress, eta, line ->
                     channel.trySend(ProgressEvent(progress, eta, line))
                 }
                 return DownloadOutcome(file, false, title, artist, artwork)
             } catch (e: Exception) {
-                // If MusicMan server fails, fall back to Radio Javan or YouTube
                 val query = "$title $artist".trim()
+                val saavnMatch = runCatching { saavnClient.search(query, 2).firstOrNull() }.getOrNull()
+                if (saavnMatch != null) {
+                    runCatching {
+                        val file = saavnDownloader.download(
+                            downloadUrl = saavnMatch.url,
+                            songId = saavnMatch.id,
+                            downloadId = item.id,
+                            workspace = dir
+                        ) { progress, eta, line ->
+                            channel.trySend(ProgressEvent(progress, eta, line))
+                        }
+                        return DownloadOutcome(file, true, title, artist, artwork)
+                    }
+                }
                 val rjMatch = runCatching { radioJavanClient.search(query, 1).firstOrNull() }.getOrNull()
                 if (rjMatch != null) {
-                    val file = radioJavanDownloader.download(
-                        songId = rjMatch.id,
-                        sourceUrl = rjMatch.url,
-                        downloadId = item.id,
-                        workspace = dir
-                    ) { progress, eta, line ->
-                        channel.trySend(ProgressEvent(progress, eta, line))
+                    runCatching {
+                        val file = radioJavanDownloader.download(
+                            songId = rjMatch.id,
+                            sourceUrl = rjMatch.url,
+                            downloadId = item.id,
+                            workspace = dir
+                        ) { progress, eta, line ->
+                            channel.trySend(ProgressEvent(progress, eta, line))
+                        }
+                        return DownloadOutcome(file, true, title, artist, artwork)
                     }
+                }
+                val ytFallback = runCatching { searchService.searchSoundCloud(query).firstOrNull() }.getOrNull()
+                if (ytFallback != null) {
+                    val file = downloadOnce(item, ytFallback.url, ytFallback.id, dir, channel)
                     return DownloadOutcome(file, true, title, artist, artwork)
                 }
                 throw e
@@ -345,8 +435,9 @@ class DownloadWorker @AssistedInject constructor(
         dir: File,
         channel: Channel<ProgressEvent>
     ): File {
+        val abr = item.quality.prefValue.toIntOrNull()?.takeIf { it > 0 }
         return try {
-            downloader.download(url, videoId, item.id, dir) { p, e, line ->
+            downloader.download(url, videoId, item.id, dir, abr) { p, e, line ->
                 channel.trySend(ProgressEvent(p, e, line))
             }
         } catch (cancelled: CancellationException) {
@@ -405,6 +496,7 @@ class DownloadWorker @AssistedInject constructor(
 
         val audioFile = mp4Remuxer.normalize(outcome.file)
         val artworkBytes = artworkLoader.load(outcome.artworkUrl)
+        val autoLyrics = fetchAutoLyrics(outcome.title, outcome.artist, album, item.durationMs)
         val tagOutcome = tagEnricher.enrich(
             file = audioFile,
             title = outcome.title,
@@ -415,7 +507,8 @@ class DownloadWorker @AssistedInject constructor(
             year = year,
             trackNumber = trackNumber,
             discNumber = discNumber,
-            composer = composer
+            composer = composer,
+            lyrics = autoLyrics
         )
         val tagDetail = when (tagOutcome.status) {
             TagEnrichStatus.UNSUPPORTED -> DOWNLOAD_SAVED_WITHOUT_TAGS_DETAIL
@@ -444,6 +537,32 @@ class DownloadWorker @AssistedInject constructor(
         return Result.success()
     }
 
+    private suspend fun fetchAutoLyrics(
+        title: String,
+        artist: String,
+        album: String,
+        durationMs: Long
+    ): String? = withTimeoutOrNull(4_500L) {
+        try {
+            val result = lrclibLyricsSource.search(
+                LyricsQuery(
+                    title = title,
+                    artist = artist,
+                    album = album,
+                    durationMs = durationMs
+                )
+            )
+            val best = result.candidates.firstOrNull { it.isSynced }
+                ?: result.candidates.firstOrNull()
+                ?: return@withTimeoutOrNull null
+            LrcParser.format(best.lyrics).takeIf { it.isNotBlank() }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+            null
+        }
+    }
+
     private suspend fun pumpProgress(
         id: String,
         title: String,
@@ -468,12 +587,16 @@ class DownloadWorker @AssistedInject constructor(
 
             lastProgress = progress
             lastWriteAt = now
+            val detail = when {
+                event.line.startsWith("[crawl]", ignoreCase = true) -> DOWNLOAD_CRAWLING_DETAIL
+                else -> event.line.takeIf { it.isNotBlank() }?.take(90)
+            }
             dao.updateProgress(
                 id = id,
                 status = status.raw,
                 progress = progress,
                 eta = event.etaSeconds,
-                detail = event.line.takeIf { it.isNotBlank() }?.take(90),
+                detail = detail,
                 now = now
             )
             updateForeground(title, progress, event.etaSeconds, status)
@@ -492,7 +615,7 @@ class DownloadWorker @AssistedInject constructor(
 
     private fun statusFor(event: ProgressEvent, current: DownloadStatus): DownloadStatus {
         val line = event.line.lowercase()
-        return if (event.progress > 0f || line.contains("[download]")) {
+        return if (event.progress > 0f || line.contains("[download]") || line.contains("[crawl]")) {
             DownloadStatus.DOWNLOADING
         } else {
             current

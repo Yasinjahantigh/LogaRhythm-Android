@@ -5,6 +5,9 @@ import android.content.Context
 import android.os.Build
 import android.provider.MediaStore
 import com.yasinjahantigh.logarhythm.core.library.AudioLibraryFilter
+import com.yasinjahantigh.logarhythm.data.tagger.engine.TagEngines
+import com.yasinjahantigh.logarhythm.domain.library.MetadataNormalizer
+import com.yasinjahantigh.logarhythm.domain.library.TagSuggestionCleaner
 import com.yasinjahantigh.logarhythm.domain.model.SourceType
 import com.yasinjahantigh.logarhythm.domain.model.Track
 import com.yasinjahantigh.logarhythm.domain.source.MusicSource
@@ -49,7 +52,9 @@ class LocalMusicSource @Inject constructor(
     suspend fun scanTracks(
         minDurationMs: Long = this.minDurationMs,
         excludedFolders: Set<String> = emptySet(),
-        showSystemAudio: Boolean = false
+        showSystemAudio: Boolean = false,
+        whitelistMode: Boolean = false,
+        whitelistedFolders: Set<String> = emptySet()
     ): List<Track> = withContext(Dispatchers.IO) {
         val effectiveExcludedFolders = excludedFolders
         val tracks = mutableListOf<Track>()
@@ -69,7 +74,8 @@ class LocalMusicSource @Inject constructor(
                 MediaStore.Audio.Media.ALBUM_ARTIST,
                 MediaStore.Audio.Media.YEAR,
                 MediaStore.Audio.Media.TRACK,
-                MediaStore.Audio.Media.COMPOSER
+                MediaStore.Audio.Media.COMPOSER,
+                MediaStore.Audio.Media.IS_MUSIC
             )
         } else {
             arrayOf(
@@ -83,7 +89,8 @@ class LocalMusicSource @Inject constructor(
                 MediaStore.Audio.Media.DATA,
                 MediaStore.Audio.Media.YEAR,
                 MediaStore.Audio.Media.TRACK,
-                MediaStore.Audio.Media.COMPOSER
+                MediaStore.Audio.Media.COMPOSER,
+                MediaStore.Audio.Media.IS_MUSIC
             )
         }
 
@@ -142,6 +149,7 @@ class LocalMusicSource @Inject constructor(
             val yearCol = cursor.getColumnIndex(MediaStore.Audio.Media.YEAR)
             val trackCol = cursor.getColumnIndex(MediaStore.Audio.Media.TRACK)
             val composerCol = cursor.getColumnIndex(MediaStore.Audio.Media.COMPOSER)
+            val isMusicCol = cursor.getColumnIndex(MediaStore.Audio.Media.IS_MUSIC)
 
             while (cursor.moveToNext()) {
                 val mediaStoreId = cursor.getLong(idCol)
@@ -153,16 +161,16 @@ class LocalMusicSource @Inject constructor(
                 val dateAdded = cursor.getLong(dateAddedCol)
                 val filePath = if (dataCol != -1) cursor.getString(dataCol) else null
                 val genreRaw = if (genreCol != -1) cursor.getString(genreCol) else null
-                val genre = genreRaw?.trim()?.ifBlank { "Unknown Genre" } ?: "Unknown Genre"
-                val albumArtist = if (albumArtistCol != -1) {
+                var genre = MetadataNormalizer.canonicalizeGenre(genreRaw, "Unknown Genre")
+                var albumArtist = if (albumArtistCol != -1) {
                     cleanMetadataField(cursor.getString(albumArtistCol) ?: "", "")
                 } else ""
-                val year = if (yearCol != -1) cursor.getInt(yearCol).coerceAtLeast(0) else 0
+                var year = if (yearCol != -1) cursor.getInt(yearCol).coerceAtLeast(0) else 0
                 // MediaStore packs disc and track into one number: disc * 1000 + track.
                 val packedTrack = if (trackCol != -1) cursor.getInt(trackCol).coerceAtLeast(0) else 0
-                val discNumber = packedTrack / 1000
-                val trackNumber = packedTrack % 1000
-                val composer = if (composerCol != -1) {
+                var discNumber = packedTrack / 1000
+                var trackNumber = packedTrack % 1000
+                var composer = if (composerCol != -1) {
                     cleanMetadataField(cursor.getString(composerCol) ?: "", "")
                 } else ""
 
@@ -173,22 +181,103 @@ class LocalMusicSource @Inject constructor(
                     else -> "Music"
                 }
 
-                if (effectiveExcludedFolders.any { excluded -> folderName.equals(excluded, ignoreCase = true) }) {
+                if (whitelistMode) {
+                    if (whitelistedFolders.none { allowed -> folderName.equals(allowed, ignoreCase = true) }) {
+                        continue
+                    }
+                } else if (effectiveExcludedFolders.any { excluded -> folderName.equals(excluded, ignoreCase = true) }) {
                     continue
                 }
+                val isMusicFlag = if (isMusicCol != -1 && !cursor.isNull(isMusicCol)) {
+                    cursor.getInt(isMusicCol) != 0
+                } else null
+                val hasArtistOrAlbum = !MetadataNormalizer.isPlaceholderField(rawArtist) ||
+                    !MetadataNormalizer.isPlaceholderField(rawAlbum)
                 if (!showSystemAudio &&
                     AudioLibraryFilter.isHidden(
                         filePath = filePath,
                         folderName = folderName,
-                        fileName = filePath?.let { File(it).name }
+                        fileName = filePath?.let { File(it).name },
+                        isMusic = isMusicFlag,
+                        durationMs = duration,
+                        hasArtistOrAlbum = hasArtistOrAlbum
                     )
                 ) {
                     continue
                 }
 
-                val title = cleanTitle(rawTitle, filePath)
-                val artist = cleanMetadataField(rawArtist, "Unknown Artist")
-                val album = cleanMetadataField(rawAlbum, "Unknown Album")
+                var title = cleanTitle(rawTitle, filePath)
+                var artist = cleanMetadataField(rawArtist, "Unknown Artist")
+                var album = cleanMetadataField(rawAlbum, "Unknown Album")
+
+                val needsEmbeddedFallback = !filePath.isNullOrBlank() && (
+                    MetadataNormalizer.isPlaceholderField(rawTitle) ||
+                        MetadataNormalizer.isPlaceholderField(title) ||
+                        MetadataNormalizer.isPlaceholderField(artist) ||
+                        MetadataNormalizer.isPlaceholderField(album) ||
+                        genre == "Unknown Genre" ||
+                        year == 0 ||
+                        albumArtist.isEmpty()
+                    )
+
+                if (needsEmbeddedFallback) {
+                    val embedded = runCatching {
+                        val file = File(filePath!!)
+                        if (file.isFile && file.canRead()) TagEngines.detect(file)?.read(file) else null
+                    }.getOrNull()
+
+                    if (embedded != null) {
+                        if (MetadataNormalizer.isPlaceholderField(rawTitle) || MetadataNormalizer.isPlaceholderField(title)) {
+                            embedded.title?.takeUnless { MetadataNormalizer.isPlaceholderField(it) }?.let {
+                                title = cleanTitle(it, filePath)
+                            }
+                        }
+                        if (MetadataNormalizer.isPlaceholderField(artist)) {
+                            embedded.artist?.takeUnless { MetadataNormalizer.isPlaceholderField(it) }?.let {
+                                artist = cleanMetadataField(it, "Unknown Artist")
+                            }
+                        }
+                        if (MetadataNormalizer.isPlaceholderField(album)) {
+                            embedded.album?.takeUnless { MetadataNormalizer.isPlaceholderField(it) }?.let {
+                                album = cleanMetadataField(it, "Unknown Album")
+                            }
+                        }
+                        if (albumArtist.isEmpty()) {
+                            embedded.albumArtist?.takeUnless { MetadataNormalizer.isPlaceholderField(it) }?.let {
+                                albumArtist = cleanMetadataField(it, "")
+                            }
+                        }
+                        if (genre == "Unknown Genre") {
+                            genre = MetadataNormalizer.canonicalizeGenre(embedded.genre, "Unknown Genre")
+                        }
+                        if (year == 0) {
+                            year = parseYear(embedded.year)
+                        }
+                        if (trackNumber == 0) {
+                            trackNumber = (embedded.trackNumber ?: 0).coerceAtLeast(0)
+                        }
+                        if (discNumber == 0) {
+                            discNumber = (embedded.discNumber ?: 0).coerceAtLeast(0)
+                        }
+                        if (composer.isEmpty()) {
+                            composer = cleanMetadataField(embedded.composer.orEmpty(), "")
+                        }
+                    }
+                }
+
+                val cleanedTags = TagSuggestionCleaner.clean(
+                    title = title,
+                    artist = artist,
+                    album = album,
+                    genre = genre,
+                    year = year,
+                    albumArtist = albumArtist
+                )
+                title = cleanedTags.title.ifBlank { "Unknown Title" }
+                artist = cleanedTags.artist.ifBlank { "Unknown Artist" }
+                album = cleanedTags.album.ifBlank { "Unknown Album" }
+                genre = cleanedTags.genre.ifBlank { "Unknown Genre" }
+                albumArtist = cleanedTags.albumArtist
 
                 val contentUri = ContentUris.withAppendedId(
                     MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
@@ -223,42 +312,34 @@ class LocalMusicSource @Inject constructor(
         tracks
     }
 
+    private fun parseYear(rawYear: String?): Int {
+        val text = rawYear?.trim().orEmpty()
+        if (text.length < 4) return 0
+        return text.take(4).toIntOrNull()?.takeIf { it in 1900..2100 } ?: 0
+    }
+
     private fun cleanMetadataField(value: String, fallback: String): String {
-        val trimmed = value.trim()
-        if (trimmed.isEmpty() ||
-            trimmed.equals("<unknown>", ignoreCase = true) ||
-            trimmed.equals("unknown", ignoreCase = true) ||
-            trimmed.equals("null", ignoreCase = true)
-        ) {
+        val cleaned = MetadataNormalizer.cleanDisplayText(value)
+        if (cleaned.isEmpty() || MetadataNormalizer.isPlaceholderField(cleaned)) {
             return fallback
         }
-        return trimmed
+        return cleaned
     }
 
     private fun cleanTitle(title: String, filePath: String?): String {
-        val trimmed = title.trim()
-        if (trimmed.isEmpty() ||
-            trimmed.equals("<unknown>", ignoreCase = true) ||
-            trimmed.equals("unknown", ignoreCase = true) ||
-            trimmed.equals("null", ignoreCase = true)
-        ) {
+        val cleaned = MetadataNormalizer.cleanDisplayText(title)
+        if (cleaned.isEmpty() || MetadataNormalizer.isPlaceholderField(cleaned)) {
             if (!filePath.isNullOrBlank()) {
-                val fileName = File(filePath).nameWithoutExtension
-                if (fileName.isNotBlank() &&
-                    !fileName.equals("unknown", ignoreCase = true) &&
-                    !fileName.equals("null", ignoreCase = true)
-                ) {
-                    return fileName.replace('_', ' ').replace('-', ' ').trim()
+                val fileName = MetadataNormalizer.cleanDisplayText(File(filePath).nameWithoutExtension)
+                if (fileName.isNotBlank() && !MetadataNormalizer.isPlaceholderField(fileName)) {
+                    return fileName.replace('_', ' ').trim()
                 }
             }
             return "Unknown Title"
         }
-        val clean = trimmed
-            .removeSuffix(".mp3")
-            .removeSuffix(".m4a")
-            .removeSuffix(".flac")
-            .removeSuffix(".wav")
-            .removeSuffix(".ogg")
+        val clean = cleaned
+            .replace(Regex("""(?i)\.(mp3|m4a|flac|wav|ogg|opus|aac|wma)$"""), "")
+            .trim()
         return clean.ifBlank { "Unknown Title" }
     }
 

@@ -1,6 +1,8 @@
 package com.yasinjahantigh.logarhythm.feature.settings
 
 import android.app.Activity
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Context
 import android.content.ContextWrapper
 import android.content.Intent
@@ -16,6 +18,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -27,7 +30,9 @@ import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.ColorLens
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.DarkMode
+import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FolderOff
 import androidx.compose.material.icons.filled.Backup
 import androidx.compose.material.icons.filled.Info
@@ -46,6 +51,7 @@ import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Lyrics
 import androidx.compose.material.icons.filled.RoundedCorner
 import androidx.compose.material.icons.filled.Timer
+import androidx.compose.material.icons.filled.TouchApp
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.ViewStream
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -112,6 +118,10 @@ fun SettingsScreen(
     val replayGainMode by viewModel.replayGainMode.collectAsStateWithLifecycle()
     val replayGainPreampDb by viewModel.replayGainPreampDb.collectAsStateWithLifecycle()
     val resumeOnHeadset by viewModel.resumeOnHeadset.collectAsStateWithLifecycle()
+    val privateSession by viewModel.privateSession.collectAsStateWithLifecycle()
+    val doubleTapSeek by viewModel.doubleTapSeek.collectAsStateWithLifecycle()
+    val folderWhitelistMode by viewModel.folderWhitelistMode.collectAsStateWithLifecycle()
+    val whitelistedFolders by viewModel.whitelistedFolders.collectAsStateWithLifecycle()
     val splitArtists by viewModel.splitArtists.collectAsStateWithLifecycle()
     val artistSeparators by viewModel.artistSeparators.collectAsStateWithLifecycle()
     val artistNeverSplit by viewModel.artistNeverSplit.collectAsStateWithLifecycle()
@@ -122,6 +132,7 @@ fun SettingsScreen(
     val updateState by viewModel.updateState.collectAsStateWithLifecycle()
     val latestRelease by viewModel.latestRelease.collectAsStateWithLifecycle()
     val autoCheckEnabled by viewModel.autoCheckEnabled.collectAsStateWithLifecycle()
+    val totalDeviceInstalls by viewModel.totalDeviceInstalls.collectAsStateWithLifecycle()
     val message by viewModel.message.collectAsStateWithLifecycle()
     val context = androidx.compose.ui.platform.LocalContext.current
 
@@ -251,6 +262,10 @@ fun SettingsScreen(
             onToggleFolder = viewModel::toggleExcludedFolder,
             onResetDefaults = viewModel::resetExcludedFoldersToDefault,
             onClearAll = viewModel::clearAllExcludedFolders,
+            whitelistMode = folderWhitelistMode,
+            whitelistedFolders = whitelistedFolders,
+            onSetWhitelistMode = viewModel::setFolderWhitelistMode,
+            onToggleWhitelistFolder = viewModel::toggleWhitelistedFolder,
             onDismiss = { showFoldersDialog = false }
         )
     }
@@ -362,6 +377,13 @@ fun SettingsScreen(
         )
     }
 
+    var showFeatureGuide by remember { mutableStateOf(false) }
+    if (showFeatureGuide) {
+        com.yasinjahantigh.logarhythm.ui.components.FeatureGuideSheet(
+            onDismiss = { showFeatureGuide = false }
+        )
+    }
+
     val playbackBottomPadding = LocalPlaybackBottomPadding.current
 
     Scaffold(
@@ -419,6 +441,18 @@ fun SettingsScreen(
                             onClick = onNavigateToDownload,
                             modifier = Modifier.weight(1f),
                             testTag = "settings_download_item"
+                        )
+                    }
+                }
+
+                item {
+                    SettingsGroup(title = stringResource(R.string.feature_guide_banner_cta)) {
+                        SettingsActionItem(
+                            title = stringResource(R.string.feature_guide_title),
+                            subtitle = stringResource(R.string.feature_guide_settings_desc),
+                            icon = Icons.Filled.AutoAwesome,
+                            onClick = { showFeatureGuide = true },
+                            testTag = "settings_feature_guide_item"
                         )
                     }
                 }
@@ -533,6 +567,24 @@ fun SettingsScreen(
                             onCheckedChange = viewModel::setResumeOnHeadset,
                             rowTag = "settings_resume_headset_item",
                             switchTag = "settings_resume_headset_switch"
+                        )
+                        SettingsSwitchItem(
+                            title = stringResource(R.string.settings_double_tap_seek_title),
+                            subtitle = stringResource(R.string.settings_double_tap_seek_desc),
+                            icon = Icons.Filled.TouchApp,
+                            checked = doubleTapSeek,
+                            onCheckedChange = viewModel::setDoubleTapSeek,
+                            rowTag = "settings_double_tap_seek_item",
+                            switchTag = "settings_double_tap_seek_switch"
+                        )
+                        SettingsSwitchItem(
+                            title = stringResource(R.string.settings_private_session_title),
+                            subtitle = stringResource(R.string.settings_private_session_desc),
+                            icon = Icons.Filled.VisibilityOff,
+                            checked = privateSession,
+                            onCheckedChange = viewModel::setPrivateSession,
+                            rowTag = "settings_private_session_item",
+                            switchTag = "settings_private_session_switch"
                         )
                     }
                 }
@@ -786,10 +838,11 @@ fun SettingsScreen(
                             }
                             is UpdateState.Failed -> stringResource(R.string.update_failed_title)
                             UpdateState.Hidden -> latestRelease?.let {
+                                val count = maxOf(it.downloads, totalDeviceInstalls ?: 0L)
                                 stringResource(
                                     R.string.update_latest_short,
                                     it.versionName,
-                                    formatCount(it.downloads.toInt())
+                                    formatCount(count.toInt())
                                 )
                             } ?: stringResource(R.string.settings_check_update_desc)
                         }
@@ -821,10 +874,48 @@ fun SettingsScreen(
                             },
                             testTag = "settings_github_item"
                         )
+                        SettingsActionItem(
+                            title = stringResource(R.string.settings_donate_daramet_title),
+                            subtitle = stringResource(R.string.settings_donate_daramet_desc),
+                            icon = Icons.Filled.Favorite,
+                            onClick = {
+                                runCatching {
+                                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://daramet.com/yasinjahantigh"))
+                                    context.startActivity(intent)
+                                }
+                            },
+                            testTag = "settings_donate_daramet_item"
+                        )
+                        SettingsActionItem(
+                            title = stringResource(R.string.settings_donate_ton_title),
+                            subtitle = stringResource(R.string.settings_donate_ton_desc),
+                            icon = Icons.Filled.ContentCopy,
+                            onClick = {
+                                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+                                clipboard?.setPrimaryClip(
+                                    ClipData.newPlainText(
+                                        "GRAM (TON)",
+                                        "UQD-le1G2GZN7rF8PE0PKZ6BeyqKGDqaby6IZvcmw5VgLNZj"
+                                    )
+                                )
+                                Toast.makeText(
+                                    context,
+                                    context.getString(R.string.settings_donate_ton_copied),
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                            },
+                            testTag = "settings_donate_ton_item"
+                        )
                         if (viewModel.installStatsAvailable) {
+                            val installSubtitle = if (totalDeviceInstalls != null && totalDeviceInstalls!! > 0) {
+                                stringResource(R.string.settings_install_stats_count, formatCount(totalDeviceInstalls!!.toInt())) +
+                                    " · " + stringResource(R.string.settings_install_stats_desc)
+                            } else {
+                                stringResource(R.string.settings_install_stats_desc)
+                            }
                             SettingsInfoItem(
                                 title = stringResource(R.string.settings_install_stats_title),
-                                subtitle = stringResource(R.string.settings_install_stats_desc),
+                                subtitle = installSubtitle,
                                 icon = Icons.Filled.Info,
                                 testTag = "settings_install_stats_item"
                             )

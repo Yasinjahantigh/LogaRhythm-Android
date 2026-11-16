@@ -5,6 +5,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Share
+import androidx.compose.material3.DatePickerDialog
+import androidx.compose.material3.DateRangePicker
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -13,7 +16,9 @@ import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.rememberDateRangePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -45,8 +50,11 @@ fun StatsScreen(
     viewModel: StatsViewModel = hiltViewModel()
 ) {
     val timeRange by viewModel.timeRange.collectAsStateWithLifecycle()
+    val customDateRange by viewModel.customDateRange.collectAsStateWithLifecycle()
     val selectedTab by viewModel.selectedTab.collectAsStateWithLifecycle()
     val totalTimeMs by viewModel.totalListenTimeMs.collectAsStateWithLifecycle()
+    val completedPlayCount by viewModel.completedPlayCount.collectAsStateWithLifecycle()
+    val peakHour by viewModel.peakHour.collectAsStateWithLifecycle()
     val topTracks by viewModel.topTracks.collectAsStateWithLifecycle()
     val topArtists by viewModel.topArtists.collectAsStateWithLifecycle()
     val topAlbums by viewModel.topAlbums.collectAsStateWithLifecycle()
@@ -57,6 +65,20 @@ fun StatsScreen(
 
     var selectedTrackForMenu by remember { mutableStateOf<Track?>(null) }
     var trackForAddToPlaylist by remember { mutableStateOf<Track?>(null) }
+    var showDatePicker by remember { mutableStateOf(false) }
+    var showReportSheet by remember { mutableStateOf(false) }
+
+    val customLabel = customDateRange?.let { range ->
+        val fmt = java.text.SimpleDateFormat("MMM d", java.util.Locale.getDefault())
+        "${fmt.format(java.util.Date(range.startMs))} - ${fmt.format(java.util.Date(range.endMs))}"
+    }
+    val periodLabel = when (timeRange) {
+        com.yasinjahantigh.logarhythm.domain.model.TimeRange.THIS_WEEK -> stringResource(R.string.stats_range_week)
+        com.yasinjahantigh.logarhythm.domain.model.TimeRange.THIS_MONTH -> stringResource(R.string.stats_range_month)
+        com.yasinjahantigh.logarhythm.domain.model.TimeRange.THIS_YEAR -> stringResource(R.string.stats_range_year)
+        com.yasinjahantigh.logarhythm.domain.model.TimeRange.ALL_TIME -> stringResource(R.string.stats_range_all_time)
+        com.yasinjahantigh.logarhythm.domain.model.TimeRange.CUSTOM -> customLabel ?: stringResource(R.string.stats_range_custom)
+    }
 
     Scaffold(
         modifier = modifier.fillMaxSize().testTag("stats_screen"),
@@ -73,6 +95,14 @@ fun StatsScreen(
                             contentDescription = stringResource(R.string.cd_back)
                         )
                     }
+                },
+                actions = {
+                    IconButton(onClick = { showReportSheet = true }) {
+                        Icon(
+                            imageVector = Icons.Filled.Share,
+                            contentDescription = stringResource(R.string.stats_report_action)
+                        )
+                    }
                 }
             )
         }
@@ -84,10 +114,20 @@ fun StatsScreen(
         ) {
             TimeRangeSelector(
                 selectedRange = timeRange,
-                onRangeSelected = viewModel::setTimeRange
+                customLabel = customLabel,
+                onRangeSelected = { picked ->
+                    if (picked == com.yasinjahantigh.logarhythm.domain.model.TimeRange.CUSTOM) {
+                        showDatePicker = true
+                    } else {
+                        viewModel.setTimeRange(picked)
+                    }
+                }
             )
 
-            TotalTimeCard(totalTimeMs = totalTimeMs)
+            TotalTimeCard(
+                totalTimeMs = totalTimeMs,
+                onOpenReport = { showReportSheet = true }
+            )
 
             val tabs = listOf(
                 StatsTab.HISTORY to stringResource(R.string.stats_history),
@@ -213,6 +253,50 @@ fun StatsScreen(
             onCreatePlaylist = { name ->
                 viewModel.createPlaylist(name)
             }
+        )
+    }
+
+    if (showDatePicker) {
+        val dateRangeState = rememberDateRangePickerState(
+            initialSelectedStartDateMillis = customDateRange?.startMs,
+            initialSelectedEndDateMillis = customDateRange?.endMs
+        )
+        DatePickerDialog(
+            onDismissRequest = { showDatePicker = false },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val s = dateRangeState.selectedStartDateMillis
+                        val e = dateRangeState.selectedEndDateMillis ?: s
+                        if (s != null && e != null) {
+                            viewModel.setCustomDateRange(s, e)
+                        }
+                        showDatePicker = false
+                    },
+                    enabled = dateRangeState.selectedStartDateMillis != null
+                ) {
+                    Text(stringResource(R.string.done))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDatePicker = false }) {
+                    Text(stringResource(R.string.cancel))
+                }
+            }
+        ) {
+            DateRangePicker(state = dateRangeState)
+        }
+    }
+
+    if (showReportSheet) {
+        ListeningReportSheet(
+            periodLabel = periodLabel,
+            totalTimeMs = totalTimeMs,
+            playCount = completedPlayCount,
+            peakHour = peakHour,
+            topArtists = topArtists,
+            topTracks = topTracks,
+            onDismiss = { showReportSheet = false }
         )
     }
 }

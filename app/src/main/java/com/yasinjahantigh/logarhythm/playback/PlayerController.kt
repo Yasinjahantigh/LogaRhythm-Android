@@ -15,6 +15,10 @@ interface PlayerController {
     val queueIndex: StateFlow<Int>
 
     val playbackSpeed: StateFlow<Float>
+    val playbackPitch: StateFlow<Float>
+    val slowedReverb: StateFlow<Boolean>
+    val abLoopStartMs: StateFlow<Long?>
+    val abLoopEndMs: StateFlow<Long?>
     val sleepTimerRemainingMs: StateFlow<Long?>
     val sleepTimerRemainingTracks: StateFlow<Int?>
     val isSleepTimerEndOfTrack: StateFlow<Boolean>
@@ -44,6 +48,10 @@ interface PlayerController {
     fun clearQueue()
 
     fun setPlaybackSpeed(speed: Float)
+    fun setPlaybackPitch(pitch: Float)
+    fun setSlowedReverb(enabled: Boolean)
+    fun toggleAbLoopMarker()
+    fun clearAbLoop()
     fun setSleepTimer(minutes: Int)
     fun setSleepTimerTracks(tracks: Int)
     fun setSleepTimerEndOfTrack()
@@ -53,6 +61,9 @@ interface PlayerController {
     fun setEqualizerBandLevel(bandIndex: Short, levelMb: Short)
     fun setBassBoostStrength(strength: Short)
     fun setVirtualizerStrength(strength: Short)
+    fun setStereoBalance(balance: Float)
+    fun setMonoAudio(enabled: Boolean)
+    fun setDeviceAutoEqEnabled(enabled: Boolean)
     fun resetEqualizer()
     fun updateTrackInPlayback(updatedTrack: Track)
 }

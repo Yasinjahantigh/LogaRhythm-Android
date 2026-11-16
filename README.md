@@ -11,6 +11,7 @@ No account, no subscription, no ads. Your library stays on your phone.
 <a href="https://github.com/Yasinjahantigh/LogaRhythm-Android/releases"><img alt="Downloads" src="https://img.shields.io/github/downloads/Yasinjahantigh/LogaRhythm-Android/total?label=downloads&color=2ea44f" /></a>
 <a href="https://logarhythm-installs.yasinjahantigh.workers.dev/stats"><img alt="Installs" src="https://img.shields.io/endpoint?url=https%3A%2F%2Flogarhythm-installs.yasinjahantigh.workers.dev%2Fbadge" /></a>
 <a href="https://t.me/LogaRhythmApp"><img alt="Telegram" src="https://img.shields.io/badge/Telegram-@LogaRhythmApp-2CA5E0?logo=telegram&logoColor=white" /></a>
+<a href="https://daramet.com/yasinjahantigh"><img alt="Donate" src="https://img.shields.io/badge/Donate-Daramet-f97316?logo=buymeacoffee&logoColor=white" /></a>
 <img alt="Android 8.0+" src="https://img.shields.io/badge/Android-8.0%2B-3DDC84?logo=android&logoColor=white" />
 <img alt="License: Apache 2.0" src="https://img.shields.io/badge/License-Apache%202.0-blue.svg" />
 
@@ -32,40 +33,44 @@ LogaRhythm plays the music that is already on your phone. Playlists, history, ed
 ## Features
 
 ### Playback
-- Cross-fade between songs, skip silence, per-song playback speed
-- Sleep timer by minutes or by number of tracks; resume position for long tracks
-- Playback resumes when headphones reconnect
-- Swipe the cover to preview the next or previous song; the next cover always waits on the right, so swiping left advances and swiping right goes back
-- ReplayGain (track and album), preamp, 5-band equalizer, bass boost and virtualizer
+- Cross-fade between songs, skip silence, per-song playback speed, and A–B loop
+- Sleep timer by minutes or by number of tracks; resume position for long tracks (and vinyl turntable pause/resume)
+- Playback resumes when headphones reconnect, with per-device Auto-EQ profiles
+- Swipe the cover to preview the next or previous song; double-tap left/right artwork to skip ±10s
+- Car Mode with high-contrast portrait and two-column landscape layouts
+- ReplayGain (track and album), preamp, 5-band equalizer, stereo balance, mono downmix, pitch shift, bass boost, virtualizer, and Slowed + Reverb
 - Home screen widgets in five sizes, from a 2×2 cover to a 4×4 player with an up-next queue
 
 ### Queue
 - Three sections: what already played, what is playing now, and what comes next
 - Drag the grip to reorder upcoming songs; the played section stays put as history
 - Swipe a row to remove it, with undo; tap any row to jump to it
-- Save the whole queue as a playlist in one tap
+- Save the whole queue as a playlist or manage multiple saved queues
 
 ### Lyrics
 - Reads lyrics embedded in the file, a `.lrc` file next to it, or fetches them online (LRCLIB, NetEase, Kugou, lyrics.ovh, Genius)
-- Synced scrolling, timing adjustment, manual editing, import and export
+- Synced scrolling, line-by-line LRC timestamp editor, manual editing, import and export
+- Share selected lyric lines as a 9:16 graphic card
 - Each online source can be turned off, and you can point the app at your own lyrics server
 
-### Tags and covers
+### Tags, covers & audio tools
 - Edit title, artist, album, album artist, genre, year, track and disc number, composer
 - Change, crop or remove the cover art; find covers online from iTunes and Deezer
-- Auto-fill tags from online metadata; a "Fix names" tool cleans messy file names
+- Batch Tag & Cover Fixer: algorithmic filename/tag cleanup and cover matching, plus optional AI refinement
+- Audio Trimmer & Ringtone Maker: cut any segment and save or set it directly as your ringtone
 - Writes go to a staged copy and are verified before the original file is replaced
 
-### Library
+### Library, Radar & Reports
 - Sort and filter by title, artist, album, year, date added, duration, play count and more
-- Multi-select for queueing, playlists, favorites and hiding songs
+- Folder Whitelist or Exclusion mode, Private Session (pause history/stats), and multi-select actions
 - Swipe a song to the right to play it next without interrupting playback
-- Hides ringtones, notifications, alarms and recordings by default, with a switch to show them
-- Stats for your most played songs, artists and albums
+- Follow artists & Release Radar: get notified when followed artists drop new music (via MusicMan, Cloudflare Worker relay, and Deezer)
+- Listening Reports for any custom date range with an in-app 9:16 Story Card preview before sharing
 
 ### Downloads
-- Search and download from YouTube, SoundCloud and MusicMan, in original quality
-- Album downloads with a track picker, duplicate detection and one summary notification
+- Search and download from YouTube, SoundCloud, MusicMan, Radio Javan, and Deezer metadata
+- Automatic MusicMan server crawling when a track isn't cached yet, with quality & download folder selection
+- Playlist and album batch downloads with a track picker, duplicate detection and one summary notification
 - Metadata and cover art merged from Deezer, iTunes and MusicBrainz; the source artist always wins
 
 ### AI (optional)
@@ -113,6 +118,13 @@ cd LogaRhythm-Android
 
 The download feature uses [youtubedl-android](https://github.com/junkfood02/youtubedl-android) and [yt-dlp](https://github.com/yt-dlp/yt-dlp) (GPL-3.0); released APKs bundle them. See [THIRD_PARTY_NOTICES](THIRD_PARTY_NOTICES).
 The bundled [Vazirmatn](https://github.com/rastikerdar/vazirmatn) font is licensed under SIL OFL 1.1, see [OFL.txt](app/src/main/assets/OFL.txt).
+
+## Support / Donate
+
+If LogaRhythm makes your daily listening better, you can support its development:
+
+- **Daramet (Iranian cards):** https://daramet.com/yasinjahantigh
+- **GRAM (TON):** `UQD-le1G2GZN7rF8PE0PKZ6BeyqKGDqaby6IZvcmw5VgLNZj`
 
 ## License
 

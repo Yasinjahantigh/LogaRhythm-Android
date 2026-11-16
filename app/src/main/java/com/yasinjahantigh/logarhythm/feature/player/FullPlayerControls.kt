@@ -1,5 +1,7 @@
 package com.yasinjahantigh.logarhythm.feature.player
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.togetherWith
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
@@ -118,11 +120,24 @@ fun FullPlayerControls(
                     contentColor = scheme.onPrimary
                 )
             ) {
-                Icon(
-                    imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                    contentDescription = stringResource(if (isPlaying) R.string.cd_pause else R.string.cd_play),
-                    modifier = Modifier.size(if (compact) 36.dp else 44.dp)
-                )
+                androidx.compose.animation.AnimatedContent(
+                    targetState = isPlaying,
+                    transitionSpec = {
+                        (androidx.compose.animation.scaleIn(initialScale = 0.7f, animationSpec = spring(dampingRatio = 0.6f, stiffness = 380f)) +
+                            androidx.compose.animation.fadeIn())
+                            .togetherWith(
+                                androidx.compose.animation.scaleOut(targetScale = 0.7f) +
+                                    androidx.compose.animation.fadeOut()
+                            )
+                    },
+                    label = "full_play_pause_icon"
+                ) { playing ->
+                    Icon(
+                        imageVector = if (playing) Icons.Default.Pause else Icons.Default.PlayArrow,
+                        contentDescription = stringResource(if (playing) R.string.cd_pause else R.string.cd_play),
+                        modifier = Modifier.size(if (compact) 36.dp else 44.dp)
+                    )
+                }
             }
 
             SkipKey(

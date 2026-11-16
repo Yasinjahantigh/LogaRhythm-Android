@@ -135,4 +135,23 @@ object LrcParser {
         }
         return words
     }
+
+    fun formatTimestamp(ms: Long): String {
+        val clamped = ms.coerceAtLeast(0L)
+        val totalSeconds = clamped / 1_000L
+        val minutes = totalSeconds / 60L
+        val seconds = totalSeconds % 60L
+        val hundredths = (clamped % 1_000L) / 10L
+        return String.format(java.util.Locale.US, "%02d:%02d.%02d", minutes, seconds, hundredths)
+    }
+
+    fun formatLines(lines: List<com.yasinjahantigh.logarhythm.domain.model.LyricLine>): String =
+        lines.sortedBy { it.timestampMs }
+            .joinToString("\n") { "[${formatTimestamp(it.timestampMs)}]${it.text}" }
+
+    fun format(lyrics: com.yasinjahantigh.logarhythm.domain.model.Lyrics): String = when {
+        lyrics.lines.isNotEmpty() -> formatLines(lyrics.lines)
+        !lyrics.plainText.isNullOrBlank() -> lyrics.plainText.trim()
+        else -> ""
+    }
 }

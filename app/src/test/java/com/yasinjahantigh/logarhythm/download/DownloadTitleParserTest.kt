@@ -52,4 +52,34 @@ class DownloadTitleParserTest {
         assertFalse(sanitized.contains('>'))
         assertFalse(sanitized.contains('|'))
     }
+
+    @Test
+    fun cleanStripsBitrateWatermarksAndTelegramHandles() {
+        val cleaned = DownloadTitleParser.clean("01. Shadmehr - Taghdir [320] (128kbps) @RadioJavan [Nex1Music.ir].mp3")
+        assertEquals("Shadmehr - Taghdir", cleaned)
+    }
+
+    @Test
+    fun cleanStripsLeadingTrackNumberButPreservesNumberedTitles() {
+        assertEquals("Artist - Song", DownloadTitleParser.clean("03. Artist - Song"))
+        assertEquals("21 Guns", DownloadTitleParser.clean("21 Guns (Official Video)"))
+        assertEquals("7 Years", DownloadTitleParser.clean("7 Years [HD]"))
+    }
+
+    @Test
+    fun parseHandlesPersianDownloadPrefixAndArabicScript() {
+        val (artist, title) = DownloadTitleParser.parse(
+            "دانلود آهنگ جديد شادمهر عقيلي به نام تقدير [320] @Channel",
+            uploader = null
+        )
+        assertEquals("شادمهر عقیلی", artist)
+        assertEquals("تقدیر", title)
+    }
+
+    @Test
+    fun extractFeaturedSplitsCollaborationFromTitle() {
+        val (main, featured) = DownloadTitleParser.extractFeatured("Taghdir (feat. Ebi & Googoosh)")
+        assertEquals("Taghdir", main)
+        assertEquals(listOf("Ebi", "Googoosh"), featured)
+    }
 }

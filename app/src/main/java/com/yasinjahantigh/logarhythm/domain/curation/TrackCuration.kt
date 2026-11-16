@@ -1,5 +1,6 @@
 package com.yasinjahantigh.logarhythm.domain.curation
 
+import com.yasinjahantigh.logarhythm.domain.library.MetadataNormalizer
 import com.yasinjahantigh.logarhythm.domain.model.Track
 import com.yasinjahantigh.logarhythm.domain.taste.TasteProfile
 import kotlin.math.abs
@@ -34,15 +35,18 @@ object TrackCuration {
     fun analyzeTrackDna(track: Track): TrackDna {
         val title = normalizeForMood(track.title)
         val album = normalizeForMood(track.album)
-        val genre = normalizeForMood(track.genre)
+        val genre = normalizeForMood(MetadataNormalizer.canonicalizeGenre(track.genre, track.genre))
+        val genreFamily = MetadataNormalizer.genreGroupKey(track.genre)
         val descriptiveText = "$title $album $genre"
 
         var energy = 0.50f
-        if (genre.containsAny("rock", "metal", "edm", "electronic", "dance", "techno", "rap", "راک", "متال", "الکترونیک", "رپ") ||
+        if (genreFamily in HIGH_ENERGY_FAMILIES ||
+            genre.containsAny("rock", "metal", "edm", "electronic", "dance", "techno", "rap", "راک", "متال", "الکترونیک", "رپ") ||
             descriptiveText.containsAny("remix", "fast", "pump", "workout", "ریمیکس", "انرژی", "رقص", "تند", "باشگاه", "پارتی")
         ) {
             energy += 0.35f
-        } else if (genre.containsAny("classical", "ambient", "acoustic", "jazz", "lo-fi", "folk", "کلاسیک", "آکوستیک") ||
+        } else if (genreFamily in CALM_FAMILIES ||
+            genre.containsAny("classical", "ambient", "acoustic", "jazz", "lo-fi", "folk", "کلاسیک", "آکوستیک") ||
             descriptiveText.containsAny("slow", "sleep", "calm", "piano", "آرام", "خواب", "ملایم", "لالایی", "بی کلام", "پیانو")
         ) {
             energy -= 0.30f
@@ -59,9 +63,11 @@ object TrackCuration {
         }
 
         val acoustic = when {
-            genre.containsAny("acoustic", "classical", "folk", "jazz", "ambient", "آکوستیک", "کلاسیک") ||
+            genreFamily in ACOUSTIC_FAMILIES ||
+                genre.containsAny("acoustic", "classical", "folk", "jazz", "ambient", "آکوستیک", "کلاسیک") ||
                 descriptiveText.containsAny("acoustic", "unplugged", "piano", "guitar", "instrumental", "آکوستیک", "پیانو", "گیتار", "بی کلام") -> 0.88f
-            genre.containsAny("edm", "electronic", "techno", "house", "metal", "الکترونیک", "متال") ||
+            genreFamily == "electronic" || genreFamily == "metal" ||
+                genre.containsAny("edm", "electronic", "techno", "house", "metal", "الکترونیک", "متال") ||
                 descriptiveText.containsAny("remix", "synth", "ریمیکس") -> 0.12f
             else -> 0.38f
         }
@@ -91,8 +97,17 @@ object TrackCuration {
         val durationDiff = abs(t1.durationMs - t2.durationMs).toFloat() / 300_000f
 
         var distance = energyDiff * 0.40f + valenceDiff * 0.30f + acousticDiff * 0.10f + durationDiff.coerceAtMost(1f) * 0.20f
-        if (t1.artist.isNotBlank() && t1.artist.equals(t2.artist, ignoreCase = true)) distance -= 0.12f
-        if (t1.genre.isNotBlank() && t1.genre.equals(t2.genre, ignoreCase = true)) distance -= 0.10f
+        if (hasSameKnownMetadata(t1.artist, t2.artist)) distance -= 0.12f
+        val genreKey1 = MetadataNormalizer.genreGroupKey(t1.genre)
+        val genreKey2 = MetadataNormalizer.genreGroupKey(t2.genre)
+        if (genreKey1.isNotEmpty() && genreKey1 == genreKey2) {
+            distance -= 0.12f
+        } else if (hasSameKnownMetadata(t1.genre, t2.genre)) {
+            distance -= 0.10f
+        }
+        if (t1.year > 1900 && t2.year > 1900 && abs(t1.year - t2.year) <= 5) {
+            distance -= 0.04f
+        }
         return distance.coerceAtLeast(0.01f)
     }
 
@@ -111,9 +126,11 @@ object TrackCuration {
                 var distance = calculateSimilarity(currentTrack, candidate)
                 if (profile != null) {
                     // Real listening beats metadata guesses: songs heard together pull closer,
-                    // loved songs get a nudge, and songs the listener keeps skipping sink.
+                    // taste-aligned & loved tracks get boosted, and skipped artists/tracks sink.
                     distance -= profile.coListenStrength(currentTrack.id, candidate.id).toFloat() * 0.45f
-                    distance -= profile.affinity(candidate.id).coerceIn(-2.0, 3.0).toFloat() * 0.04f
+                    distance -= profile.affinity(candidate.id).coerceIn(-2.0, 3.0).toFloat() * 0.025f
+                    distance -= profile.tasteMatchScore(candidate).coerceIn(-1.5, 3.0).toFloat() * 0.045f
+                    distance += profile.sessionPenalty(candidate).toFloat() * 0.35f
                     if (profile.isDisliked(candidate.id)) distance += 0.5f
                 }
                 candidate to distance
@@ -137,7 +154,9 @@ object TrackCuration {
                 abs(dna.acousticScore - mood.targetAcoustic) * 0.16f +
                 abs(dna.danceabilityScore - mood.targetDanceability) * 0.12f
             val tasteAdjusted = if (profile == null) distance else {
-                distance - profile.affinity(track.id).coerceIn(-2.0, 3.0).toFloat() * 0.02f +
+                distance - profile.affinity(track.id).coerceIn(-2.0, 3.0).toFloat() * 0.015f -
+                    profile.tasteMatchScore(track).coerceIn(-2.0, 3.5).toFloat() * 0.04f +
+                    profile.sessionPenalty(track).toFloat() * 0.35f +
                     (if (profile.isDisliked(track.id)) 0.4f else 0f)
             }
             track to tasteAdjusted
@@ -175,27 +194,21 @@ object TrackCuration {
         return selected.map { it.first }
     }
 
-    private fun hasSameKnownMetadata(left: String, right: String): Boolean =
-        left.isNotBlank() && right.isNotBlank() &&
-            !left.equals("unknown artist", ignoreCase = true) &&
-            !right.equals("unknown artist", ignoreCase = true) &&
-            !left.equals("unknown album", ignoreCase = true) &&
-            !right.equals("unknown album", ignoreCase = true) &&
-            left.trim().equals(right.trim(), ignoreCase = true)
+    private fun hasSameKnownMetadata(left: String, right: String): Boolean {
+        if (MetadataNormalizer.isPlaceholderField(left) || MetadataNormalizer.isPlaceholderField(right)) {
+            return false
+        }
+        val normLeft = MetadataNormalizer.normalizeForComparison(left)
+        val normRight = MetadataNormalizer.normalizeForComparison(right)
+        return normLeft.isNotEmpty() && normLeft == normRight
+    }
 
-    private fun normalizeForMood(value: String): String = value.lowercase()
-        .replace('ي', 'ی')
-        .replace('ى', 'ی')
-        .replace('ك', 'ک')
-        .replace('أ', 'ا')
-        .replace('إ', 'ا')
-        .replace('ؤ', 'و')
-        .replace('ئ', 'ی')
-        .replace('ـ', ' ')
-        .replace(Regex("[\u064B-\u065F\u0670]"), "")
-        .replace('‌', ' ')
-        .replace(Regex("\\s+"), " ")
-        .trim()
+    private fun normalizeForMood(value: String): String =
+        MetadataNormalizer.normalizeForComparison(value)
 
     private fun String.containsAny(vararg keywords: String): Boolean = keywords.any { contains(it) }
+
+    private val HIGH_ENERGY_FAMILIES = setOf("rock", "metal", "electronic", "rap")
+    private val CALM_FAMILIES = setOf("classical", "chill", "acoustic", "jazz", "instrumental")
+    private val ACOUSTIC_FAMILIES = setOf("acoustic", "classical", "traditional", "jazz", "chill", "instrumental", "nostalgic")
 }

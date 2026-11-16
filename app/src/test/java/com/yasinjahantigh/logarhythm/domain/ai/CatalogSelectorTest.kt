@@ -1,7 +1,9 @@
 package com.yasinjahantigh.logarhythm.domain.ai
 
+import com.yasinjahantigh.logarhythm.domain.model.PlayEvent
 import com.yasinjahantigh.logarhythm.domain.model.SourceType
 import com.yasinjahantigh.logarhythm.domain.model.Track
+import com.yasinjahantigh.logarhythm.domain.taste.TasteProfile
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -80,5 +82,41 @@ class CatalogSelectorTest {
         assertEquals(30, first.size)
         assertEquals(first, second)
         assertFalse(first.any { it.id == "base" })
+    }
+
+    @Test
+    fun playlistSelection_usesTasteProfileAndAvoidsDislikedAndRecentTracks() {
+        val now = 100L * 86_400_000L
+        val library = buildList {
+            repeat(5) { i -> add(track("fav$i", artist = "LovedArtist_$i", genre = "پاپ")) }
+            repeat(5) { i -> add(track("dislike$i", artist = "HatedArtist_$i", genre = "Metal")) }
+            repeat(5) { i -> add(track("recent$i", artist = "RecentArtist_$i", genre = "Pop")) }
+            repeat(200) { i -> add(track("pool$i", artist = "PoolArtist_$i", genre = "Rock")) }
+        }
+        val events = buildList {
+            repeat(5) { i ->
+                add(PlayEvent(trackId = "fav$i", timestamp = now - 5L * 86_400_000L, listenedMs = 175_000L))
+            }
+            repeat(5) { i ->
+                add(PlayEvent(trackId = "dislike$i", timestamp = now - 10_000L, listenedMs = 3_000L, skipped = true))
+                add(PlayEvent(trackId = "dislike$i", timestamp = now - 5_000L, listenedMs = 3_000L, skipped = true))
+            }
+        }
+        val profile = TasteProfile.build(events, favoriteTrackIds = setOf("fav0", "fav1"), nowMs = now, library = library)
+        val recent = (0 until 5).map { "recent$it" }.toSet()
+
+        val picked = CatalogSelector.forPlaylist(
+            library = library,
+            prompt = "something good for evening",
+            limit = 40,
+            profile = profile,
+            recentTrackIds = recent,
+            seed = 42L
+        )
+        val pickedIds = picked.map { it.id }.toSet()
+        assertEquals(40, picked.size)
+        assertTrue(pickedIds.contains("fav0"))
+        assertTrue(pickedIds.none { it.startsWith("dislike") })
+        assertTrue(pickedIds.none { it.startsWith("recent") })
     }
 }

@@ -11,13 +11,16 @@ import android.os.Build
 import android.util.Size
 import coil.ImageLoader
 import coil.decode.DataSource
+import coil.decode.ImageSource
 import coil.fetch.DrawableResult
 import coil.fetch.FetchResult
 import coil.fetch.Fetcher
+import coil.fetch.SourceResult
 import coil.request.Options
 import coil.size.pxOrElse
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import okio.Buffer
 
 /**
  * Custom Coil fetcher for loading audio album artwork in highest possible quality.
@@ -39,8 +42,23 @@ class AudioArtworkFetcher(
 
     override suspend fun fetch(): FetchResult? = withContext(Dispatchers.IO) {
         val resolver = context.contentResolver
+        val isThumbnail = targetEdge <= 320
 
-        // 1. Prioritize original embedded picture from audio metadata for pristine high resolution
+        // Fast path for list thumbnails: MediaStore maintains pre-scaled system thumbnails in native code.
+        if (isThumbnail && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            try {
+                val thumb = resolver.loadThumbnail(uri, Size(targetEdge, targetEdge), null)
+                return@withContext DrawableResult(
+                    drawable = BitmapDrawable(context.resources, thumb),
+                    isSampled = true,
+                    dataSource = DataSource.DISK
+                )
+            } catch (_: Exception) {
+                // Fall back to embedded extraction below
+            }
+        }
+
+        // Embedded picture extraction (downsampled tightly to targetEdge to keep memory/scroll fast)
         try {
             val retriever = MediaMetadataRetriever()
             retriever.setDataSource(context, uri)
@@ -50,12 +68,22 @@ class AudioArtworkFetcher(
             } catch (_: Exception) {}
 
             if (picture != null) {
+                if (isThumbnail) {
+                    // Return encoded bytes via SourceResult so Coil both downsamples to exact
+                    // list item bounds and persists into DiskCache, avoiding repeat file reads.
+                    val buffer = Buffer().write(picture)
+                    return@withContext SourceResult(
+                        source = ImageSource(buffer, context),
+                        mimeType = null,
+                        dataSource = DataSource.DISK
+                    )
+                }
+
                 val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
                 BitmapFactory.decodeByteArray(picture, 0, picture.size, bounds)
 
-                // Only downsample if image genuinely exceeds the target size or 2048px
                 var sample = 1
-                val maxLimit = maxOf(targetEdge, 1080).coerceAtMost(2048)
+                val maxLimit = targetEdge.coerceIn(128, 2048)
                 while (bounds.outWidth / (sample * 2) >= maxLimit && bounds.outHeight / (sample * 2) >= maxLimit) {
                     sample *= 2
                 }
@@ -77,8 +105,8 @@ class AudioArtworkFetcher(
             // Embedded picture extraction failed or not available for this URI
         }
 
-        // 2. Fall back to scoped storage loadThumbnail on Android Q+
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+        // Fall back to scoped storage loadThumbnail on Android Q+
+        if (!isThumbnail && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             try {
                 val bitmap = resolver.loadThumbnail(uri, Size(targetEdge, targetEdge), null)
                 return@withContext DrawableResult(

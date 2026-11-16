@@ -10,9 +10,14 @@ interface DownloadRepository {
     /** Persists the request and schedules the download worker. Returns the download id. */
     suspend fun enqueue(result: DownloadSearchResult): String
 
+    /** Enqueues multiple tracks (e.g. full album or artist discography) and returns queued count. */
+    suspend fun enqueueBatch(results: List<DownloadSearchResult>): Int
+
     suspend fun cancel(id: String)
 
     suspend fun retry(id: String)
+
+    suspend fun retryAllFailed(): Int
 
     suspend fun remove(id: String)
 

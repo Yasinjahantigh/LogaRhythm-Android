@@ -1,6 +1,7 @@
 package com.yasinjahantigh.logarhythm.feature.library
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.togetherWith
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
@@ -369,38 +370,47 @@ fun LibraryScreen(
                             onRefresh = { viewModel.refresh(true) },
                             modifier = Modifier.weight(1f)
                         ) {
-                            when (uiState.selectedTab) {
-                                LibraryTab.SONGS -> SongsTabContent(
-                                    tracks = uiState.visibleTracks,
-                                    currentTrackId = currentTrack?.id,
-                                    isPlaying = isPlaying,
-                                    onTrackClick = viewModel::playTrack,
-                                    onTrackMenuClick = { selectedTrackForMenu = it },
-                                    onPlayAll = viewModel::playAll,
-                                    onShuffleAll = viewModel::shuffleAll,
-                                    selectionMode = selectionMode,
-                                    selectedTrackIds = selectedTrackIds,
-                                    onTrackLongClick = { track ->
-                                        if (selectionMode) toggleSelection(track) else startSelection(track)
-                                    },
-                                    onToggleSelect = ::toggleSelection,
-                                    onPlayNext = { viewModel.playNext(it) },
-                                    filter = uiState.trackFilter,
-                                    onFilterChange = viewModel::setTrackFilter
-                                )
-                                LibraryTab.ALBUMS -> AlbumsTabContent(albums = uiState.albums, onAlbumClick = onNavigateToAlbum)
-                                LibraryTab.ARTISTS -> ArtistsTabContent(
-                                    artists = uiState.artists,
-                                    onArtistClick = onNavigateToArtist,
-                                    onOpenSmartOrganizer = onNavigateToLibraryTools
-                                )
-                                LibraryTab.PLAYLISTS -> PlaylistsTabContent(
-                                    onPlaylistClick = onNavigateToPlaylist,
-                                    onSmartMixClick = onNavigateToSmartMix,
-                                    onOpenAiSettings = onNavigateToSettings
-                                )
-                                LibraryTab.GENRES -> GenresTabContent(genres = uiState.genres, onGenreClick = onNavigateToGenre)
-                                LibraryTab.FOLDERS -> FoldersTabContent(folders = uiState.folders, onFolderClick = onNavigateToFolder)
+                            androidx.compose.animation.AnimatedContent(
+                                targetState = uiState.selectedTab,
+                                transitionSpec = {
+                                    androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(150))
+                                        .togetherWith(androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(110)))
+                                },
+                                label = "library_tab_content"
+                            ) { selectedTab ->
+                                when (selectedTab) {
+                                    LibraryTab.SONGS -> SongsTabContent(
+                                        tracks = uiState.visibleTracks,
+                                        currentTrackId = currentTrack?.id,
+                                        isPlaying = isPlaying,
+                                        onTrackClick = viewModel::playTrack,
+                                        onTrackMenuClick = { selectedTrackForMenu = it },
+                                        onPlayAll = viewModel::playAll,
+                                        onShuffleAll = viewModel::shuffleAll,
+                                        selectionMode = selectionMode,
+                                        selectedTrackIds = selectedTrackIds,
+                                        onTrackLongClick = { track ->
+                                            if (selectionMode) toggleSelection(track) else startSelection(track)
+                                        },
+                                        onToggleSelect = ::toggleSelection,
+                                        onPlayNext = { viewModel.playNext(it) },
+                                        filter = uiState.trackFilter,
+                                        onFilterChange = viewModel::setTrackFilter
+                                    )
+                                    LibraryTab.ALBUMS -> AlbumsTabContent(albums = uiState.albums, onAlbumClick = onNavigateToAlbum)
+                                    LibraryTab.ARTISTS -> ArtistsTabContent(
+                                        artists = uiState.artists,
+                                        onArtistClick = onNavigateToArtist,
+                                        onOpenSmartOrganizer = onNavigateToLibraryTools
+                                    )
+                                    LibraryTab.PLAYLISTS -> PlaylistsTabContent(
+                                        onPlaylistClick = onNavigateToPlaylist,
+                                        onSmartMixClick = onNavigateToSmartMix,
+                                        onOpenAiSettings = onNavigateToSettings
+                                    )
+                                    LibraryTab.GENRES -> GenresTabContent(genres = uiState.genres, onGenreClick = onNavigateToGenre)
+                                    LibraryTab.FOLDERS -> FoldersTabContent(folders = uiState.folders, onFolderClick = onNavigateToFolder)
+                                }
                             }
                         }
                     }

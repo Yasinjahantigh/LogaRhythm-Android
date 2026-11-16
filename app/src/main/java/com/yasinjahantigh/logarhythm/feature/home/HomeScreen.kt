@@ -1,5 +1,6 @@
 package com.yasinjahantigh.logarhythm.feature.home
 
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -104,6 +105,11 @@ fun HomeScreen(
     val rightNow by viewModel.rightNow.collectAsStateWithLifecycle()
     val onRepeat by viewModel.onRepeat.collectAsStateWithLifecycle()
     val becauseYouPlayed by viewModel.becauseYouPlayed.collectAsStateWithLifecycle()
+    val followedArtists by viewModel.followedArtists.collectAsStateWithLifecycle()
+    val radarReleases by viewModel.radarReleases.collectAsStateWithLifecycle()
+    val radarUnseenCount by viewModel.radarUnseenCount.collectAsStateWithLifecycle()
+    val radarRefreshing by viewModel.radarRefreshing.collectAsStateWithLifecycle()
+    val releaseRadarEnabled by viewModel.releaseRadarEnabled.collectAsStateWithLifecycle()
 
     var selectedTrackForMenu by remember { mutableStateOf<Track?>(null) }
     var trackForAddToPlaylist by remember { mutableStateOf<Track?>(null) }
@@ -113,6 +119,9 @@ fun HomeScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     val coroutineScope = rememberCoroutineScope()
     val context = androidx.compose.ui.platform.LocalContext.current
+    val uiPrefs = remember(context) { context.getSharedPreferences("logarhythm_ui", android.content.Context.MODE_PRIVATE) }
+    var guideDismissed by remember { mutableStateOf(uiPrefs.getBoolean("feature_guide_dismissed_v2", false)) }
+    var showFeatureGuide by remember { mutableStateOf(false) }
     val mediaStoreConsent = rememberMediaStoreConsent()
     val emptyMoodMessage = stringResource(R.string.mood_empty)
     val sessionUnavailableMessage = stringResource(R.string.home_session_unavailable)
@@ -284,6 +293,60 @@ fun HomeScreen(
                         )
                     }
 
+                    if (!guideDismissed) {
+                        item(key = "feature_spotlight") {
+                            com.yasinjahantigh.logarhythm.ui.components.FeatureSpotlightBanner(
+                                onOpenGuide = { showFeatureGuide = true },
+                                onDismiss = {
+                                    guideDismissed = true
+                                    uiPrefs.edit().putBoolean("feature_guide_dismissed_v2", true).apply()
+                                }
+                            )
+                        }
+                    }
+
+                    if (followedArtists.isNotEmpty()) {
+                        item(key = "release_radar") {
+                            ReleaseRadarHomeSection(
+                                followedArtists = followedArtists,
+                                releases = radarReleases,
+                                unseenCount = radarUnseenCount,
+                                refreshing = radarRefreshing,
+                                radarEnabled = releaseRadarEnabled,
+                                onRefresh = {
+                                    viewModel.refreshReleaseRadar { summary ->
+                                        coroutineScope.launch {
+                                            val msg = when {
+                                                summary.newReleases.isNotEmpty() ->
+                                                    context.getString(R.string.radar_found_new, summary.newReleases.size)
+                                                summary.suggestVpn ->
+                                                    context.getString(R.string.radar_check_failed_vpn)
+                                                else ->
+                                                    context.getString(R.string.radar_up_to_date)
+                                            }
+                                            snackbarHostState.showSnackbar(msg)
+                                        }
+                                    }
+                                },
+                                onDownloadRelease = { release ->
+                                    viewModel.downloadRadarRelease(release) { queued ->
+                                        coroutineScope.launch {
+                                            snackbarHostState.showSnackbar(
+                                                context.getString(
+                                                    if (queued) R.string.download_added_to_queue
+                                                    else R.string.radar_download_not_found
+                                                )
+                                            )
+                                        }
+                                    }
+                                },
+                                onMarkSeen = viewModel::markRadarSeen,
+                                onUnfollowArtist = viewModel::unfollowArtist,
+                                onSetRadarEnabled = viewModel::setReleaseRadarEnabled
+                            )
+                        }
+                    }
+
                     // One shelf instead of three: recently played / new / on repeat share a row.
                     if (activeShelf != null) {
                         item(key = "jump_back_in") {
@@ -308,11 +371,20 @@ fun HomeScreen(
                                     }
                                 }
                             }
-                            TrackShelf(
-                                tracks = activeShelf.second,
-                                tagPrefix = "home_shelf_${activeShelf.first.name.lowercase()}",
-                                onPlay = { list, index -> viewModel.playTracks(list, index) }
-                            )
+                            androidx.compose.animation.AnimatedContent(
+                                targetState = activeShelf,
+                                transitionSpec = {
+                                    androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(220))
+                                        .togetherWith(androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(160)))
+                                },
+                                label = "home_shelf_transition"
+                            ) { shelfPair ->
+                                TrackShelf(
+                                    tracks = shelfPair.second,
+                                    tagPrefix = "home_shelf_${shelfPair.first.name.lowercase()}",
+                                    onPlay = { list, index -> viewModel.playTracks(list, index) }
+                                )
+                            }
                         }
                     }
                     }
@@ -462,6 +534,12 @@ fun HomeScreen(
                 aiMixBase = mix
                 showMagicPlaylist = true
             }
+        )
+    }
+
+    if (showFeatureGuide) {
+        com.yasinjahantigh.logarhythm.ui.components.FeatureGuideSheet(
+            onDismiss = { showFeatureGuide = false }
         )
     }
 

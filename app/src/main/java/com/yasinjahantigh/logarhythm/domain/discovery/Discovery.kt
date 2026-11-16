@@ -1,6 +1,8 @@
 package com.yasinjahantigh.logarhythm.domain.discovery
 
 import com.yasinjahantigh.logarhythm.domain.curation.TrackCuration
+import com.yasinjahantigh.logarhythm.domain.library.ArtistSplitter
+import com.yasinjahantigh.logarhythm.domain.library.MetadataNormalizer
 import com.yasinjahantigh.logarhythm.domain.model.PlayEvent
 import com.yasinjahantigh.logarhythm.domain.model.Track
 import com.yasinjahantigh.logarhythm.domain.taste.TasteProfile
@@ -55,7 +57,11 @@ object Discovery {
             .filter { !profile.isDisliked(it.id) && profile.affinity(it.id) >= 0.0 }
             .map { it to profile.hourWeight(it.id, hour) }
             .filter { (_, weight) -> weight >= MIN_HABIT_WEIGHT }
-            .sortedByDescending { (track, weight) -> weight * (1.0 + profile.affinity(track.id).coerceIn(0.0, 4.0) * 0.1) }
+            .sortedByDescending { (track, weight) ->
+                weight * (1.0 + profile.affinity(track.id).coerceIn(0.0, 4.0) * 0.1 +
+                    profile.tasteMatchScore(track).coerceIn(0.0, 3.0) * 0.08) -
+                    profile.sessionPenalty(track) * 0.5
+            }
             .map { it.first }
             .toList()
         val habitualCapped = capPerArtist(habitual, perArtist = 2).take(limit)
@@ -101,11 +107,14 @@ object Discovery {
     ): BecauseYouPlayed? {
         if (limit <= 0 || library.size < 3) return null
         val byId = library.associateBy { it.id }
-        val seed = events.asSequence()
+        val recentLiked = events.asSequence()
             .filter { !it.skipped }
             .sortedByDescending { it.timestamp }
             .mapNotNull { byId[it.trackId] }
-            .firstOrNull { profile.affinity(it.id) > 0.0 }
+            .filter { profile.affinity(it.id) > 0.0 || profile.tasteMatchScore(it) > 0.5 }
+            .toList()
+        val seed = recentLiked.firstOrNull { profile.sessionPenalty(it) < 0.7 }
+            ?: recentLiked.firstOrNull()
             ?: return null
         val picks = TrackCuration.recommendNextTracks(seed, library, limit = limit, profile = profile)
         return if (picks.size >= MIN_SHELF_SIZE) BecauseYouPlayed(seed, picks) else null
@@ -114,7 +123,13 @@ object Discovery {
     private fun capPerArtist(tracks: List<Track>, perArtist: Int): List<Track> {
         val seen = HashMap<String, Int>()
         return tracks.filter { track ->
-            val key = track.artist.trim().lowercase().ifBlank { "track:${track.id}" }
+            val primary = ArtistSplitter.split(track.artist).firstOrNull().orEmpty()
+            val norm = MetadataNormalizer.normalizeForComparison(primary)
+            val key = if (norm.isBlank() || MetadataNormalizer.isPlaceholderField(primary)) {
+                "track:${track.id}"
+            } else {
+                norm
+            }
             val n = (seen[key] ?: 0) + 1
             seen[key] = n
             n <= perArtist

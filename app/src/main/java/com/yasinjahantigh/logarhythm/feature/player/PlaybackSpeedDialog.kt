@@ -14,9 +14,11 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -38,10 +40,15 @@ internal fun roundedPlaybackSpeed(speed: Float): Float =
 fun PlaybackSpeedDialog(
     currentSpeed: Float,
     onSpeedSelected: (Float) -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    currentPitch: Float = 1.0f,
+    onPitchSelected: (Float) -> Unit = {},
+    slowedReverbEnabled: Boolean = false,
+    onToggleSlowedReverb: (Boolean) -> Unit = {}
 ) {
     val presetSpeeds = listOf(0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 1.75f, 2.0f)
     val selectedSpeed = roundedPlaybackSpeed(currentSpeed)
+    val selectedPitch = roundedPlaybackSpeed(currentPitch)
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -109,6 +116,53 @@ fun PlaybackSpeedDialog(
                         )
                     }
                 }
+
+                Spacer(modifier = Modifier.height(14.dp))
+                HorizontalDivider()
+                Spacer(modifier = Modifier.height(10.dp))
+
+                // Pitch control
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = stringResource(R.string.playback_pitch_label),
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Text(
+                        text = stringResource(R.string.speed_multiplier, String.format(Locale.US, "%.2f", selectedPitch)),
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+                Slider(
+                    value = selectedPitch,
+                    onValueChange = { onPitchSelected(roundedPlaybackSpeed(it)) },
+                    valueRange = 0.5f..2.0f,
+                    steps = 29,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                // Slowed + Reverb 1-tap toggle
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = stringResource(R.string.playback_slowed_reverb),
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Medium
+                    )
+                    Switch(
+                        checked = slowedReverbEnabled,
+                        onCheckedChange = onToggleSlowedReverb
+                    )
+                }
             }
         },
         confirmButton = {
@@ -118,7 +172,11 @@ fun PlaybackSpeedDialog(
         },
         dismissButton = {
             TextButton(
-                onClick = { onSpeedSelected(1.0f) },
+                onClick = {
+                    onToggleSlowedReverb(false)
+                    onSpeedSelected(1.0f)
+                    onPitchSelected(1.0f)
+                },
                 modifier = Modifier.testTag("speed_reset_button")
             ) {
                 Text(stringResource(R.string.speed_reset))

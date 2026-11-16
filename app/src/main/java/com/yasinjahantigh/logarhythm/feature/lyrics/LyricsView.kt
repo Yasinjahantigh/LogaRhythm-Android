@@ -61,6 +61,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material.icons.filled.TouchApp
 import androidx.compose.material.icons.filled.FileUpload
@@ -132,6 +133,8 @@ fun LyricsView(
     val isMismatch by viewModel.lyricsMismatch.collectAsStateWithLifecycle()
     var showOffsetDialog by remember { mutableStateOf(false) }
     var isTapToSyncMode by remember { mutableStateOf(false) }
+    var showLyricCardDialog by remember { mutableStateOf(false) }
+    var showLrcEditorSheet by remember { mutableStateOf(false) }
 
     if (showOffsetDialog) {
         androidx.compose.material3.AlertDialog(
@@ -423,6 +426,28 @@ fun LyricsView(
                 viewModel.resetLyricsToDefault(currentTrack)
                 viewModel.dismissCandidatePicker()
             }
+        )
+    }
+
+    if (showLyricCardDialog && currentTrack != null && lyrics != null && !lyrics!!.isEmpty) {
+        LyricCardShareDialog(
+            track = currentTrack!!,
+            lyrics = lyrics!!,
+            initialFocusIndex = activeIndex.coerceAtLeast(0),
+            onDismiss = { showLyricCardDialog = false }
+        )
+    }
+
+    if (showLrcEditorSheet && lyrics != null && !lyrics!!.isEmpty) {
+        LrcLineEditorSheet(
+            lyrics = lyrics!!,
+            livePositionMs = viewModel.livePositionMs,
+            onSaveLines = { lines ->
+                requestLyricsWrite { track ->
+                    viewModel.saveTimestampedLines(lines, track)
+                }
+            },
+            onDismiss = { showLrcEditorSheet = false }
         )
     }
 
@@ -724,6 +749,24 @@ fun LyricsView(
                                         modifier = Modifier.testTag("lyrics_tap_to_sync_button")
                                     )
                                 }
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(R.string.lyrics_lrc_editor_title)) },
+                                    leadingIcon = { Icon(Icons.Default.Timer, contentDescription = null) },
+                                    onClick = {
+                                        showLyricsMenu = false
+                                        showLrcEditorSheet = true
+                                    },
+                                    modifier = Modifier.testTag("lyrics_lrc_editor_button")
+                                )
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(R.string.lyrics_share_card_title)) },
+                                    leadingIcon = { Icon(Icons.Default.Share, contentDescription = null) },
+                                    onClick = {
+                                        showLyricsMenu = false
+                                        showLyricCardDialog = true
+                                    },
+                                    modifier = Modifier.testTag("lyrics_share_card_button")
+                                )
                             }
                         }
                     }
@@ -831,6 +874,11 @@ private fun SyncedLyricsContent(
                 animationSpec = tween(durationMillis = 380, easing = FastOutSlowInEasing),
                 label = "lyric_alpha_$index"
             )
+            val lineScale by animateFloatAsState(
+                targetValue = if (isCurrent && !isTapToSyncMode) 1.04f else 1f,
+                animationSpec = tween(durationMillis = 320, easing = FastOutSlowInEasing),
+                label = "lyric_scale_$index"
+            )
 
             val lineModifier = Modifier
                 .fillMaxWidth()
@@ -840,7 +888,11 @@ private fun SyncedLyricsContent(
                     else Color.Transparent
                 )
                 .clickable { onLineClick(line) }
-                .graphicsLayer { this.alpha = alpha }
+                .graphicsLayer {
+                    this.alpha = alpha
+                    scaleX = lineScale
+                    scaleY = lineScale
+                }
                 .padding(horizontal = 14.dp, vertical = if (isLandscape) 7.dp else 11.dp)
                 .testTag("lyric_line_$index")
             if (isCurrent && line.words.isNotEmpty() && !isTapToSyncMode) {

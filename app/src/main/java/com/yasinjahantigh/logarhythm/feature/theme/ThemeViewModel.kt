@@ -3,6 +3,8 @@ package com.yasinjahantigh.logarhythm.feature.theme
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.yasinjahantigh.logarhythm.data.datastore.PreferencesManager
+import com.yasinjahantigh.logarhythm.ui.theme.CuratedThemePreset
+import com.yasinjahantigh.logarhythm.ui.theme.ThemePresets
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -17,6 +19,9 @@ class ThemeViewModel @Inject constructor(
 
     val themeStyle: StateFlow<String> = preferencesManager.themeStyle
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "default")
+
+    val themePresetId: StateFlow<String> = preferencesManager.themePresetId
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ThemePresets.DEFAULT_ID)
 
     val themeMode: StateFlow<String> = preferencesManager.themeMode
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "system")
@@ -33,8 +38,32 @@ class ThemeViewModel @Inject constructor(
     val customBackgroundAlpha: StateFlow<Float> = preferencesManager.customBackgroundAlpha
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0.35f)
 
+    val appFont: StateFlow<String> = preferencesManager.appFont
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "default")
+
     fun setThemeStyle(style: String) {
         viewModelScope.launch { preferencesManager.setThemeStyle(style) }
+    }
+
+    fun applyCuratedPreset(preset: CuratedThemePreset) {
+        viewModelScope.launch {
+            preferencesManager.setThemePresetId(preset.id)
+            preferencesManager.setThemeStyle("preset")
+        }
+    }
+
+    fun customizeFromPreset(preset: CuratedThemePreset) {
+        viewModelScope.launch {
+            preferencesManager.setCustomAccentColor(preset.primaryHex)
+            preferencesManager.setCustomBase(
+                when {
+                    preset.amoled -> "oled"
+                    preset.isDark -> "dark"
+                    else -> "light"
+                }
+            )
+            preferencesManager.setThemeStyle("custom")
+        }
     }
 
     fun setThemeMode(mode: String) {
@@ -55,5 +84,9 @@ class ThemeViewModel @Inject constructor(
 
     fun setBackgroundAlpha(alpha: Float) {
         viewModelScope.launch { preferencesManager.setCustomBackgroundAlpha(alpha) }
+    }
+
+    fun setAppFont(font: String) {
+        viewModelScope.launch { preferencesManager.setAppFont(font) }
     }
 }

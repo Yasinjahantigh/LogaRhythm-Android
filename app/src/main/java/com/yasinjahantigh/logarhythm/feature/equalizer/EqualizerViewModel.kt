@@ -37,4 +37,16 @@ class EqualizerViewModel @Inject constructor(
     fun resetEqualizer() {
         playerController.resetEqualizer()
     }
+
+    fun setStereoBalance(balance: Float) {
+        playerController.setStereoBalance(balance)
+    }
+
+    fun setMonoAudio(enabled: Boolean) {
+        playerController.setMonoAudio(enabled)
+    }
+
+    fun setDeviceAutoEqEnabled(enabled: Boolean) {
+        playerController.setDeviceAutoEqEnabled(enabled)
+    }
 }

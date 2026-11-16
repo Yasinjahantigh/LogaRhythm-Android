@@ -3,6 +3,12 @@ package com.yasinjahantigh.logarhythm.feature.home
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.yasinjahantigh.logarhythm.core.library.LibrarySync
+import com.yasinjahantigh.logarhythm.data.datastore.PreferencesManager
+import com.yasinjahantigh.logarhythm.data.radar.ArtistFollowRepository
+import com.yasinjahantigh.logarhythm.data.radar.RadarRefreshSummary
+import com.yasinjahantigh.logarhythm.data.radar.ReleaseRadarNotifications
+import com.yasinjahantigh.logarhythm.data.room.ArtistReleaseEntity
+import com.yasinjahantigh.logarhythm.data.room.FollowedArtistEntity
 import com.yasinjahantigh.logarhythm.domain.curation.TrackCuration
 import com.yasinjahantigh.logarhythm.domain.discovery.Discovery
 import com.yasinjahantigh.logarhythm.domain.mix.DailyMixGenerator
@@ -18,7 +24,9 @@ import com.yasinjahantigh.logarhythm.playback.PlayerController
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
@@ -38,8 +46,61 @@ class HomeViewModel @Inject constructor(
     private val trackRepository: TrackRepository,
     private val playlistRepository: PlaylistRepository,
     private val playerController: PlayerController,
-    private val librarySync: LibrarySync
+    private val librarySync: LibrarySync,
+    private val preferencesManager: PreferencesManager,
+    private val artistFollowRepository: ArtistFollowRepository,
+    private val releaseRadarNotifications: ReleaseRadarNotifications
 ) : ViewModel() {
+
+    val followedArtists: StateFlow<List<FollowedArtistEntity>> = artistFollowRepository.observeFollowed()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val radarReleases: StateFlow<List<ArtistReleaseEntity>> = artistFollowRepository.observeReleases()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val radarUnseenCount: StateFlow<Int> = artistFollowRepository.observeUnseenCount()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
+
+    val releaseRadarEnabled: StateFlow<Boolean> = preferencesManager.releaseRadarEnabled
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
+
+    private val _radarRefreshing = MutableStateFlow(false)
+    val radarRefreshing: StateFlow<Boolean> = _radarRefreshing.asStateFlow()
+
+    fun refreshReleaseRadar(onResult: (RadarRefreshSummary) -> Unit) {
+        if (_radarRefreshing.value) return
+        viewModelScope.launch {
+            _radarRefreshing.value = true
+            try {
+                val summary = artistFollowRepository.refreshAll()
+                if (summary.newReleases.isNotEmpty()) {
+                    releaseRadarNotifications.notifyReleases(summary.newReleases)
+                }
+                onResult(summary)
+            } finally {
+                _radarRefreshing.value = false
+            }
+        }
+    }
+
+    fun markRadarSeen() {
+        viewModelScope.launch { artistFollowRepository.markAllSeen() }
+    }
+
+    fun unfollowArtist(artistKey: String) {
+        viewModelScope.launch { artistFollowRepository.unfollow(artistKey) }
+    }
+
+    fun setReleaseRadarEnabled(enabled: Boolean) {
+        viewModelScope.launch { preferencesManager.setReleaseRadarEnabled(enabled) }
+    }
+
+    fun downloadRadarRelease(release: ArtistReleaseEntity, onResult: (Boolean) -> Unit) {
+        viewModelScope.launch {
+            val queued = runCatching { artistFollowRepository.downloadRelease(release) }.getOrDefault(false)
+            onResult(queued)
+        }
+    }
 
     /** Index the device's music now (after permission is granted or on a manual rescan). */
     fun rescanLibrary() = librarySync.requestRefresh(force = true)
@@ -92,30 +153,18 @@ class HomeViewModel @Inject constructor(
             initialValue = 0L
         )
 
+    private val allPlayEvents = statsRepository.getAllPlayEvents()
+
     private val favoritesTrackIds = playlistRepository.getPlaylistTracks(1L)
         .map { tracks -> tracks.map { it.id }.toSet() }
 
-    val dailyMixes: StateFlow<List<DailyMix>> = combine(
+    /** What the listener's own history says about their taste; empty until there is history. */
+    private val tasteProfile: StateFlow<TasteProfile> = combine(
         allTracks,
-        statsRepository.getAllPlayEvents(),
+        allPlayEvents,
         favoritesTrackIds
     ) { tracks, events, favIds ->
-        dailyMixGenerator.generateMixes(
-            allTracks = tracks,
-            playEvents = events,
-            favoriteTrackIds = favIds
-        )
-    }.flowOn(Dispatchers.Default).stateIn(
-        scope = viewModelScope,
-        started = SharingStarted.WhileSubscribed(5000),
-        initialValue = emptyList()
-    )
-
-    private val allPlayEvents = statsRepository.getAllPlayEvents()
-
-    /** What the listener's own history says about their taste; empty until there is history. */
-    private val tasteProfile: StateFlow<TasteProfile> = combine(allPlayEvents, favoritesTrackIds) { events, favIds ->
-        TasteProfile.build(events, favIds)
+        TasteProfile.build(events, favIds, library = tracks)
     }
         .flowOn(Dispatchers.Default)
         .stateIn(
@@ -123,6 +172,42 @@ class HomeViewModel @Inject constructor(
             started = SharingStarted.WhileSubscribed(5000),
             initialValue = TasteProfile.EMPTY
         )
+
+    private val currentDay = flow {
+        while (true) {
+            emit(System.currentTimeMillis() / TasteProfile.DAY_MS)
+            delay(60_000L)
+        }
+    }.distinctUntilChanged()
+
+    val dailyMixes: StateFlow<List<DailyMix>> = combine(
+        allTracks,
+        allPlayEvents,
+        favoritesTrackIds,
+        currentDay
+    ) { tracks, events, favIds, seedDate ->
+        val exposure = preferencesManager.mixExposureHistory.first()
+        val mixes = dailyMixGenerator.generateMixes(
+            allTracks = tracks,
+            playEvents = events,
+            favoriteTrackIds = favIds,
+            seedDate = seedDate,
+            recentExposureDays = exposure
+        )
+        if (mixes.isNotEmpty()) {
+            val allIds = mixes.flatMap { mix -> mix.tracks.map { it.id } }
+            if (allIds.any { exposure[it] != seedDate }) {
+                viewModelScope.launch {
+                    preferencesManager.recordMixExposure(allIds, seedDate)
+                }
+            }
+        }
+        mixes
+    }.flowOn(Dispatchers.Default).stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = emptyList()
+    )
 
     /** Local hour of day, refreshed so Home's daypart follows the clock while the app stays open. */
     private val currentHour = flow {
@@ -259,7 +344,7 @@ class HomeViewModel @Inject constructor(
             // A tap should create one playlist from the current library snapshot. Keeping a
             // collect alive here can unexpectedly restart playback after every library update.
             val tracks = trackRepository.getAllTracks().first()
-            val moodTracks = TrackCuration.generateMoodPlaylist(mood, tracks)
+            val moodTracks = TrackCuration.generateMoodPlaylist(mood, tracks, profile = tasteProfile.value)
             if (moodTracks.isNotEmpty()) {
                 playerController.play(moodTracks, 0)
             } else {

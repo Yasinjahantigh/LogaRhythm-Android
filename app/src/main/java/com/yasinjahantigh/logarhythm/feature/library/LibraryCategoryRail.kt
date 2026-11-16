@@ -1,6 +1,9 @@
 package com.yasinjahantigh.logarhythm.feature.library
 
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -25,6 +28,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.yasinjahantigh.logarhythm.ui.components.formatCount
+import com.yasinjahantigh.logarhythm.ui.designsystem.bounceOnPress
 
 /**
  * The library's category switcher.
@@ -72,13 +76,22 @@ private fun CategoryCard(
         targetValue = if (isSelected) scheme.onPrimary else scheme.onSurface,
         label = "category_content"
     )
+    val scale by animateFloatAsState(
+        targetValue = if (isSelected) 1.03f else 1f,
+        animationSpec = spring(dampingRatio = 0.62f, stiffness = 360f),
+        label = "category_scale"
+    )
+    val interactionSource = androidx.compose.runtime.remember { MutableInteractionSource() }
 
     Surface(
         onClick = onClick,
+        interactionSource = interactionSource,
         shape = RoundedCornerShape(20.dp),
         color = container,
         contentColor = content,
-        modifier = Modifier.testTag("library_tab_${tab.name}")
+        modifier = Modifier
+            .bounceOnPress(interactionSource, 0.94f)
+            .testTag("library_tab_${tab.name}")
     ) {
         Row(
             modifier = Modifier.padding(start = 14.dp, end = 16.dp, top = 9.dp, bottom = 9.dp),

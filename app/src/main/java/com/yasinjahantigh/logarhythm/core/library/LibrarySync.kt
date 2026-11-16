@@ -114,6 +114,6 @@ class LibrarySync @Inject constructor(
 
     private companion object {
         /** Bump when a scan must repopulate new columns even if the media index is unchanged. */
-        const val SCHEMA_TAG = "v9"
+        const val SCHEMA_TAG = "v10"
     }
 }

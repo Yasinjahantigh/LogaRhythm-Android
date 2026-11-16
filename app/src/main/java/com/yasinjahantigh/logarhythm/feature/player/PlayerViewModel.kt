@@ -3,6 +3,8 @@ package com.yasinjahantigh.logarhythm.feature.player
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.yasinjahantigh.logarhythm.data.datastore.PreferencesManager
+import com.yasinjahantigh.logarhythm.data.room.SavedQueueDao
+import com.yasinjahantigh.logarhythm.data.room.SavedQueueEntity
 import com.yasinjahantigh.logarhythm.domain.curation.TrackCuration
 import com.yasinjahantigh.logarhythm.domain.model.Track
 import com.yasinjahantigh.logarhythm.domain.repository.PlaylistRepository
@@ -31,11 +33,18 @@ class PlayerViewModel @Inject constructor(
     private val playlistRepository: PlaylistRepository,
     private val trackRepository: TrackRepository,
     private val statsRepository: StatsRepository,
-    private val preferencesManager: PreferencesManager
+    private val preferencesManager: PreferencesManager,
+    private val savedQueueDao: SavedQueueDao
 ) : ViewModel() {
 
     val isCompactMiniPlayer: StateFlow<Boolean> = preferencesManager.isCompactMiniPlayer
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+
+    val doubleTapSeekEnabled: StateFlow<Boolean> = preferencesManager.doubleTapSeek
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
+
+    val savedQueues: StateFlow<List<SavedQueueEntity>> = savedQueueDao.observeAll()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val currentTrack: StateFlow<Track?> = playerController.currentTrack
     val isPlaying: StateFlow<Boolean> = playerController.isPlaying
@@ -47,6 +56,10 @@ class PlayerViewModel @Inject constructor(
     val queueIndex: StateFlow<Int> = playerController.queueIndex
 
     val playbackSpeed: StateFlow<Float> = playerController.playbackSpeed
+    val playbackPitch: StateFlow<Float> = playerController.playbackPitch
+    val slowedReverb: StateFlow<Boolean> = playerController.slowedReverb
+    val abLoopStartMs: StateFlow<Long?> = playerController.abLoopStartMs
+    val abLoopEndMs: StateFlow<Long?> = playerController.abLoopEndMs
     val sleepTimerRemainingMs: StateFlow<Long?> = playerController.sleepTimerRemainingMs
     val sleepTimerRemainingTracks: StateFlow<Int?> = playerController.sleepTimerRemainingTracks
     val isSleepTimerEndOfTrack: StateFlow<Boolean> = playerController.isSleepTimerEndOfTrack
@@ -109,6 +122,56 @@ class PlayerViewModel @Inject constructor(
     fun clearQueue() = playerController.clearQueue()
 
     fun setPlaybackSpeed(speed: Float) = playerController.setPlaybackSpeed(speed)
+    fun setPlaybackPitch(pitch: Float) = playerController.setPlaybackPitch(pitch)
+    fun setSlowedReverb(enabled: Boolean) = playerController.setSlowedReverb(enabled)
+    fun toggleAbLoopMarker() = playerController.toggleAbLoopMarker()
+    fun clearAbLoop() = playerController.clearAbLoop()
+
+    fun saveCurrentQueueAsSlot(name: String, onSaved: () -> Unit = {}) {
+        val trimmed = name.trim()
+        val list = queue.value
+        if (trimmed.isBlank() || list.isEmpty()) return
+        val idsJson = org.json.JSONArray(list.map { it.id }).toString()
+        val currentIdx = playerController.currentQueueIndex().coerceIn(0, list.lastIndex)
+        val posMs = position.value.coerceAtLeast(0L)
+        val isShuffled = shuffle.value
+        viewModelScope.launch {
+            savedQueueDao.upsert(
+                SavedQueueEntity(
+                    queueId = java.util.UUID.randomUUID().toString(),
+                    name = trimmed,
+                    trackIdsJson = idsJson,
+                    currentIndex = currentIdx,
+                    positionMs = posMs,
+                    shuffle = isShuffled,
+                    updatedAt = System.currentTimeMillis()
+                )
+            )
+            onSaved()
+        }
+    }
+
+    fun loadSavedQueueSlot(slot: SavedQueueEntity, onLoaded: (Boolean) -> Unit = {}) {
+        viewModelScope.launch {
+            val allById = trackRepository.getAllTracks().first().associateBy { it.id }
+            val arr = runCatching { org.json.JSONArray(slot.trackIdsJson) }.getOrNull()
+            val tracks = if (arr == null) emptyList() else {
+                (0 until arr.length()).mapNotNull { i -> allById[arr.optString(i)] }
+            }
+            if (tracks.isEmpty()) {
+                onLoaded(false)
+                return@launch
+            }
+            val startIdx = slot.currentIndex.coerceIn(0, tracks.lastIndex)
+            playerController.play(tracks, startIdx)
+            if (slot.positionMs > 0L) playerController.seekTo(slot.positionMs)
+            onLoaded(true)
+        }
+    }
+
+    fun deleteSavedQueueSlot(queueId: String) {
+        viewModelScope.launch { savedQueueDao.delete(queueId) }
+    }
     fun setSleepTimer(minutes: Int) = playerController.setSleepTimer(minutes)
     fun setSleepTimerTracks(tracks: Int) = playerController.setSleepTimerTracks(tracks)
     fun setSleepTimerEndOfTrack() = playerController.setSleepTimerEndOfTrack()

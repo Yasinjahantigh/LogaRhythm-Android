@@ -183,7 +183,7 @@ internal fun accentColor() = WidgetAccent
 @Composable
 internal fun widgetSnapshot(): MusicWidgetSnapshot {
     androidx.glance.currentState<androidx.datastore.preferences.core.Preferences>()
-    return MusicWidgetUpdater.currentState()
+    return MusicWidgetUpdater.currentState(androidx.glance.LocalContext.current)
 }
 
 @Composable

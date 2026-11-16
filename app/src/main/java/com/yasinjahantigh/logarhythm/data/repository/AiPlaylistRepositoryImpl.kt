@@ -11,7 +11,9 @@ import com.yasinjahantigh.logarhythm.domain.model.MagicPlaylistResult
 import com.yasinjahantigh.logarhythm.domain.model.Track
 import com.yasinjahantigh.logarhythm.domain.repository.AiPlaylistRepository
 import com.yasinjahantigh.logarhythm.domain.repository.PlaylistRepository
+import com.yasinjahantigh.logarhythm.domain.repository.StatsRepository
 import com.yasinjahantigh.logarhythm.domain.repository.TrackRepository
+import com.yasinjahantigh.logarhythm.domain.taste.TasteProfile
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -29,7 +31,8 @@ class AiPlaylistRepositoryImpl @Inject constructor(
     private val keyStore: AiKeyStore,
     private val client: AiPlaylistClient,
     private val trackRepository: TrackRepository,
-    private val playlistRepository: PlaylistRepository
+    private val playlistRepository: PlaylistRepository,
+    private val statsRepository: StatsRepository
 ) : AiPlaylistRepository {
 
     /** Bumped whenever the encrypted key changes, so settings observers see the new state. */
@@ -101,13 +104,25 @@ class AiPlaylistRepositoryImpl @Inject constructor(
             if (library.isEmpty()) {
                 return@withContext MagicPlaylistResult.Failure(AiFailure.NO_TRACKS)
             }
-            client.generate(
+            val ctx = buildTasteContext(library)
+            val result = client.generate(
                 settings = settings,
                 apiKey = apiKey,
                 prompt = prompt,
                 trackCount = trackCount,
-                catalog = CatalogSelector.forPlaylist(library, prompt)
+                catalog = CatalogSelector.forPlaylist(
+                    library = library,
+                    prompt = prompt,
+                    profile = ctx.profile,
+                    recentTrackIds = ctx.recentTrackIds,
+                    seed = ctx.seed
+                ),
+                tasteSummary = ctx.summary
             )
+            if (result is MagicPlaylistResult.Success) {
+                preferencesManager.recordMixExposure(result.playlist.tracks.map { it.id }, ctx.today)
+            }
+            result
         }
 
     override suspend fun generateMix(
@@ -126,18 +141,56 @@ class AiPlaylistRepositoryImpl @Inject constructor(
         val apiKey = keyStore.load()
             ?: return@withContext MagicPlaylistResult.Failure(AiFailure.NOT_CONFIGURED)
         val library = trackRepository.getAllTracks().first()
-        val candidates = CatalogSelector.forMix(library, baseTracks)
+        val ctx = buildTasteContext(library)
+        val candidates = CatalogSelector.forMix(
+            library = library,
+            base = baseTracks,
+            profile = ctx.profile,
+            recentTrackIds = ctx.recentTrackIds,
+            seed = ctx.seed
+        )
         if (candidates.isEmpty()) {
             return@withContext MagicPlaylistResult.Failure(AiFailure.NO_TRACKS)
         }
-        client.generateMix(
+        val result = client.generateMix(
             settings = settings,
             apiKey = apiKey,
             prompt = prompt,
             mixName = mixName,
             baseTracks = baseTracks,
             candidates = candidates,
-            additions = additions
+            additions = additions,
+            tasteSummary = ctx.summary
+        )
+        if (result is MagicPlaylistResult.Success) {
+            preferencesManager.recordMixExposure(result.playlist.tracks.map { it.id }, ctx.today)
+        }
+        result
+    }
+
+    private data class TasteContext(
+        val profile: TasteProfile,
+        val summary: String,
+        val recentTrackIds: Set<String>,
+        val seed: Long,
+        val today: Long
+    )
+
+    private suspend fun buildTasteContext(library: List<Track>): TasteContext {
+        val nowMs = System.currentTimeMillis()
+        val today = nowMs / TasteProfile.DAY_MS
+        val events = statsRepository.getAllPlayEvents().first()
+        val favorites = playlistRepository.getPlaylistTracks(1L).first().map { it.id }.toSet()
+        val profile = TasteProfile.build(events, favorites, nowMs = nowMs, library = library)
+        val recentIds = preferencesManager.mixExposureHistory.first()
+            .filterValues { day -> today - day in 0L..7L }
+            .keys
+        return TasteContext(
+            profile = profile,
+            summary = profile.toSummary(),
+            recentTrackIds = recentIds,
+            seed = nowMs / 60_000L,
+            today = today
         )
     }
 

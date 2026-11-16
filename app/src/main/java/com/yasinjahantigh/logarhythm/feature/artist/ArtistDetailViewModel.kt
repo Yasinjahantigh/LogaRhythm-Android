@@ -4,6 +4,7 @@ import android.net.Uri
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.yasinjahantigh.logarhythm.data.radar.ArtistFollowRepository
 import com.yasinjahantigh.logarhythm.domain.model.ArtistProfile
 import com.yasinjahantigh.logarhythm.domain.model.Track
 import com.yasinjahantigh.logarhythm.domain.repository.TrackRepository
@@ -20,11 +21,26 @@ import javax.inject.Inject
 class ArtistDetailViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val trackRepository: TrackRepository,
-    private val playerController: PlayerController
+    private val playerController: PlayerController,
+    private val artistFollowRepository: ArtistFollowRepository
 ) : ViewModel() {
 
     private val rawArtistName: String = savedStateHandle.get<String>("artistName").orEmpty()
     val artistName: String = Uri.decode(rawArtistName)
+
+    val isFollowed: StateFlow<Boolean> = artistFollowRepository.observeIsFollowed(artistName)
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = false
+        )
+
+    fun toggleFollow() {
+        val art = profile.value?.tracks?.firstOrNull()?.artworkUri
+        viewModelScope.launch {
+            artistFollowRepository.toggleFollow(displayName = artistName, artworkUrl = art)
+        }
+    }
 
     val profile: StateFlow<ArtistProfile?> = trackRepository.getArtistProfile(artistName)
         .stateIn(

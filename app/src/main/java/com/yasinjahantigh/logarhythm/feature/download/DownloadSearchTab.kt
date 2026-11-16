@@ -21,7 +21,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -51,6 +54,9 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -65,10 +71,14 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.yasinjahantigh.logarhythm.R
+import com.yasinjahantigh.logarhythm.data.download.DownloadCatalogCache
 import com.yasinjahantigh.logarhythm.domain.model.DownloadErrorKind
 import com.yasinjahantigh.logarhythm.domain.model.DownloadItem
+import com.yasinjahantigh.logarhythm.domain.model.DownloadResultKind
+import com.yasinjahantigh.logarhythm.domain.model.DownloadSearchCategory
 import com.yasinjahantigh.logarhythm.domain.model.DownloadSearchResult
 import com.yasinjahantigh.logarhythm.domain.model.DownloadSource
+import com.yasinjahantigh.logarhythm.ui.components.ArtworkImage
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -79,6 +89,11 @@ fun DownloadSearchTab(
     state: DownloadSearchUiState,
     sourceFilter: DownloadSource?,
     onSourceFilterChange: (DownloadSource?) -> Unit,
+    categoryFilter: DownloadSearchCategory,
+    onCategoryFilterChange: (DownloadSearchCategory) -> Unit,
+    savedCollections: List<DownloadCatalogCache.SavedCollectionSummary>,
+    onOpenSavedCollection: (String) -> Unit,
+    listState: LazyListState,
     recentSearches: List<String>,
     onSelectRecent: (String) -> Unit,
     onRemoveRecent: (String) -> Unit,
@@ -88,6 +103,11 @@ fun DownloadSearchTab(
     bottomPadding: Dp,
     onResultClick: (DownloadSearchResult) -> Unit,
     onDownloadAlbum: (DownloadSearchResult) -> Unit = {},
+    previewState: com.yasinjahantigh.logarhythm.data.download.StreamPreviewState =
+        com.yasinjahantigh.logarhythm.data.download.StreamPreviewState(),
+    onTogglePreview: (DownloadSearchResult) -> Unit = {},
+    freshResults: List<DownloadSearchResult> = emptyList(),
+    popularResults: List<DownloadSearchResult> = emptyList(),
     onRetry: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -144,37 +164,57 @@ fun DownloadSearchTab(
             )
         )
 
+        CategoryFilterRow(
+            selected = categoryFilter,
+            onSelect = onCategoryFilterChange
+        )
+
         SourceFilterRow(
             selected = sourceFilter,
             onSelect = onSourceFilterChange
         )
 
-        if (sourceFilter == DownloadSource.MUSICMAN) {
-            Text(
-                text = stringResource(R.string.download_musicman_ready_note),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(horizontal = 20.dp, vertical = 2.dp)
-            )
-        }
-
         if (preparing && sourceFilter != DownloadSource.MUSICMAN && sourceFilter != DownloadSource.SAAVN && sourceFilter != DownloadSource.RADIOJAVAN && sourceFilter != DownloadSource.DEEZER) {
             PreparingRow()
         }
 
-        when {
-            state.searching -> SearchSkeleton()
-            state.error == DownloadErrorKind.NETWORK -> NetworkErrorCard(onRetry = onRetry)
-            state.error != null && state.results.isEmpty() -> ContentErrorCard(onRetry = onRetry)
-            !state.hasSearched -> IntroAndRecent(
-                recentSearches = recentSearches,
-                onSelectRecent = onSelectRecent,
-                onRemoveRecent = onRemoveRecent,
-                onClearRecent = onClearRecent,
-                bottomPadding = bottomPadding
+        if (state.searching && state.results.isNotEmpty()) {
+            androidx.compose.material3.LinearProgressIndicator(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 2.dp)
             )
+        }
+
+        when {
+            state.searching && state.results.isEmpty() -> SearchSkeleton()
+            state.error == DownloadErrorKind.NETWORK && state.results.isEmpty() -> NetworkErrorCard(onRetry = onRetry)
+            state.error != null && state.results.isEmpty() -> ContentErrorCard(onRetry = onRetry)
+            !state.hasSearched -> Column(modifier = Modifier.fillMaxSize()) {
+                if (freshResults.isNotEmpty() || popularResults.isNotEmpty()) {
+                    DiscoveryFeedsShelf(
+                        freshResults = freshResults,
+                        popularResults = popularResults,
+                        onResultClick = onResultClick
+                    )
+                }
+                if (savedCollections.isNotEmpty()) {
+                    SavedCollectionsRow(
+                        collections = savedCollections,
+                        onOpen = onOpenSavedCollection
+                    )
+                }
+                IntroAndRecent(
+                    recentSearches = recentSearches,
+                    onSelectRecent = onSelectRecent,
+                    onRemoveRecent = onRemoveRecent,
+                    onClearRecent = onClearRecent,
+                    bottomPadding = bottomPadding
+                )
+            }
             state.results.isEmpty() -> NoResults()
             else -> LazyColumn(
+                state = listState,
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(
                     start = 16.dp,
@@ -184,13 +224,180 @@ fun DownloadSearchTab(
                 ),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                items(state.results, key = { "${it.source.raw}_${it.id}" }) { result ->
+                items(state.results, key = { "${it.kind.name}_${it.source.raw}_${it.id}" }) { result ->
+                    val pKey = "${result.kind.name}_${result.source.raw}_${result.id}"
                     DownloadResultCard(
                         result = result,
                         activeItem = history.firstOrNull { it.sourceUrl == result.url },
                         onClick = { onResultClick(result) },
-                        onDownloadAlbum = { onDownloadAlbum(result) }
+                        onDownloadAlbum = if (result.kind == DownloadResultKind.TRACK) {
+                            { onDownloadAlbum(result) }
+                        } else null,
+                        isPreviewLoading = previewState.trackKey == pKey && previewState.isLoading,
+                        isPreviewPlaying = previewState.trackKey == pKey && previewState.isPlaying,
+                        onTogglePreview = if (result.kind == DownloadResultKind.TRACK) {
+                            { onTogglePreview(result) }
+                        } else null,
+                        modifier = Modifier.animateItem()
                     )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CategoryFilterRow(
+    selected: DownloadSearchCategory,
+    onSelect: (DownloadSearchCategory) -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState())
+            .padding(horizontal = 16.dp, vertical = 2.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        listOf(
+            DownloadSearchCategory.ALL to R.string.download_category_all,
+            DownloadSearchCategory.TRACK to R.string.download_category_track,
+            DownloadSearchCategory.ALBUM to R.string.download_category_album,
+            DownloadSearchCategory.ARTIST to R.string.download_category_artist
+        ).forEach { (category, labelRes) ->
+            FilterChip(
+                selected = selected == category,
+                onClick = { onSelect(category) },
+                label = { Text(stringResource(labelRes)) }
+            )
+        }
+    }
+}
+
+@Composable
+private fun DiscoveryFeedsShelf(
+    freshResults: List<DownloadSearchResult>,
+    popularResults: List<DownloadSearchResult>,
+    onResultClick: (DownloadSearchResult) -> Unit
+) {
+    var selectedFeed by remember { mutableIntStateOf(if (freshResults.isNotEmpty()) 0 else 1) }
+    val activeList = if (selectedFeed == 0 && freshResults.isNotEmpty()) freshResults else popularResults
+    if (activeList.isEmpty()) return
+
+    Column(modifier = Modifier.fillMaxWidth().padding(top = 6.dp)) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 2.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            if (freshResults.isNotEmpty()) {
+                FilterChip(
+                    selected = selectedFeed == 0,
+                    onClick = { selectedFeed = 0 },
+                    label = { Text(stringResource(R.string.download_feed_fresh)) }
+                )
+            }
+            if (popularResults.isNotEmpty()) {
+                FilterChip(
+                    selected = selectedFeed == 1,
+                    onClick = { selectedFeed = 1 },
+                    label = { Text(stringResource(R.string.download_feed_popular)) }
+                )
+            }
+        }
+        LazyRow(
+            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            items(activeList, key = { "feed_${selectedFeed}_${it.id}" }) { item ->
+                Surface(
+                    modifier = Modifier
+                        .width(126.dp)
+                        .clip(RoundedCornerShape(16.dp))
+                        .clickable { onResultClick(item) },
+                    shape = RoundedCornerShape(16.dp),
+                    color = MaterialTheme.colorScheme.surfaceContainerLow
+                ) {
+                    Column(modifier = Modifier.padding(8.dp)) {
+                        ArtworkImage(
+                            uri = item.thumbnailUrl,
+                            fallbackKey = item.title,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(92.dp),
+                            shape = RoundedCornerShape(12.dp),
+                            contentDescription = item.title
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = item.title,
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        if (item.artist.isNotBlank()) {
+                            Text(
+                                text = item.artist,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SavedCollectionsRow(
+    collections: List<DownloadCatalogCache.SavedCollectionSummary>,
+    onOpen: (String) -> Unit
+) {
+    Column(modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
+        Text(
+            text = stringResource(R.string.download_saved_collections_title),
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.padding(horizontal = 18.dp, vertical = 4.dp)
+        )
+        LazyRow(
+            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            items(collections, key = { it.cacheKey }) { item ->
+                Surface(
+                    modifier = Modifier
+                        .width(120.dp)
+                        .clip(RoundedCornerShape(16.dp))
+                        .clickable { onOpen(item.cacheKey) },
+                    shape = RoundedCornerShape(16.dp),
+                    color = MaterialTheme.colorScheme.surfaceContainerLow
+                ) {
+                    Column(modifier = Modifier.padding(8.dp)) {
+                        ArtworkImage(
+                            uri = item.thumbnailUrl,
+                            fallbackKey = item.title,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(92.dp),
+                            shape = if (item.kind == DownloadResultKind.ARTIST) CircleShape else RoundedCornerShape(12.dp),
+                            contentDescription = item.title
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = item.title,
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
                 }
             }
         }
@@ -340,7 +547,7 @@ private fun NetworkErrorCard(onRetry: () -> Unit) {
             }
             Spacer(modifier = Modifier.height(8.dp))
             Text(
-                text = stringResource(R.string.download_error_network_message),
+                text = stringResource(R.string.download_error_vpn_or_musicman),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.9f)
             )

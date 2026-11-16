@@ -69,14 +69,13 @@ private fun QueueWidgetContent(state: MusicWidgetSnapshot) {
             .padding(top = 12.dp, start = 12.dp, end = 12.dp, bottom = 10.dp)
     ) {
         Column(modifier = GlanceModifier.fillMaxSize()) {
-            // Header: Now Playing Artwork, Title, Artist, and Transport Controls
+            // Header: Now Playing Artwork, Title, Artist, Live Queue Position & Transport Controls
             Row(
                 modifier = GlanceModifier
                     .fillMaxWidth()
                     .padding(bottom = 10.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Artwork (Left)
                 val coverProvider = state.artwork.cover?.let { ImageProvider(it) }
                     ?: state.artwork.strip?.let { ImageProvider(it) }
                     ?: ImageProvider(R.drawable.ic_music_placeholder)
@@ -99,18 +98,36 @@ private fun QueueWidgetContent(state: MusicWidgetSnapshot) {
 
                 Spacer(modifier = GlanceModifier.width(12.dp))
 
-                // Info & Controls (Right)
                 Column(modifier = GlanceModifier.defaultWeight()) {
-                    Text(
-                        text = if (hasTrack) track.title else LocalString(R.string.app_name),
-                        style = TextStyle(
-                            color = ArtText,
-                            fontSize = 15.sp,
-                            fontWeight = FontWeight.Bold
-                        ),
-                        maxLines = 1,
-                        modifier = GlanceModifier.clickable(actionStartActivity<MainActivity>())
-                    )
+                    Row(
+                        modifier = GlanceModifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = if (hasTrack) track.title else LocalString(R.string.app_name),
+                            style = TextStyle(
+                                color = ArtText,
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.Bold
+                            ),
+                            maxLines = 1,
+                            modifier = GlanceModifier.defaultWeight().clickable(actionStartActivity<MainActivity>())
+                        )
+                        if (state.totalQueueSize > 0 && state.currentQueueIndex >= 0) {
+                            Spacer(modifier = GlanceModifier.width(6.dp))
+                            Box(
+                                modifier = GlanceModifier
+                                    .cornerRadius(8.dp)
+                                    .background(QueueControlSurface)
+                                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                            ) {
+                                Text(
+                                    text = "${state.currentQueueIndex + 1}/${state.totalQueueSize}",
+                                    style = TextStyle(color = QueueActiveTextPrimary, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                )
+                            }
+                        }
+                    }
                     Spacer(modifier = GlanceModifier.height(2.dp))
                     Text(
                         text = if (hasTrack) track.artist else LocalString(R.string.widget_select_to_play),
@@ -203,7 +220,7 @@ private fun QueueWidgetContent(state: MusicWidgetSnapshot) {
                 }
             }
 
-            // Bottom Section: Rounded Inner Card with Scrollable Song List
+            // Bottom Section: Rounded Inner Card with Live Dynamic Queue List
             Box(
                 modifier = GlanceModifier
                     .fillMaxSize()
@@ -211,7 +228,7 @@ private fun QueueWidgetContent(state: MusicWidgetSnapshot) {
                     .cornerRadius(18.dp)
                     .padding(horizontal = 4.dp, vertical = 6.dp)
             ) {
-                if (state.sortedTracks.isEmpty()) {
+                if (state.queueItems.isEmpty()) {
                     Column(
                         modifier = GlanceModifier.fillMaxSize().padding(16.dp),
                         verticalAlignment = Alignment.CenterVertically,
@@ -225,37 +242,58 @@ private fun QueueWidgetContent(state: MusicWidgetSnapshot) {
                     }
                 } else {
                     LazyColumn(modifier = GlanceModifier.fillMaxSize()) {
-                        items(state.sortedTracks, itemId = { it.id.hashCode().toLong() }) { item ->
-                            val isCurrent = item.id == currentTrackId
+                        items(state.queueItems, itemId = { (it.index.toLong() shl 32) xor it.value.id.hashCode().toLong() }) { indexed ->
+                            val item = indexed.value
+                            val isCurrent = indexed.index == state.currentQueueIndex ||
+                                (state.currentQueueIndex < 0 && item.id == currentTrackId)
+                            val thumb = state.artwork.queueThumbnails[item.id]
                             Row(
                                 modifier = GlanceModifier
                                     .fillMaxWidth()
                                     .cornerRadius(10.dp)
                                     .background(if (isCurrent) QueueActiveItemSurface else colorProvider(Color.Transparent))
-                                    .padding(horizontal = 10.dp, vertical = 7.dp)
+                                    .padding(horizontal = 8.dp, vertical = 6.dp)
                                     .clickable(
-                                        actionRunCallback<PlayTrackWidgetAction>(
-                                            actionParametersOf(PlayTrackWidgetAction.trackIdKey to item.id)
+                                        actionRunCallback<PlayQueueWidgetAction>(
+                                            actionParametersOf(
+                                                PlayQueueWidgetAction.indexKey to indexed.index,
+                                                PlayQueueWidgetAction.trackIdKey to item.id
+                                            )
                                         )
                                     ),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
+                                Box(
+                                    modifier = GlanceModifier
+                                        .size(34.dp)
+                                        .cornerRadius(8.dp)
+                                        .background(QueueControlSurface),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Image(
+                                        provider = thumb?.let { ImageProvider(it) }
+                                            ?: ImageProvider(R.drawable.ic_music_placeholder),
+                                        contentDescription = null,
+                                        modifier = GlanceModifier.fillMaxSize().cornerRadius(8.dp),
+                                        contentScale = ContentScale.Crop
+                                    )
+                                }
+                                Spacer(modifier = GlanceModifier.width(10.dp))
                                 Column(modifier = GlanceModifier.defaultWeight()) {
                                     Text(
                                         text = item.title,
                                         style = TextStyle(
                                             color = if (isCurrent) QueueActiveTextPrimary else QueueTextPrimary,
-                                            fontSize = 14.sp,
+                                            fontSize = 13.5.sp,
                                             fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Medium
                                         ),
                                         maxLines = 1
                                     )
-                                    Spacer(modifier = GlanceModifier.height(2.dp))
                                     Text(
                                         text = item.artist,
                                         style = TextStyle(
                                             color = if (isCurrent) QueueActiveTextSecondary else QueueTextSecondary,
-                                            fontSize = 11.5.sp,
+                                            fontSize = 11.sp,
                                             fontWeight = FontWeight.Normal
                                         ),
                                         maxLines = 1

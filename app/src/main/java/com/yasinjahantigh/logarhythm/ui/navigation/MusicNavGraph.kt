@@ -1,5 +1,10 @@
 package com.yasinjahantigh.logarhythm.ui.navigation
 
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.navigation.NavHostController
@@ -7,6 +12,7 @@ import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
+import com.yasinjahantigh.logarhythm.ui.designsystem.AppMotion
 import com.yasinjahantigh.logarhythm.feature.album.AlbumDetailScreen
 import com.yasinjahantigh.logarhythm.feature.artist.ArtistDetailScreen
 import com.yasinjahantigh.logarhythm.feature.download.DownloadScreen
@@ -32,7 +38,23 @@ fun MusicNavGraph(
     NavHost(
         navController = navController,
         startDestination = NavDestination.Home.route,
-        modifier = modifier
+        modifier = modifier,
+        enterTransition = {
+            fadeIn(tween(AppMotion.durationNormal, easing = AppMotion.standardEasing)) +
+                slideInHorizontally(tween(AppMotion.durationNormal, easing = AppMotion.standardEasing)) { it / 14 }
+        },
+        exitTransition = {
+            fadeOut(tween(AppMotion.durationFast, easing = AppMotion.standardEasing)) +
+                slideOutHorizontally(tween(AppMotion.durationNormal, easing = AppMotion.standardEasing)) { -it / 20 }
+        },
+        popEnterTransition = {
+            fadeIn(tween(AppMotion.durationNormal, easing = AppMotion.standardEasing)) +
+                slideInHorizontally(tween(AppMotion.durationNormal, easing = AppMotion.standardEasing)) { -it / 16 }
+        },
+        popExitTransition = {
+            fadeOut(tween(AppMotion.durationFast, easing = AppMotion.standardEasing)) +
+                slideOutHorizontally(tween(AppMotion.durationNormal, easing = AppMotion.standardEasing)) { it / 12 }
+        }
     ) {
         composable(NavDestination.Home.route) {
             HomeScreen(

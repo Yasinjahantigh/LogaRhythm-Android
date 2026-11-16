@@ -58,6 +58,26 @@ object AppModule {
     }
 
     @Provides
+    fun provideDownloadCatalogDao(database: MusicDatabase): com.yasinjahantigh.logarhythm.data.room.DownloadCatalogDao {
+        return database.downloadCatalogDao()
+    }
+
+    @Provides
+    fun provideArtistFollowDao(database: MusicDatabase): com.yasinjahantigh.logarhythm.data.room.ArtistFollowDao {
+        return database.artistFollowDao()
+    }
+
+    @Provides
+    fun provideSavedQueueDao(database: MusicDatabase): com.yasinjahantigh.logarhythm.data.room.SavedQueueDao {
+        return database.savedQueueDao()
+    }
+
+    @Provides
+    fun provideDeviceEqDao(database: MusicDatabase): com.yasinjahantigh.logarhythm.data.room.DeviceEqDao {
+        return database.deviceEqDao()
+    }
+
+    @Provides
     @Singleton
     fun provideDataStore(
         @ApplicationContext context: Context

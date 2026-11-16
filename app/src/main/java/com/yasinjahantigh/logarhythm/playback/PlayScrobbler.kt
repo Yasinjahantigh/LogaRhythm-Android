@@ -1,5 +1,6 @@
 package com.yasinjahantigh.logarhythm.playback
 
+import com.yasinjahantigh.logarhythm.data.datastore.PreferencesManager
 import com.yasinjahantigh.logarhythm.domain.model.PlayEvent
 import com.yasinjahantigh.logarhythm.domain.model.Track
 import com.yasinjahantigh.logarhythm.domain.repository.StatsRepository
@@ -11,19 +12,21 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/**
- * Turns raw playback into honest listening history:
- *  - a play is logged as soon as the play threshold is crossed, so it shows up immediately;
- *  - that event's listened time is then corrected to the real total (it used to stay at ~30s,
- *    which badly understated listening time);
- *  - leaving a track before the threshold is logged as a skip, which the taste engine uses to
- *    stop recommending music the listener keeps passing over.
- */
 @Singleton
 class PlayScrobbler @Inject constructor(
-    private val statsRepository: StatsRepository
+    private val statsRepository: StatsRepository,
+    private val preferencesManager: PreferencesManager
 ) {
     private val ioScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    @Volatile
+    private var isPrivateSession = false
+
+    init {
+        ioScope.launch {
+            preferencesManager.privateSession.collect { isPrivateSession = it }
+        }
+    }
 
     private var currentTrackId: String? = null
     private var currentDurationMs = 0L
@@ -62,6 +65,7 @@ class PlayScrobbler @Inject constructor(
     }
 
     private fun maybeRecordPlay(trackId: String, now: Long) {
+        if (isPrivateSession) return
         if (recordedTimestamp != 0L) return
         if (currentTrackListenedMs < ListenPolicy.playThresholdMs(currentDurationMs)) return
         recordedTimestamp = now
@@ -77,6 +81,7 @@ class PlayScrobbler @Inject constructor(
 
     /** Keeps the stored listened time close to reality even if the process is killed mid-track. */
     private fun maybeFlush(trackId: String) {
+        if (isPrivateSession) return
         if (recordedTimestamp == 0L) return
         if (currentTrackListenedMs - lastFlushedListenedMs < FLUSH_INTERVAL_MS) return
         lastFlushedListenedMs = currentTrackListenedMs
@@ -86,6 +91,7 @@ class PlayScrobbler @Inject constructor(
     }
 
     private fun finalizeCurrent() {
+        if (isPrivateSession) return
         val trackId = currentTrackId ?: return
         val listened = currentTrackListenedMs
         if (recordedTimestamp != 0L) {

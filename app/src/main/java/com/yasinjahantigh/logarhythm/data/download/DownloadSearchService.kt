@@ -6,16 +6,26 @@ import com.yasinjahantigh.logarhythm.data.download.radiojavan.RadioJavanClient
 import com.yasinjahantigh.logarhythm.data.download.saavn.SaavnClient
 import com.yasinjahantigh.logarhythm.domain.download.DownloadPipelineException
 import com.yasinjahantigh.logarhythm.domain.model.DownloadErrorKind
+import com.yasinjahantigh.logarhythm.domain.model.DownloadSearchCategory
 import com.yasinjahantigh.logarhythm.domain.model.DownloadSearchResult
 import com.yasinjahantigh.logarhythm.domain.model.DownloadSource
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.channelFlow
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withTimeoutOrNull
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/** Combines Persian (Radio Javan) and International (Deezer, MusicMan, JioSaavn, YouTube, SoundCloud) sources. */
+/**
+ * Combines fast native HTTP APIs (MusicMan mm.3rah.ir, Deezer, JioSaavn, Radio Javan)
+ * with yt-dlp fallback, streaming progressive results immediately as fast APIs respond.
+ */
 @Singleton
 class DownloadSearchService @Inject constructor(
     private val ytDlp: YtDlpSearchService,
@@ -27,101 +37,170 @@ class DownloadSearchService @Inject constructor(
 
     data class Outcome(
         val results: List<DownloadSearchResult>,
-        val failure: DownloadErrorKind? = null
+        val failure: DownloadErrorKind? = null,
+        val isFinal: Boolean = true
     )
 
-    suspend fun search(query: String, source: DownloadSource?): Outcome = coroutineScope {
-        val needsYtDlp = source == null || source.usesYtDlp
-        val ytDlpSources = when (source) {
-            null -> setOf(DownloadSource.YOUTUBE, DownloadSource.SOUNDCLOUD, DownloadSource.BANDCAMP)
-            DownloadSource.MUSICMAN, DownloadSource.SAAVN, DownloadSource.RADIOJAVAN, DownloadSource.DEEZER -> emptySet()
-            else -> setOf(source)
-        }
-        val ytDlpJob = if (needsYtDlp) {
-            async(Dispatchers.IO) { ytDlp.search(query, ytDlpSources) }
-        } else {
-            null
+    fun searchFlow(
+        query: String,
+        source: DownloadSource?,
+        category: DownloadSearchCategory = DownloadSearchCategory.ALL
+    ): Flow<Outcome> = channelFlow {
+        val mutex = Mutex()
+        val byBucket = linkedMapOf<String, List<DownloadSearchResult>>()
+        val failures = mutableListOf<DownloadErrorKind>()
+
+        suspend fun publish(isFinal: Boolean) {
+            mutex.withLock {
+                val ordered = buildList {
+                    listOf("musicman", "deezer", "radiojavan", "saavn", "ytdlp").forEach { key ->
+                        addAll(byBucket[key].orEmpty())
+                    }
+                }.distinctBy { "${it.kind.name}:${it.source.raw}:${it.id}" }
+
+                send(
+                    Outcome(
+                        results = ordered,
+                        failure = when {
+                            ordered.isNotEmpty() -> null
+                            failures.contains(DownloadErrorKind.NETWORK) -> DownloadErrorKind.NETWORK
+                            else -> failures.firstOrNull()
+                        },
+                        isFinal = isFinal
+                    )
+                )
+            }
         }
 
-        val radioJavanJob = if (source == null || source == DownloadSource.RADIOJAVAN) {
-            async(Dispatchers.IO) {
-                try {
-                    SourceOutcome(radioJavan.search(query), null)
-                } catch (cancelled: CancellationException) {
-                    throw cancelled
-                } catch (_: Exception) {
-                    SourceOutcome(emptyList(), DownloadErrorKind.UNKNOWN)
+        val jobs = mutableListOf<kotlinx.coroutines.Job>()
+
+        if (source == null || source == DownloadSource.MUSICMAN) {
+            jobs += launch(Dispatchers.IO) {
+                val outcome = safeRun {
+                    withTimeoutOrNull(FAST_API_TIMEOUT_MS) { musicMan.search(query, category) }
+                        ?: throw DownloadPipelineException(DownloadErrorKind.NETWORK, "MusicMan timed out")
+                }
+                mutex.withLock {
+                    byBucket["musicman"] = outcome.results
+                    outcome.failure?.let { failures += it }
+                }
+                publish(isFinal = false)
+            }
+        }
+
+        if (source == null || source == DownloadSource.DEEZER) {
+            jobs += launch(Dispatchers.IO) {
+                val outcome = safeRun {
+                    withTimeoutOrNull(FAST_API_TIMEOUT_MS) {
+                        when (category) {
+                            DownloadSearchCategory.TRACK -> deezer.searchDownload(query)
+                            DownloadSearchCategory.ALBUM -> deezer.searchAlbums(query)
+                            DownloadSearchCategory.ARTIST -> deezer.searchArtists(query)
+                            DownloadSearchCategory.ALL -> coroutineScope {
+                                val tracks = async { deezer.searchDownload(query, 15) }
+                                val albums = async { deezer.searchAlbums(query, 8) }
+                                val artists = async { deezer.searchArtists(query, 6) }
+                                artists.await() + albums.await() + tracks.await()
+                            }
+                        }
+                    }.orEmpty()
+                }
+                mutex.withLock {
+                    byBucket["deezer"] = outcome.results
+                    outcome.failure?.let { failures += it }
+                }
+                publish(isFinal = false)
+            }
+        }
+
+        if ((source == null || source == DownloadSource.RADIOJAVAN) &&
+            (category == DownloadSearchCategory.ALL || category == DownloadSearchCategory.TRACK)
+        ) {
+            jobs += launch(Dispatchers.IO) {
+                val outcome = safeRun {
+                    withTimeoutOrNull(FAST_API_TIMEOUT_MS) { radioJavan.search(query) }.orEmpty()
+                }
+                mutex.withLock {
+                    byBucket["radiojavan"] = outcome.results
+                    outcome.failure?.let { failures += it }
+                }
+                publish(isFinal = false)
+            }
+        }
+
+        if ((source == null || source == DownloadSource.SAAVN) &&
+            (category == DownloadSearchCategory.ALL || category == DownloadSearchCategory.TRACK)
+        ) {
+            jobs += launch(Dispatchers.IO) {
+                val outcome = safeRun {
+                    withTimeoutOrNull(FAST_API_TIMEOUT_MS) { saavn.search(query) }.orEmpty()
+                }
+                mutex.withLock {
+                    byBucket["saavn"] = outcome.results
+                    outcome.failure?.let { failures += it }
+                }
+                publish(isFinal = false)
+            }
+        }
+
+        jobs.forEach { it.join() }
+
+        val fastCount = mutex.withLock { byBucket.values.sumOf { it.size } }
+        val explicitYtDlp = source?.usesYtDlp == true
+        val fallbackYtDlp = source == null &&
+            (category == DownloadSearchCategory.ALL || category == DownloadSearchCategory.TRACK) &&
+            fastCount == 0
+
+        if (explicitYtDlp || fallbackYtDlp) {
+            val ytSources = when (source) {
+                null -> setOf(DownloadSource.YOUTUBE, DownloadSource.SOUNDCLOUD, DownloadSource.BANDCAMP)
+                else -> setOf(source)
+            }
+            val ytOutcome = withTimeoutOrNull(YT_FALLBACK_TIMEOUT_MS) {
+                ytDlp.search(query, ytSources)
+            }
+            mutex.withLock {
+                if (ytOutcome != null) {
+                    byBucket["ytdlp"] = ytOutcome.results
+                    ytOutcome.failure?.let { failures += it }
                 }
             }
-        } else {
-            null
         }
 
-        val deezerJob = if (source == null || source == DownloadSource.DEEZER) {
-            async(Dispatchers.IO) {
-                try {
-                    SourceOutcome(deezer.searchDownload(query), null)
-                } catch (cancelled: CancellationException) {
-                    throw cancelled
-                } catch (_: Exception) {
-                    SourceOutcome(emptyList(), DownloadErrorKind.UNKNOWN)
-                }
-            }
-        } else {
-            null
-        }
+        publish(isFinal = true)
+    }
 
-        val musicManJob = if (source == null || source == DownloadSource.MUSICMAN) {
-            async(Dispatchers.IO) {
-                try {
-                    SourceOutcome(musicMan.search(query), null)
-                } catch (cancelled: CancellationException) {
-                    throw cancelled
-                } catch (pipeline: DownloadPipelineException) {
-                    SourceOutcome(emptyList(), pipeline.kind)
-                } catch (_: Exception) {
-                    SourceOutcome(emptyList(), DownloadErrorKind.UNKNOWN)
-                }
-            }
-        } else {
-            null
-        }
-        val saavnJob = if (source == null || source == DownloadSource.SAAVN) {
-            async(Dispatchers.IO) {
-                try {
-                    SourceOutcome(saavn.search(query), null)
-                } catch (cancelled: CancellationException) {
-                    throw cancelled
-                } catch (pipeline: DownloadPipelineException) {
-                    SourceOutcome(emptyList(), pipeline.kind)
-                } catch (_: Exception) {
-                    SourceOutcome(emptyList(), DownloadErrorKind.UNKNOWN)
-                }
-            }
-        } else {
-            null
-        }
+    suspend fun search(
+        query: String,
+        source: DownloadSource?,
+        category: DownloadSearchCategory = DownloadSearchCategory.ALL
+    ): Outcome {
+        var latest = Outcome(emptyList())
+        searchFlow(query, source, category).collect { latest = it }
+        return latest
+    }
 
-        val rj = radioJavanJob?.await()
-        val dz = deezerJob?.await()
-        val sv = saavnJob?.await()
-        val mm = musicManJob?.await()
-        val yt = ytDlpJob?.await()
-
-        val results = (rj?.results.orEmpty() + dz?.results.orEmpty() + sv?.results.orEmpty() + mm?.results.orEmpty() + yt?.results.orEmpty())
-        val failures = listOfNotNull(rj?.failure, dz?.failure, yt?.failure, mm?.failure, sv?.failure)
-        Outcome(
-            results = results,
-            failure = when {
-                results.isNotEmpty() -> null
-                failures.contains(DownloadErrorKind.NETWORK) -> DownloadErrorKind.NETWORK
-                else -> failures.firstOrNull()
-            }
-        )
+    private suspend inline fun safeRun(
+        crossinline block: suspend () -> List<DownloadSearchResult>
+    ): SourceOutcome {
+        return try {
+            SourceOutcome(block(), null)
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (pipeline: DownloadPipelineException) {
+            SourceOutcome(emptyList(), pipeline.kind)
+        } catch (_: Exception) {
+            SourceOutcome(emptyList(), DownloadErrorKind.UNKNOWN)
+        }
     }
 
     private data class SourceOutcome(
         val results: List<DownloadSearchResult>,
         val failure: DownloadErrorKind?
     )
+
+    private companion object {
+        const val FAST_API_TIMEOUT_MS = 10_000L
+        const val YT_FALLBACK_TIMEOUT_MS = 22_000L
+    }
 }

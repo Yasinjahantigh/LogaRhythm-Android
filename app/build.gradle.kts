@@ -38,13 +38,14 @@ fun getVersionInfo(): Pair<Int, String> {
 
 val (appVersionCode, appVersionName) = getVersionInfo()
 
-// Optional anonymous install counter; empty disables the first-launch ping entirely.
+// Anonymous install counter endpoint; defaults to production worker if not overridden.
 val localProperties = Properties().apply {
   val file = rootProject.file("local.properties")
   if (file.isFile) file.inputStream().use { load(it) }
 }
 val installEndpoint = System.getenv("INSTALL_ENDPOINT")?.trim()
-  ?: localProperties.getProperty("INSTALL_ENDPOINT")?.trim().orEmpty()
+  ?: localProperties.getProperty("INSTALL_ENDPOINT")?.trim()
+  ?: "https://logarhythm-installs.yasinjahantigh.workers.dev/hit"
 
 android {
   namespace = "com.yasinjahantigh.logarhythm"

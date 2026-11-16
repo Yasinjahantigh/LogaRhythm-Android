@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.yasinjahantigh.logarhythm.domain.model.AlbumStat
 import com.yasinjahantigh.logarhythm.domain.model.ArtistStat
+import com.yasinjahantigh.logarhythm.domain.model.CustomDateRange
 import com.yasinjahantigh.logarhythm.domain.model.Playlist
 import com.yasinjahantigh.logarhythm.domain.model.TimeRange
 import com.yasinjahantigh.logarhythm.domain.model.Track
@@ -18,6 +19,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -42,6 +44,13 @@ class StatsViewModel @Inject constructor(
     private val _timeRange = MutableStateFlow(TimeRange.ALL_TIME)
     val timeRange: StateFlow<TimeRange> = _timeRange.asStateFlow()
 
+    private val _customDateRange = MutableStateFlow<CustomDateRange?>(null)
+    val customDateRange: StateFlow<CustomDateRange?> = _customDateRange.asStateFlow()
+
+    private val rangeBounds = combine(_timeRange, _customDateRange) { range, custom ->
+        range.toSinceTimestamp(customRange = custom) to range.toUntilTimestamp(customRange = custom)
+    }
+
     private val _selectedTab = MutableStateFlow(StatsTab.HISTORY)
     val selectedTab: StateFlow<StatsTab> = _selectedTab.asStateFlow()
 
@@ -62,9 +71,9 @@ class StatsViewModel @Inject constructor(
             initialValue = emptyList()
         )
 
-    val totalListenTimeMs: StateFlow<Long> = _timeRange
-        .flatMapLatest { range ->
-            statsRepository.getTotalListenTimeMs(range.toSinceTimestamp())
+    val totalListenTimeMs: StateFlow<Long> = rangeBounds
+        .flatMapLatest { (since, until) ->
+            statsRepository.getTotalListenTimeMs(since, until)
         }
         .stateIn(
             scope = viewModelScope,
@@ -72,9 +81,29 @@ class StatsViewModel @Inject constructor(
             initialValue = 0L
         )
 
-    val topTracks: StateFlow<List<TrackStat>> = _timeRange
-        .flatMapLatest { range ->
-            statsRepository.getTopTracks(range.toSinceTimestamp(), limit = 50)
+    val completedPlayCount: StateFlow<Int> = rangeBounds
+        .flatMapLatest { (since, until) ->
+            statsRepository.getCompletedPlayCount(since, until)
+        }
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = 0
+        )
+
+    val peakHour: StateFlow<Int?> = rangeBounds
+        .flatMapLatest { (since, until) ->
+            statsRepository.getPeakHour(since, until)
+        }
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = null
+        )
+
+    val topTracks: StateFlow<List<TrackStat>> = rangeBounds
+        .flatMapLatest { (since, until) ->
+            statsRepository.getTopTracks(since, limit = 50, untilTimestamp = until)
         }
         .stateIn(
             scope = viewModelScope,
@@ -82,9 +111,9 @@ class StatsViewModel @Inject constructor(
             initialValue = emptyList()
         )
 
-    val topArtists: StateFlow<List<ArtistStat>> = _timeRange
-        .flatMapLatest { range ->
-            statsRepository.getTopArtists(range.toSinceTimestamp(), limit = 50)
+    val topArtists: StateFlow<List<ArtistStat>> = rangeBounds
+        .flatMapLatest { (since, until) ->
+            statsRepository.getTopArtists(since, limit = 50, untilTimestamp = until)
         }
         .stateIn(
             scope = viewModelScope,
@@ -92,15 +121,23 @@ class StatsViewModel @Inject constructor(
             initialValue = emptyList()
         )
 
-    val topAlbums: StateFlow<List<AlbumStat>> = _timeRange
-        .flatMapLatest { range ->
-            statsRepository.getTopAlbums(range.toSinceTimestamp(), limit = 50)
+    val topAlbums: StateFlow<List<AlbumStat>> = rangeBounds
+        .flatMapLatest { (since, until) ->
+            statsRepository.getTopAlbums(since, limit = 50, untilTimestamp = until)
         }
         .stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5000),
             initialValue = emptyList()
         )
+
+    fun setCustomDateRange(startMs: Long, endMs: Long) {
+        val normalizedStart = minOf(startMs, endMs)
+        // Include full end calendar day (UTC picker timestamps point to midnight 00:00).
+        val normalizedEnd = maxOf(startMs, endMs) + 86_399_999L
+        _customDateRange.value = CustomDateRange(normalizedStart, normalizedEnd)
+        _timeRange.value = TimeRange.CUSTOM
+    }
 
     fun setTimeRange(range: TimeRange) {
         _timeRange.value = range
