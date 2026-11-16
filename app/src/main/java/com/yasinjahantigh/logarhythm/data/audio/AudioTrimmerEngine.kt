@@ -160,7 +160,11 @@ class AudioTrimmerEngine @Inject constructor(
                     info.offset = 0
                     info.size = size
                     info.presentationTimeUs = (pts - basePts).coerceAtLeast(0L)
-                    info.flags = extractor.sampleFlags
+                    info.flags = if ((extractor.sampleFlags and MediaExtractor.SAMPLE_FLAG_SYNC) != 0) {
+                        MediaCodec.BUFFER_FLAG_KEY_FRAME
+                    } else {
+                        0
+                    }
                     muxer.writeSampleData(muxTrack, buffer, info)
                 }
                 extractor.advance()
