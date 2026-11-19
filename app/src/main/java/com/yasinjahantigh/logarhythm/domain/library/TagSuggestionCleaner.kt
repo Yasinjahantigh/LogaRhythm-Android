@@ -20,6 +20,28 @@ object TagSuggestionCleaner {
     }
 
     private val audioExtensionSuffix = Regex("""(?i)\.(mp3|m4a|flac|ogg|opus|wav|aac|wma)$""")
+    private val genericTitleRegex = Regex("""^(track|audio|aud|recording|song|voice|music|unknown|ahang|new)[ _-]?\d*$""", RegexOption.IGNORE_CASE)
+    private val siteNoisePattern = Regex(
+        """(?i)(?:\.(?:ir|com|net|org|fm|cc)\b|@\w{3,}|radio\s*javan|music-?fa|nex1music|bia2music|tehranmusic|upmusics?|download1music|golsarmusic|sakhamusic|ahangify|musicsweb|musicdel|rozmusic|sultanmusic|tabanmusic|apmusic|irantune|farskids|fazmusic|javanmusic|\b(?:320|128)\s*kbps\b|\[\s*(?:320|128)\s*\]|دانلود\s+آهنگ)"""
+    )
+
+    fun isNoisyField(text: String): Boolean {
+        val trimmed = text.trim()
+        if (trimmed.isBlank()) return true
+        return MetadataNormalizer.isPlaceholderField(trimmed) ||
+            genericTitleRegex.matches(trimmed) ||
+            siteNoisePattern.containsMatchIn(trimmed)
+    }
+
+    fun parseFilenameFallback(filePath: String): Pair<String, String> {
+        val stem = filePath
+            .substringAfterLast('/')
+            .substringAfterLast('\\')
+            .substringBeforeLast('.')
+            .trim()
+        if (stem.isBlank()) return "" to ""
+        return DownloadTitleParser.parse(stem, null, "")
+    }
 
     fun clean(
         title: String,
@@ -34,9 +56,9 @@ object TagSuggestionCleaner {
             .ifBlank { displayTitle }
 
         val displayArtist = MetadataNormalizer.cleanDisplayText(artist)
-        val cleanArtist = DownloadTitleParser.artistFromUploader(DownloadTitleParser.clean(displayArtist))
-            .ifBlank { displayArtist }
-        val artistUnknown = MetadataNormalizer.isPlaceholderField(cleanArtist)
+        val strippedArtist = DownloadTitleParser.artistFromUploader(DownloadTitleParser.clean(displayArtist))
+        val cleanArtist = strippedArtist.ifBlank { if (siteNoisePattern.containsMatchIn(displayArtist)) "" else displayArtist }
+        val artistUnknown = cleanArtist.isBlank() || MetadataNormalizer.isPlaceholderField(cleanArtist)
 
         val (parsedArtist, parsedTitle) = DownloadTitleParser.parse(
             cleanTitle,
@@ -49,7 +71,12 @@ object TagSuggestionCleaner {
         val split = parsedTitle != cleanTitle && parsedArtist.isNotBlank() && (artistUnknown || sameArtist)
 
         val displayAlbum = MetadataNormalizer.cleanDisplayText(album)
-        val cleanAlbum = DownloadTitleParser.clean(displayAlbum).ifBlank { displayAlbum }
+        val strippedAlbum = DownloadTitleParser.clean(displayAlbum)
+        val cleanAlbum = when {
+            strippedAlbum.isNotBlank() -> strippedAlbum
+            siteNoisePattern.containsMatchIn(displayAlbum) -> ""
+            else -> displayAlbum
+        }
 
         val cleanGenre = if (genre.isBlank()) {
             ""
@@ -62,7 +89,7 @@ object TagSuggestionCleaner {
             ""
         } else {
             DownloadTitleParser.artistFromUploader(DownloadTitleParser.clean(displayAlbumArtist))
-                .ifBlank { displayAlbumArtist }
+                .ifBlank { if (siteNoisePattern.containsMatchIn(displayAlbumArtist)) "" else displayAlbumArtist }
         }
 
         return Tags(
@@ -91,9 +118,13 @@ object TagSuggestionCleaner {
             .trim()
         if (stem.isBlank()) return base
 
-        val needsArtistRecovery = MetadataNormalizer.isPlaceholderField(base.artist)
-        val needsTitleRecovery = MetadataNormalizer.isPlaceholderField(base.title) ||
-            base.title.matches(Regex("""^(track|audio|aud|recording|song|voice)[ _-]?\d*$""", RegexOption.IGNORE_CASE))
+        val needsArtistRecovery = base.artist.isBlank() ||
+            MetadataNormalizer.isPlaceholderField(base.artist) ||
+            siteNoisePattern.containsMatchIn(track.artist)
+        val needsTitleRecovery = base.title.isBlank() ||
+            MetadataNormalizer.isPlaceholderField(base.title) ||
+            genericTitleRegex.matches(base.title) ||
+            siteNoisePattern.containsMatchIn(track.title)
         if (!needsArtistRecovery && !needsTitleRecovery) return base
 
         val fromFile = clean(

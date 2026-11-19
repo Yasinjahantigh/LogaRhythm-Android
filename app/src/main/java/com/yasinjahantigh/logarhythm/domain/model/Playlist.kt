@@ -1,5 +1,8 @@
 package com.yasinjahantigh.logarhythm.domain.model
 
+import androidx.compose.runtime.Immutable
+
+@Immutable
 data class Playlist(
     val id: Long,
     val name: String,

@@ -100,49 +100,87 @@ fun TagEditorScreen(
     var coverError by remember { mutableStateOf(false) }
     val coverCandidates by viewModel.coverCandidates.collectAsStateWithLifecycle()
     val findingCovers by viewModel.findingCovers.collectAsStateWithLifecycle()
+    val choosingCover by viewModel.choosingCover.collectAsStateWithLifecycle()
+    val coverDownloadFailed by viewModel.coverDownloadFailed.collectAsStateWithLifecycle()
     val selectedCover by viewModel.selectedCover.collectAsStateWithLifecycle()
 
     androidx.compose.runtime.LaunchedEffect(selectedCover) {
         val bitmap = selectedCover ?: return@LaunchedEffect
-        pickedBitmap = bitmap
-        removeArtwork = false
-        showCropDialog = true
+        if (!bitmap.isRecycled) {
+            pickedBitmap = bitmap
+            removeArtwork = false
+            showCropDialog = true
+        }
         viewModel.clearSelectedCover()
     }
 
     coverCandidates?.let { candidates ->
         androidx.compose.material3.AlertDialog(
-            onDismissRequest = viewModel::dismissCovers,
+            onDismissRequest = { if (!choosingCover) viewModel.dismissCovers() },
             title = { Text(stringResource(R.string.tag_editor_find_cover)) },
             text = {
                 if (findingCovers) {
-                    androidx.compose.material3.CircularProgressIndicator()
+                    Box(
+                        modifier = Modifier.fillMaxWidth().height(120.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        androidx.compose.material3.CircularProgressIndicator()
+                    }
                 } else if (candidates.isEmpty()) {
                     Text(stringResource(R.string.tag_editor_no_covers))
                 } else {
-                    androidx.compose.foundation.lazy.grid.LazyVerticalGrid(
-                        columns = androidx.compose.foundation.lazy.grid.GridCells.Fixed(3),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        verticalArrangement = Arrangement.spacedBy(6.dp),
-                        modifier = Modifier.height(300.dp)
-                    ) {
-                        items(candidates.size) { index ->
-                            val candidate = candidates[index]
-                            AsyncImage(
-                                model = candidate.url,
-                                contentDescription = candidate.title,
-                                contentScale = ContentScale.Crop,
-                                modifier = Modifier
-                                    .size(88.dp)
-                                    .clip(RoundedCornerShape(10.dp))
-                                    .clickable { viewModel.chooseCover(candidate.url) }
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        if (coverDownloadFailed) {
+                            Text(
+                                text = stringResource(R.string.tag_editor_cover_load_failed),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.error
                             )
+                        }
+                        Box(modifier = Modifier.height(300.dp)) {
+                            androidx.compose.foundation.lazy.grid.LazyVerticalGrid(
+                                columns = androidx.compose.foundation.lazy.grid.GridCells.Fixed(3),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                verticalArrangement = Arrangement.spacedBy(6.dp),
+                                modifier = Modifier.fillMaxSize()
+                            ) {
+                                items(candidates.size) { index ->
+                                    val candidate = candidates[index]
+                                    AsyncImage(
+                                        model = candidate.url,
+                                        contentDescription = candidate.title,
+                                        contentScale = ContentScale.Crop,
+                                        modifier = Modifier
+                                            .size(88.dp)
+                                            .clip(RoundedCornerShape(10.dp))
+                                            .clickable(enabled = !choosingCover) {
+                                                viewModel.chooseCover(candidate.url)
+                                            }
+                                    )
+                                }
+                            }
+                            if (choosingCover) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .background(
+                                            MaterialTheme.colorScheme.surface.copy(alpha = 0.65f),
+                                            RoundedCornerShape(10.dp)
+                                        ),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    CircularProgressIndicator()
+                                }
+                            }
                         }
                     }
                 }
             },
             confirmButton = {
-                androidx.compose.material3.TextButton(onClick = viewModel::dismissCovers) {
+                androidx.compose.material3.TextButton(
+                    enabled = !choosingCover,
+                    onClick = viewModel::dismissCovers
+                ) {
                     Text(stringResource(R.string.btn_cancel))
                 }
             }
@@ -240,11 +278,17 @@ fun TagEditorScreen(
         }
     }
 
-    if (showCropDialog && pickedBitmap != null) {
+    val cropTarget = pickedBitmap?.takeUnless { it.isRecycled }
+    if (showCropDialog && cropTarget != null) {
         CoverCropDialog(
-            bitmap = pickedBitmap!!,
+            bitmap = cropTarget,
             onConfirm = { bytes ->
                 pickedArtwork = bytes
+                // Decode a fresh cropped preview bitmap so the thumbnail matches the crop and is never recycled.
+                CoverBitmap.decodeBytes(bytes, maxEdge = 512)?.let { preview ->
+                    pickedBitmap = preview
+                }
+                removeArtwork = false
                 showCropDialog = false
             },
             onDismiss = { showCropDialog = false }
@@ -293,6 +337,14 @@ fun TagEditorScreen(
                         enabled = canSave,
                         modifier = Modifier.testTag("tag_editor_save")
                     ) {
+                        if (isSaving) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(16.dp),
+                                strokeWidth = 2.dp,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                        }
                         Text(
                             text = stringResource(if (isSaving) R.string.saving else R.string.btn_save),
                             fontWeight = FontWeight.SemiBold
@@ -359,7 +411,7 @@ fun TagEditorScreen(
                         .background(MaterialTheme.colorScheme.surfaceContainerHighest),
                     contentAlignment = Alignment.Center
                 ) {
-                    val picked = pickedBitmap
+                    val picked = pickedBitmap?.takeUnless { it.isRecycled }
                     if (picked != null) {
                         androidx.compose.foundation.Image(
                             bitmap = picked.asImageBitmap(),
@@ -401,7 +453,7 @@ fun TagEditorScreen(
                     }
                     OutlinedButton(
                         enabled = !isSaving && !findingCovers,
-                        onClick = viewModel::findCovers,
+                        onClick = { viewModel.findCovers(title, artist) },
                         modifier = Modifier.testTag("tag_editor_find_cover")
                     ) {
                         Text(stringResource(R.string.tag_editor_find_cover))

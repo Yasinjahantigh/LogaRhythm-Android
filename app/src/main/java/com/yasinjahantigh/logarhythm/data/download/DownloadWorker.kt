@@ -6,6 +6,7 @@ import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.yasinjahantigh.logarhythm.R
 import com.yasinjahantigh.logarhythm.core.library.LibrarySync
+import com.yasinjahantigh.logarhythm.data.download.metadata.DeezerClient
 import com.yasinjahantigh.logarhythm.data.download.metadata.MetadataResolver
 import com.yasinjahantigh.logarhythm.data.download.musicman.MusicManClient
 import com.yasinjahantigh.logarhythm.data.download.musicman.MusicManDownloader
@@ -18,6 +19,7 @@ import com.yasinjahantigh.logarhythm.domain.lyrics.LyricsQuery
 import com.yasinjahantigh.logarhythm.domain.download.DownloadErrorClassifier
 import com.yasinjahantigh.logarhythm.domain.download.DownloadMetadataMerge
 import com.yasinjahantigh.logarhythm.domain.download.DownloadPipelineException
+import com.yasinjahantigh.logarhythm.domain.download.DownloadSafetyVerifier
 import com.yasinjahantigh.logarhythm.domain.download.DownloadTitleParser
 import com.yasinjahantigh.logarhythm.domain.model.DownloadErrorKind
 import com.yasinjahantigh.logarhythm.domain.model.DownloadItem
@@ -71,7 +73,9 @@ class DownloadWorker @AssistedInject constructor(
     private val notifications: DownloadNotifications,
     private val librarySync: LibrarySync,
     private val events: DownloadEvents,
-    private val lrclibLyricsSource: LrclibLyricsSource
+    private val lrclibLyricsSource: LrclibLyricsSource,
+    private val sourceRouter: DownloadSourceRouter,
+    private val deezerClient: DeezerClient
 ) : CoroutineWorker(appContext, params) {
 
     private val downloadId: String
@@ -235,71 +239,136 @@ class DownloadWorker @AssistedInject constructor(
             ) { progress, eta, line ->
                 channel.trySend(ProgressEvent(progress, eta, line))
             }
-            return DownloadOutcome(file, false, title, artist, artwork)
+            return DownloadOutcome(
+                file = file,
+                usedFallback = false,
+                title = title,
+                artist = artist,
+                artworkUrl = artwork,
+                candidateTrackId = item.videoId,
+                candidateSource = DownloadSource.RADIOJAVAN,
+                candidateTitle = title,
+                candidateArtist = artist,
+                candidateDurationMs = item.durationMs
+            )
         } else if (item.source == DownloadSource.DEEZER) {
-            // Prioritize MusicMan Bale endpoint first (fast & VPN-free), then Saavn, RadioJavan, yt-dlp.
-            val query = "$title $artist".trim()
-            val mmMatch = runCatching {
-                musicManClient.search(query, DownloadSearchCategory.TRACK, 5).firstOrNull { it.hasReadyAudio }
-            }.getOrNull()
-            if (mmMatch != null) {
-                try {
-                    val file = musicManDownloader.download(
-                        trackId = mmMatch.id,
-                        downloadId = item.id,
-                        workspace = dir,
-                        preferredQuality = item.quality
-                    ) { progress, eta, line ->
-                        channel.trySend(ProgressEvent(progress, eta, line))
-                    }
-                    return DownloadOutcome(file, false, title, artist, artwork)
-                } catch (_: Exception) {
-                }
+            // Strict ID lookup on Deezer if metadata needs confirmation
+            val canonical = if (item.videoId.isNotBlank()) {
+                runCatching { deezerClient.lookupTrack(item.videoId) }.getOrNull()
+            } else null
+
+            val targetTitle = canonical?.title?.ifBlank { title } ?: title
+            val targetArtist = canonical?.artist?.ifBlank { artist } ?: artist
+            val targetDurationMs = if (canonical != null && canonical.durationMs > 0L) {
+                canonical.durationMs
+            } else {
+                item.durationMs
             }
-            val saavnMatch = runCatching { saavnClient.search(query, 3).firstOrNull() }.getOrNull()
-            if (saavnMatch != null) {
-                try {
-                    val file = saavnDownloader.download(
-                        downloadUrl = saavnMatch.url,
-                        songId = saavnMatch.id,
-                        downloadId = item.id,
-                        workspace = dir
-                    ) { progress, eta, line ->
-                        channel.trySend(ProgressEvent(progress, eta, line))
-                    }
-                    return DownloadOutcome(file, true, title, artist, artwork)
-                } catch (_: Exception) {
-                }
+            val targetArtwork = canonical?.thumbnailUrl ?: artwork
+
+            val query = "$targetTitle $targetArtist".trim()
+            val orderedSources = sourceRouter.rankedAudioDownloadSources()
+            tryDownloadFromRankedSources(
+                sources = orderedSources,
+                query = query,
+                item = item.copy(durationMs = targetDurationMs),
+                title = targetTitle,
+                artist = targetArtist,
+                artwork = targetArtwork,
+                dir = dir,
+                channel = channel,
+                markFallback = false
+            )?.let { return it }
+
+            val scCandidates = runCatching { searchService.searchSoundCloud(query) }.getOrNull().orEmpty()
+            val scMatch = DownloadSafetyVerifier.findBestMatch(
+                expectedSource = DownloadSource.DEEZER,
+                expectedTrackId = item.videoId,
+                expectedTitle = targetTitle,
+                expectedArtist = targetArtist,
+                expectedDurationMs = targetDurationMs,
+                candidates = scCandidates,
+                candidateSource = DownloadSource.SOUNDCLOUD,
+                trackIdExtractor = { it.id },
+                titleExtractor = { it.title },
+                artistExtractor = { it.artist },
+                durationExtractor = { it.durationMs }
+            )
+            if (scMatch != null) {
+                val file = downloadOnce(item, scMatch.url, scMatch.id, dir, channel)
+                return DownloadOutcome(
+                    file = file,
+                    usedFallback = true,
+                    title = targetTitle,
+                    artist = targetArtist,
+                    artworkUrl = scMatch.thumbnailUrl ?: targetArtwork,
+                    candidateTrackId = scMatch.id,
+                    candidateSource = DownloadSource.SOUNDCLOUD,
+                    candidateTitle = scMatch.title,
+                    candidateArtist = scMatch.artist,
+                    candidateDurationMs = scMatch.durationMs
+                )
             }
-            val rjMatches = runCatching { radioJavanClient.search(query, 3) }.getOrNull().orEmpty()
-            val rjBest = rjMatches.firstOrNull()
-            if (rjBest != null) {
-                try {
-                    val file = radioJavanDownloader.download(
-                        songId = rjBest.id,
-                        sourceUrl = rjBest.url,
-                        downloadId = item.id,
-                        workspace = dir
-                    ) { progress, eta, line ->
-                        channel.trySend(ProgressEvent(progress, eta, line))
-                    }
-                    return DownloadOutcome(file, false, title, artist, artwork)
-                } catch (_: Exception) {
-                }
+
+            val ytCandidates = runCatching { searchService.search(query, setOf(DownloadSource.YOUTUBE)).results }.getOrNull().orEmpty()
+            val ytMatch = DownloadSafetyVerifier.findBestMatch(
+                expectedSource = DownloadSource.DEEZER,
+                expectedTrackId = item.videoId,
+                expectedTitle = targetTitle,
+                expectedArtist = targetArtist,
+                expectedDurationMs = targetDurationMs,
+                candidates = ytCandidates,
+                candidateSource = DownloadSource.YOUTUBE,
+                trackIdExtractor = { it.id },
+                titleExtractor = { it.title },
+                artistExtractor = { it.artist },
+                durationExtractor = { it.durationMs }
+            )
+            if (ytMatch != null) {
+                val file = downloadOnce(item, ytMatch.url, ytMatch.id, dir, channel)
+                return DownloadOutcome(
+                    file = file,
+                    usedFallback = true,
+                    title = targetTitle,
+                    artist = targetArtist,
+                    artworkUrl = ytMatch.thumbnailUrl ?: targetArtwork,
+                    candidateTrackId = ytMatch.id,
+                    candidateSource = DownloadSource.YOUTUBE,
+                    candidateTitle = ytMatch.title,
+                    candidateArtist = ytMatch.artist,
+                    candidateDurationMs = ytMatch.durationMs
+                )
             }
-            val ytFallback = runCatching {
-                searchService.searchSoundCloud(query).firstOrNull()
-            }.getOrNull()
-            if (ytFallback != null) {
-                val file = downloadOnce(item, ytFallback.url, ytFallback.id, dir, channel)
-                return DownloadOutcome(file, true, title, artist, artwork)
-            }
-            val ytSearchUrl = "ytsearch1:$query"
-            val file = downloadOnce(item, ytSearchUrl, item.id, dir, channel)
-            return DownloadOutcome(file, true, title, artist, artwork)
+
+            throw DownloadPipelineException(
+                DownloadErrorKind.CONTENT,
+                "Could not find a verified audio source for '${item.title}' by '${item.artist}'."
+            )
         } else if (item.source == DownloadSource.MUSICMAN) {
             val trackId = item.videoId.ifBlank { item.sourceUrl.substringAfterLast('/') }
+            val query = "$title $artist".trim()
+            val vpnActive = sourceRouter.isVpnActive()
+            val rankedSources = sourceRouter.rankedAudioDownloadSources()
+
+            // When VPN is ON and a faster non-MusicMan direct source is available, try the fastest source first
+            // if it matches the track cleanly, then fall back immediately to MusicMan.
+            if (vpnActive && rankedSources.firstOrNull() != DownloadSource.MUSICMAN) {
+                val fasterSources = rankedSources.takeWhile { it != DownloadSource.MUSICMAN }
+                tryDownloadFromRankedSources(
+                    sources = fasterSources,
+                    query = query,
+                    item = item,
+                    title = title,
+                    artist = artist,
+                    artwork = artwork,
+                    dir = dir,
+                    channel = channel,
+                    markFallback = false
+                )?.let { return it }
+            }
+
             try {
+                val started = System.nanoTime()
                 val file = musicManDownloader.download(
                     trackId = trackId,
                     downloadId = item.id,
@@ -308,41 +377,62 @@ class DownloadWorker @AssistedInject constructor(
                 ) { progress, eta, line ->
                     channel.trySend(ProgressEvent(progress, eta, line))
                 }
-                return DownloadOutcome(file, false, title, artist, artwork)
+                sourceRouter.recordLatency(DownloadSource.MUSICMAN, (System.nanoTime() - started) / 1_000_000L, true)
+                return DownloadOutcome(
+                    file = file,
+                    usedFallback = false,
+                    title = title,
+                    artist = artist,
+                    artworkUrl = artwork,
+                    candidateTrackId = trackId,
+                    candidateSource = DownloadSource.MUSICMAN,
+                    candidateTitle = title,
+                    candidateArtist = artist,
+                    candidateDurationMs = item.durationMs
+                )
             } catch (e: Exception) {
-                val query = "$title $artist".trim()
-                val saavnMatch = runCatching { saavnClient.search(query, 2).firstOrNull() }.getOrNull()
-                if (saavnMatch != null) {
-                    runCatching {
-                        val file = saavnDownloader.download(
-                            downloadUrl = saavnMatch.url,
-                            songId = saavnMatch.id,
-                            downloadId = item.id,
-                            workspace = dir
-                        ) { progress, eta, line ->
-                            channel.trySend(ProgressEvent(progress, eta, line))
-                        }
-                        return DownloadOutcome(file, true, title, artist, artwork)
-                    }
-                }
-                val rjMatch = runCatching { radioJavanClient.search(query, 1).firstOrNull() }.getOrNull()
-                if (rjMatch != null) {
-                    runCatching {
-                        val file = radioJavanDownloader.download(
-                            songId = rjMatch.id,
-                            sourceUrl = rjMatch.url,
-                            downloadId = item.id,
-                            workspace = dir
-                        ) { progress, eta, line ->
-                            channel.trySend(ProgressEvent(progress, eta, line))
-                        }
-                        return DownloadOutcome(file, true, title, artist, artwork)
-                    }
-                }
-                val ytFallback = runCatching { searchService.searchSoundCloud(query).firstOrNull() }.getOrNull()
-                if (ytFallback != null) {
-                    val file = downloadOnce(item, ytFallback.url, ytFallback.id, dir, channel)
-                    return DownloadOutcome(file, true, title, artist, artwork)
+                sourceRouter.recordLatency(DownloadSource.MUSICMAN, 5_000L, false)
+                val remaining = rankedSources.filterNot { it == DownloadSource.MUSICMAN }
+                tryDownloadFromRankedSources(
+                    sources = remaining,
+                    query = query,
+                    item = item,
+                    title = title,
+                    artist = artist,
+                    artwork = artwork,
+                    dir = dir,
+                    channel = channel,
+                    markFallback = true
+                )?.let { return it }
+
+                val scCandidates = runCatching { searchService.searchSoundCloud(query) }.getOrNull().orEmpty()
+                val scMatch = DownloadSafetyVerifier.findBestMatch(
+                    expectedSource = DownloadSource.MUSICMAN,
+                    expectedTrackId = trackId,
+                    expectedTitle = title,
+                    expectedArtist = artist,
+                    expectedDurationMs = item.durationMs,
+                    candidates = scCandidates,
+                    candidateSource = DownloadSource.SOUNDCLOUD,
+                    trackIdExtractor = { it.id },
+                    titleExtractor = { it.title },
+                    artistExtractor = { it.artist },
+                    durationExtractor = { it.durationMs }
+                )
+                if (scMatch != null) {
+                    val file = downloadOnce(item, scMatch.url, scMatch.id, dir, channel)
+                    return DownloadOutcome(
+                        file = file,
+                        usedFallback = true,
+                        title = title,
+                        artist = artist,
+                        artworkUrl = artwork,
+                        candidateTrackId = scMatch.id,
+                        candidateSource = DownloadSource.SOUNDCLOUD,
+                        candidateTitle = scMatch.title,
+                        candidateArtist = scMatch.artist,
+                        candidateDurationMs = scMatch.durationMs
+                    )
                 }
                 throw e
             }
@@ -356,7 +446,18 @@ class DownloadWorker @AssistedInject constructor(
             ) { progress, eta, line ->
                 channel.trySend(ProgressEvent(progress, eta, line))
             }
-            return DownloadOutcome(file, false, title, artist, artwork)
+            return DownloadOutcome(
+                file = file,
+                usedFallback = false,
+                title = title,
+                artist = artist,
+                artworkUrl = artwork,
+                candidateTrackId = songId,
+                candidateSource = DownloadSource.SAAVN,
+                candidateTitle = title,
+                candidateArtist = artist,
+                candidateDurationMs = item.durationMs
+            )
         }
 
         val firstError = try {
@@ -428,6 +529,168 @@ class DownloadWorker @AssistedInject constructor(
         throw firstError
     }
 
+    private suspend fun tryDownloadFromRankedSources(
+        sources: List<DownloadSource>,
+        query: String,
+        item: DownloadItem,
+        title: String,
+        artist: String,
+        artwork: String?,
+        dir: File,
+        channel: Channel<ProgressEvent>,
+        markFallback: Boolean
+    ): DownloadOutcome? {
+        for (source in sources) {
+            val started = System.nanoTime()
+            when (source) {
+                DownloadSource.MUSICMAN -> {
+                    val mmCandidates = runCatching {
+                        musicManClient.search(query, DownloadSearchCategory.TRACK, 10)
+                    }.getOrNull().orEmpty()
+
+                    val mmMatch = DownloadSafetyVerifier.findBestMatch(
+                        expectedSource = item.source,
+                        expectedTrackId = item.videoId,
+                        expectedTitle = title,
+                        expectedArtist = artist,
+                        expectedDurationMs = item.durationMs,
+                        candidates = mmCandidates,
+                        candidateSource = DownloadSource.MUSICMAN,
+                        trackIdExtractor = { it.id },
+                        titleExtractor = { it.title },
+                        artistExtractor = { it.artist },
+                        durationExtractor = { it.durationMs },
+                        hasReadyAudioExtractor = { it.hasReadyAudio }
+                    ) ?: continue
+
+                    try {
+                        val file = musicManDownloader.download(
+                            trackId = mmMatch.id,
+                            downloadId = item.id,
+                            workspace = dir,
+                            preferredQuality = item.quality
+                        ) { progress, eta, line ->
+                            channel.trySend(ProgressEvent(progress, eta, line))
+                        }
+                        sourceRouter.recordLatency(DownloadSource.MUSICMAN, (System.nanoTime() - started) / 1_000_000L, true)
+                        return DownloadOutcome(
+                            file = file,
+                            usedFallback = markFallback,
+                            title = title,
+                            artist = artist,
+                            artworkUrl = artwork,
+                            candidateTrackId = mmMatch.id,
+                            candidateSource = DownloadSource.MUSICMAN,
+                            candidateTitle = mmMatch.title,
+                            candidateArtist = mmMatch.artist,
+                            candidateDurationMs = mmMatch.durationMs
+                        )
+                    } catch (cancelled: CancellationException) {
+                        throw cancelled
+                    } catch (_: Exception) {
+                        sourceRouter.recordLatency(DownloadSource.MUSICMAN, 5_000L, false)
+                    }
+                }
+                DownloadSource.SAAVN -> {
+                    val saavnCandidates = runCatching {
+                        saavnClient.search(query, 5)
+                    }.getOrNull().orEmpty()
+
+                    val saavnMatch = DownloadSafetyVerifier.findBestMatch(
+                        expectedSource = item.source,
+                        expectedTrackId = item.videoId,
+                        expectedTitle = title,
+                        expectedArtist = artist,
+                        expectedDurationMs = item.durationMs,
+                        candidates = saavnCandidates,
+                        candidateSource = DownloadSource.SAAVN,
+                        trackIdExtractor = { it.id },
+                        titleExtractor = { it.title },
+                        artistExtractor = { it.artist },
+                        durationExtractor = { it.durationMs }
+                    ) ?: continue
+
+                    try {
+                        val file = saavnDownloader.download(
+                            downloadUrl = saavnMatch.url,
+                            songId = saavnMatch.id,
+                            downloadId = item.id,
+                            workspace = dir
+                        ) { progress, eta, line ->
+                            channel.trySend(ProgressEvent(progress, eta, line))
+                        }
+                        sourceRouter.recordLatency(DownloadSource.SAAVN, (System.nanoTime() - started) / 1_000_000L, true)
+                        return DownloadOutcome(
+                            file = file,
+                            usedFallback = markFallback,
+                            title = title,
+                            artist = artist,
+                            artworkUrl = artwork,
+                            candidateTrackId = saavnMatch.id,
+                            candidateSource = DownloadSource.SAAVN,
+                            candidateTitle = saavnMatch.title,
+                            candidateArtist = saavnMatch.artist,
+                            candidateDurationMs = saavnMatch.durationMs
+                        )
+                    } catch (cancelled: CancellationException) {
+                        throw cancelled
+                    } catch (_: Exception) {
+                        sourceRouter.recordLatency(DownloadSource.SAAVN, 5_000L, false)
+                    }
+                }
+                DownloadSource.RADIOJAVAN -> {
+                    val rjCandidates = runCatching {
+                        radioJavanClient.search(query, 5)
+                    }.getOrNull().orEmpty()
+
+                    val rjMatch = DownloadSafetyVerifier.findBestMatch(
+                        expectedSource = item.source,
+                        expectedTrackId = item.videoId,
+                        expectedTitle = title,
+                        expectedArtist = artist,
+                        expectedDurationMs = item.durationMs,
+                        candidates = rjCandidates,
+                        candidateSource = DownloadSource.RADIOJAVAN,
+                        trackIdExtractor = { it.id },
+                        titleExtractor = { it.title },
+                        artistExtractor = { it.artist },
+                        durationExtractor = { it.durationMs }
+                    ) ?: continue
+
+                    try {
+                        val file = radioJavanDownloader.download(
+                            songId = rjMatch.id,
+                            sourceUrl = rjMatch.url,
+                            downloadId = item.id,
+                            workspace = dir
+                        ) { progress, eta, line ->
+                            channel.trySend(ProgressEvent(progress, eta, line))
+                        }
+                        sourceRouter.recordLatency(DownloadSource.RADIOJAVAN, (System.nanoTime() - started) / 1_000_000L, true)
+                        return DownloadOutcome(
+                            file = file,
+                            usedFallback = markFallback,
+                            title = title,
+                            artist = artist,
+                            artworkUrl = artwork,
+                            candidateTrackId = rjMatch.id,
+                            candidateSource = DownloadSource.RADIOJAVAN,
+                            candidateTitle = rjMatch.title,
+                            candidateArtist = rjMatch.artist,
+                            candidateDurationMs = rjMatch.durationMs
+                        )
+                    } catch (cancelled: CancellationException) {
+                        throw cancelled
+                    } catch (_: Exception) {
+                        sourceRouter.recordLatency(DownloadSource.RADIOJAVAN, 5_000L, false)
+                    }
+                }
+                else -> Unit
+            }
+        }
+        return null
+    }
+
     private suspend fun downloadOnce(
         item: DownloadItem,
         url: String,
@@ -468,15 +731,19 @@ class DownloadWorker @AssistedInject constructor(
         } catch (_: Exception) {
             return null
         }
-        return results
-            .map { it to DownloadMetadataMerge.similarity(it.title, title) }
-            .filter { (candidate, score) ->
-                score >= MIN_FALLBACK_SIMILARITY &&
-                    (durationMs <= 0L || candidate.durationMs <= 0L ||
-                        abs(candidate.durationMs - durationMs) <= FALLBACK_DURATION_TOLERANCE_MS)
-            }
-            .maxByOrNull { it.second }
-            ?.first
+        return DownloadSafetyVerifier.findBestMatch(
+            expectedSource = DownloadSource.SOUNDCLOUD,
+            expectedTrackId = null,
+            expectedTitle = title,
+            expectedArtist = artist,
+            expectedDurationMs = durationMs,
+            candidates = results,
+            candidateSource = DownloadSource.SOUNDCLOUD,
+            trackIdExtractor = { it.id },
+            titleExtractor = { it.title },
+            artistExtractor = { it.artist },
+            durationExtractor = { it.durationMs }
+        )
     }
 
     private suspend fun completeDownload(
@@ -490,6 +757,17 @@ class DownloadWorker @AssistedInject constructor(
         composer: String?
     ): Result {
         val id = item.id
+
+        // Critical safety verification: never silently save a mismatched song!
+        DownloadSafetyVerifier.verifyBeforeSaving(
+            item = item,
+            candidateSource = outcome.candidateSource,
+            candidateTrackId = outcome.candidateTrackId,
+            candidateTitle = outcome.candidateTitle,
+            candidateArtist = outcome.candidateArtist,
+            candidateDurationMs = outcome.candidateDurationMs
+        )
+
         updateForeground(outcome.title, 100, 0, DownloadStatus.SAVING)
         dao.updateProgress(id, DownloadStatus.SAVING.raw, 100, 0, null, now())
         dao.updateMetadata(id, outcome.title, outcome.artist, album, outcome.artworkUrl, now())
@@ -679,7 +957,12 @@ private data class DownloadOutcome(
     val usedFallback: Boolean,
     val title: String,
     val artist: String,
-    val artworkUrl: String?
+    val artworkUrl: String?,
+    val candidateTrackId: String? = null,
+    val candidateSource: DownloadSource? = null,
+    val candidateTitle: String? = null,
+    val candidateArtist: String? = null,
+    val candidateDurationMs: Long = 0L
 )
 
 private fun now(): Long = System.currentTimeMillis()

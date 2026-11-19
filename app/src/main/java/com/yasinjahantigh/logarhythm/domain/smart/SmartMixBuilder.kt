@@ -1,5 +1,6 @@
 package com.yasinjahantigh.logarhythm.domain.smart
 
+import com.yasinjahantigh.logarhythm.domain.model.PlayEvent
 import com.yasinjahantigh.logarhythm.domain.model.Track
 import com.yasinjahantigh.logarhythm.domain.model.TrackPlayStat
 import java.util.concurrent.TimeUnit
@@ -24,8 +25,25 @@ object SmartMixBuilder {
         favoriteIds: Set<String>,
         downloadedUris: Set<String>,
         lyricsTrackIds: Set<String>,
-        now: Long = System.currentTimeMillis()
+        now: Long = System.currentTimeMillis(),
+        playEvents: List<PlayEvent> = emptyList(),
+        tasteModel: UserTasteModel? = null
     ): List<Track> = when (type) {
+        SmartMixType.FOR_YOU -> {
+            val model = tasteModel ?: UserTasteModel.build(tracks, playEvents, favoriteIds, nowMs = now)
+            UserTasteEngine.buildForYou(tracks, model, limit = 35)
+        }
+
+        SmartMixType.TIME_OF_DAY_VIBE -> {
+            val model = tasteModel ?: UserTasteModel.build(tracks, playEvents, favoriteIds, nowMs = now)
+            UserTasteEngine.buildTimeOfDayVibe(tracks, model, limit = 35)
+        }
+
+        SmartMixType.HIDDEN_GEMS -> {
+            val model = tasteModel ?: UserTasteModel.build(tracks, playEvents, favoriteIds, nowMs = now)
+            UserTasteEngine.buildHiddenGems(tracks, model, limit = 35)
+        }
+
         SmartMixType.RECENTLY_ADDED -> tracks
             .sortedWith(
                 compareByDescending<Track> { if (it.dateAdded > 0L) it.dateAdded else it.dateModified }

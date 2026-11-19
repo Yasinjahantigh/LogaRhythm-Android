@@ -1,11 +1,13 @@
 package com.yasinjahantigh.logarhythm.feature.library
 
+import androidx.compose.runtime.Immutable
 import com.yasinjahantigh.logarhythm.domain.model.Album
 import com.yasinjahantigh.logarhythm.domain.model.Artist
 import com.yasinjahantigh.logarhythm.domain.model.Folder
 import com.yasinjahantigh.logarhythm.domain.model.Genre
 import com.yasinjahantigh.logarhythm.domain.model.Track
 
+@Immutable
 data class LibraryUiState(
     val selectedTab: LibraryTab = LibraryTab.SONGS,
     /** Every song, sorted. Tab counts and playback start from this list. */

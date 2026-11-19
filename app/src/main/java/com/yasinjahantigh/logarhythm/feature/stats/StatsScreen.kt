@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.DateRangePicker
@@ -52,6 +53,7 @@ fun StatsScreen(
     val timeRange by viewModel.timeRange.collectAsStateWithLifecycle()
     val customDateRange by viewModel.customDateRange.collectAsStateWithLifecycle()
     val selectedTab by viewModel.selectedTab.collectAsStateWithLifecycle()
+    val sortBy by viewModel.sortBy.collectAsStateWithLifecycle()
     val totalTimeMs by viewModel.totalListenTimeMs.collectAsStateWithLifecycle()
     val completedPlayCount by viewModel.completedPlayCount.collectAsStateWithLifecycle()
     val peakHour by viewModel.peakHour.collectAsStateWithLifecycle()
@@ -129,6 +131,13 @@ fun StatsScreen(
                 onOpenReport = { showReportSheet = true }
             )
 
+            com.yasinjahantigh.logarhythm.ui.components.FeatureMicroTip(
+                hintId = com.yasinjahantigh.logarhythm.ui.components.FeatureHintIds.STATS_SORT_SHARE,
+                text = stringResource(R.string.tip_stats_sort_share),
+                icon = Icons.Filled.BarChart,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
+            )
+
             val tabs = listOf(
                 StatsTab.HISTORY to stringResource(R.string.stats_history),
                 StatsTab.TRACKS to stringResource(R.string.stats_top_tracks),
@@ -157,6 +166,13 @@ fun StatsScreen(
                         modifier = Modifier.testTag("tab_${tab.name}")
                     )
                 }
+            }
+
+            if (selectedTab != StatsTab.HISTORY) {
+                StatsSortSelector(
+                    selectedSort = sortBy,
+                    onSortSelected = viewModel::setSortBy
+                )
             }
 
             when (selectedTab) {
@@ -190,6 +206,7 @@ fun StatsScreen(
                 StatsTab.TRACKS -> {
                     StatsTracksTab(
                         tracks = topTracks,
+                        sortBy = sortBy,
                         onTrackClick = { index ->
                             val tracksToPlay = topTracks.map { it.track }
                             viewModel.playTrackFromTop(tracksToPlay, index)
@@ -201,6 +218,7 @@ fun StatsScreen(
                 StatsTab.ARTISTS -> {
                     StatsArtistsTab(
                         artists = topArtists,
+                        sortBy = sortBy,
                         onArtistClick = onNavigateToArtist,
                         modifier = Modifier.weight(1f)
                     )
@@ -208,6 +226,7 @@ fun StatsScreen(
                 StatsTab.ALBUMS -> {
                     StatsAlbumsTab(
                         albums = topAlbums,
+                        sortBy = sortBy,
                         onAlbumClick = onNavigateToAlbum,
                         modifier = Modifier.weight(1f)
                     )
@@ -296,6 +315,7 @@ fun StatsScreen(
             peakHour = peakHour,
             topArtists = topArtists,
             topTracks = topTracks,
+            sortBy = sortBy,
             onDismiss = { showReportSheet = false }
         )
     }

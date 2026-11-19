@@ -1,160 +1,86 @@
-# LogaRhythm features
+# LogaRhythm — All Features
 
-Technical details for each feature. Back to the [README](../README.md) · [فارسی](FEATURES.fa.md)
+A simple rundown of what the app can do. Back to [README](../README.md) · [فارسی](FEATURES.fa.md)
 
-## Playback
+## Playback & Vinyl Mode
 
-- Cross-fade between songs (speed-aware) and skip silence
-- Playback resumes if headphones reconnect within 10 minutes
-- Per-song playback speed
-- Sleep timer by minutes or by track count
-- Swipe the cover horizontally to preview the next or previous track (its cover and title appear). The song changes only if you pass 35% of the way and release. The next cover always waits on the right, so swiping left advances and swiping right goes back, the same in LTR and RTL layouts; it does nothing at the end of the queue. The mini player follows the same rule
-- Shuffle can be switched on or off without interrupting the current song. Only the songs after the current one are reshuffled; everything that already played keeps its place, so the "Played" section stays real history instead of filling up with unheard songs. Queue edits (play next, add, remove, insert, move) also update the original order, so a song added while shuffled is not lost when shuffle is turned off. The shuffle state and original order are restored after reopening the app
-- The speed dialog shows one shared value for the label, slider and chips
-- Resume position for anything longer than 20 minutes: saved every 10 seconds, restored on reopen
+- **Endless Playback**: when you reach the end of a playlist or queue, the app keeps the music going by picking similar songs from your library based on artist, genre, album, and what you usually listen to.
+- **Vinyl Turntable Mode**: switch between regular cover art and a spinning vinyl player.
+  - Swipe left or right on the cover or vinyl to skip to the next or previous song (the album sleeve slides in and the vinyl slides out calmly onto the platter).
+  - Press and hold briefly on the record — or drag along its outer edge — to spin it by hand and scrub forward or backward.
+- **Everyday controls**: double-tap the left/right side of the artwork to jump ±10 seconds, crossfade between songs, skip silent gaps, per-song speed, A–B loop, sleep timer (by minutes or song count), and a clean **Car Mode** for driving.
+- **Smart resume**: picks up where you left off on long audio files (>20 minutes), resumes playback if headphones reconnect within 10 minutes, and switches EQ profiles automatically per Bluetooth or wired device (**Auto-EQ**).
+- **Queue**: split into Played, Now Playing, and Up Next. Drag to reorder, swipe to remove (with undo), or save a queue as a playlist. Shuffle only reshuffles what's coming up next and keeps your history intact.
 
-## Queue
+## Sound & Equalizer
 
-- The queue screen shows three sections — Played (dimmed), Now Playing and Up next — and opens scrolled to the current song
-- Upcoming songs are reordered by dragging the grip; the insertion line shows exactly where the song will land, and drops can never land inside the played section
-- The played section is history: those rows have no grip and cannot be swiped away
-- Swipe a row sideways to remove it from the queue, with an undo snackbar
-- The header offers shuffle (reshuffles only the upcoming part), save the queue as a playlist, and clear
+- ReplayGain support for MP3, FLAC, M4A, and Ogg (track or album mode).
+- Preamp, 5-band equalizer, left/right balance, mono downmix, pitch shift, bass boost, virtualizer, and a one-tap **Slowed + Reverb** preset.
+- Separate Auto-EQ profiles remembered per headphone or speaker.
 
-## Audio
+## Lyrics & Share Cards
 
-- ReplayGain for MP3, FLAC, M4A and Ogg, in track or album mode
-- User preamp, 5-band equalizer, bass boost
+- Reads embedded lyrics and local `.lrc` files, or fetches synced lyrics online from LRCLIB, NetEase, Kugou, lyrics.ovh, and Genius.
+- Search manually with a custom Persian or English title/artist, preview candidates before picking, adjust timing offset, or edit `.lrc` timestamps line by line.
+- **Share Card Studio** (for songs, lyric lines, and listening reports): live preview where you can pick a theme, accent color, card size (`1:1`, `4:5`, `9:16`), and text size before saving or sharing.
+- Selected lyric lines stay locked while the song keeps playing, and Persian/English lines render cleanly without overlapping.
 
-## Lyrics
+## Tag Editor, Batch Fixer & Ringtone Maker
 
-Sources: embedded in the file, a `.lrc` beside it, or fetched from LRCLIB, NetEase, Kugou, lyrics.ovh and Genius.
+- Full tag editor (title, artist, album, album artist, genre, year, track/disc number, composer, cover art crop/replace) for MP3, FLAC, Ogg, and M4A.
+- Writes safely to a temporary copy and verifies the file (including artwork checksum) before replacing the original.
+- **Batch Tag & Cover Fixer**: cleans up messy filenames from download sites (URLs, bitrates, extra brackets) and searches Deezer, iTunes, MusicBrainz, RadioJavan, and MusicMan step by step to fix tags and high-res covers. You can edit any field or re-search a single track before saving.
+- **Audio Trimmer & Ringtone Maker**: trim any part of a song and save it or set it directly as your ringtone.
 
-- Sources run in parallel inside a fixed time budget
-- Blocked providers cool down instead of slowing every song
-- Results are scored against title, artist, album and duration before they are accepted
-- If the best match is not convincing, a candidate picker lets you search with your own title and artist (Latin or Persian), preview the first line, and lock the result as manual
-- Genius is queried directly, without a VPN. If its page is blocked by Cloudflare or returns nothing, the lyrics come from lyrics.ovh and are labeled "Genius (fallback)"
-- Per-source switches, a test screen, and a custom HTTPS endpoint for your own lyrics server
-- Synced scrolling, per-song timing offset, manual editing, import and export
+## Library, Artist Online Tab & Release Radar
 
-## Tag and cover editor
+- Multi-select actions, swipe right on a track to play next, per-tab sort and filter memory, folder whitelist/blacklist, and Private Session (pauses listening history).
+- **Unified Artist Profiles & Smart Deduplication**: Artist searches automatically normalize names and aliases across Deezer, Radio Javan, MusicMan, and Saavn, merging duplicate cards into a single profile with source badges.
+- **Aggregated Discography**: Tapping an artist loads their full collection across all sources in parallel—handling track duplicates cleanly and streaming results progressively.
+- **Release Radar**: follow your favorite artists and see their newest releases right on the Home screen, with artist filters and one-tap download (checks iTunes, Deezer, and MusicMan).
+- Helpful VPN hints wherever international sources might be blocked on your network.
 
-- The format is detected from the first 12 bytes of the file, not from the extension: ID3/MP3, FLAC, Ogg or MP4
-- Editable fields: title, artist, album, album artist, genre, year, track and disc number, composer
-- Cover art: choose a new image (square crop and zoom), replace it, or remove it
-- Writes go to a staged copy, are read back and verified (including a SHA-256 check of the cover), mirrored into MediaStore, and only then replace the original
-- Notification, lock screen and widget refresh immediately
-- M4A support covers 64-bit and size-0 boxes, QuickTime metadata, `moov` at the end of the file and trailing bytes. Fragmented files are normalized on the staged copy; the original file is untouched if anything fails
-- Auto-fill: title, artist, album, year and track number from online metadata
-- Find cover online: a grid of iTunes and Deezer candidates, then the usual crop dialog and save path
+## Listening Stats & Mixes
 
-## Library
+Everything offline stays on your phone:
 
-- Multi-select: long-press a song, select more, then play next, queue, add to a playlist, favorite, hide, or remove from a playlist
-- Swipe to play next: drag a song row to the right past the threshold (a single haptic tick confirms it) and release. If nothing is queued, the song starts immediately; if something is playing, it is inserted after the current track without interrupting playback. Below the threshold the row springs back. It is disabled during multi-select, has a TalkBack custom action, and works in the Songs tab, playlists, albums, artists, folders, genres, search results, smart mixes and the tools screens (duplicates, missing tags, hidden songs)
-- Sorting: title, artist, album, year, date added or modified, duration, play count, last played, random. The choice is remembered per tab
-- Filters: favorites, downloaded, recently added
-- Tools: duplicate finder, missing tags view, hidden songs, excluded folders, minimum track length
-- Fix names (Library Tools): titles are cleaned with the same rules used for downloads and matched against online metadata only when the match is confident. You see before and after, and nothing is written until you approve; each track is applied separately
-- Albums are identified by name plus album artist, so same-named albums by different artists are no longer merged (grouping, search and navigation)
-- Artists: collaborations are split on commas, `&`, `feat.` and the Persian comma `،`, while names like *Tyler, The Creator* or *Earth, Wind & Fire* stay whole. You can add your own never-split names. Each artist has a page with top songs, albums and "Appears on"
-- Ringtones and voice recordings are excluded by default (Settings → Library)
+- **Listening Stats**: see your top songs, top artists, and top albums for any custom date range. You can sort rankings by **Play count** or by **Listening time (minutes)**, and export your report as a shareable card.
+- **Smart Mixes**: daily mixes, artist radio, Recently Added, Recently Played, Most Played, Forgotten Favorites, Songs Without Lyrics, Long Tracks, and Downloaded.
 
-## Discovery
+## Music Downloads
 
-Everything is computed on the device.
+- Search and download from MusicMan, RadioJavan, YouTube, SoundCloud, and Deezer metadata.
+- Saves files into `Music/LogaRhythm` (or any folder you pick) and fills in tags and cover art automatically.
+- Supports album and playlist batch downloads (pick which tracks to grab), skips duplicates, and supports `cookies.txt` for age-restricted YouTube videos.
 
-- Daily mixes
-- Mood queues: late-night calm, deep focus, energy, rainy day, acoustic morning
-- Artist radio
-- Listening stats by week, month or all time
-- Smart mixes: Recently added, Recently played, Most played, Forgotten favorites, Songs without lyrics, Long songs, Downloaded. They update from the library and can be saved as a normal playlist. The playing queue can be saved as a playlist as well
+## Optional AI Playlists
 
-## Music download
+Off by default — nothing is sent anywhere unless you turn it on and hit Generate.
 
-Sources: YouTube, SoundCloud and MusicMan. The download screen has source chips (All, MusicMan, YouTube, SoundCloud) and the choice is remembered after restarting the app. With "All", MusicMan results come first.
+- Works with **Google Gemini** or any **OpenAI-compatible** API (`Settings → AI`).
+- Only sends compact track info (title, artist, genre, year — never file paths). Your API key is stored encrypted on-device with Android Keystore.
 
-- Original-quality audio (M4A or MP3 when the source provides it) is saved into `Music/LogaRhythm`
-- Artwork and tags are applied to the final file with the same pipeline for every source (Deezer, MusicBrainz and iTunes)
-- An optional `cookies.txt` can unlock age-restricted YouTube videos
-- Downloads use range requests and a temporary `.part` file, show progress and estimated remaining time, and can be cancelled
-- Each file is checked to be real audio, and its extension (MP3, FLAC, Ogg or M4A) is detected from the file header
-- If a source only offers WebM, the file is saved with a clear "saved without tags" note
-- The player shows the file's container, codec, bitrate and sample rate
+## Backup & Updates
 
-### MusicMan
+- Export or restore playlists, favorites, listening history, and lyrics in a single backup file (`Settings → Backup & Restore`), plus M3U playlist import/export.
+- Built-in updater checks GitHub Releases and downloads the right APK for your phone's CPU.
+- Optional anonymous first-launch install counter (runs once per install; public count at [logarhythm-installs.yasinjahantigh.workers.dev/stats](https://logarhythm-installs.yasinjahantigh.workers.dev/stats)).
 
-- Only songs for which the server already has a file ready are listed. Songs that are still pending are hidden, so you are never left waiting
-- Cover art is upgraded to 600×600 when possible
-- Preparing a file: lookup, status check, queueing on the server if needed, then polling every 2.5 seconds for up to 60 seconds. Failed, cancelled, or completed-without-file states show a specific error
-- Telegram audio links that carry a masked token are opened through a proxy; direct links are used as they are. If a direct download fails with a network error, it is retried once through the proxy
-- No yt-dlp preparation is needed for this source
+## Home Screen Widgets
 
-### Download an album
+Five widgets that stay in sync with playback:
 
-Use the album button on a search result. The album is resolved through iTunes and shown as a track list with everything selected; deselect what you do not want and confirm. Only the selected songs are found and queued through the normal search path, duplicates are detected, and you get one summary notification plus a message with the number of successes and failures.
-
-## Optional AI playlist
-
-Disabled by default. No provider is contacted until you press Generate.
-
-**Setup**
-
-1. Open **Settings → AI (optional)**.
-2. Choose **OpenAI-compatible** or **Google Gemini**, then keep or change the Base URL and model.
-3. Paste your API key, tap **Test connection**, and save.
-
-**Create a playlist**
-
-Tap the **Magic playlist** banner on the Home screen (or open **Library → Playlists → Magic playlist**), describe the mood, choose the song count, generate, then preview, rename and save. If no API key is set, the banner opens the AI settings.
-
-**Regenerate a daily mix**
-
-Open a daily mix and tap **Regenerate with AI**. The songs already in the mix stay; the model only picks new ones from your library. The default is 10 new songs, adjustable from 5 to 50. The mix keeps its name (Daily Mix 1, 2, 3). Afterwards you can play the regenerated mix or save it as a playlist.
-
-**What is sent**
-
-The catalog is trimmed to keep requests small, even for libraries of thousands of songs:
-
-- Playlists: at most 150 songs. Songs matching words in your request come first (up to 80), the rest is filled with a varied sample with at most 3 songs per artist
-- Mix regeneration: up to 20 songs from the current mix and 80 candidates, ranked by shared artist, shared genre and closeness in year. The model is told not to return songs that are already in the mix, and the app merges and de-duplicates the result itself
-- Each line is compact (`id | title | artist | genre | year`), with title, artist and genre cut to 80, 60 and 40 characters. Album names and file paths are never sent
-
-The key is encrypted with an Android Keystore key on the device and can be removed at any time. No API key ships with the app.
-
-## Backup and upgrading
-
-- Backup and restore of playlists, favorites, history and lyrics in one file (**Settings → Backup**)
-- The library database migrates to v10 on first launch of 1.6.0 and existing data is preserved. Making a backup before a major update is still recommended
-
-## Updates
-
-- **Settings → About** shows the installed version, checks GitHub for a newer release, and reports the download count of the latest one
-- The app also checks once a day on startup when the network is available
-- The APK is matched to the device CPU (arm64-v8a, armeabi-v7a, x86), downloaded with progress, and handed to the Android installer; the system still enforces the signing key, so an update can only come from the same developer
-- The automatic check runs at startup and is on by default; **Settings → About** can switch it off. Android always asks for confirmation before an APK is installed
-- A first-launch install record tells the developer how many installs come from GitHub, Telegram or anywhere else: a random install id, the app version, device model, Android version and CPU ABI. It is stored once per install, so updating the app never counts again; it never includes files, library data, an account or an advertising id. The totals are public at [logarhythm-installs.yasinjahantigh.workers.dev/stats](https://logarhythm-installs.yasinjahantigh.workers.dev/stats)
-
-## Widgets
-
-Five home screen widgets:
-
-| Widget | Size | Content |
+| Widget | Size | What it shows |
 | :--- | :--- | :--- |
-| Small | 2×2 | Cover, play/pause |
-| Strip | 4×1 | Compact info and controls |
-| Medium | 4×2 | Cover, progress bar, shuffle, previous, play, next and repeat |
-| Large | 4×4 | Full controls and an "Up next" queue |
-| Player | 4×4 | Full-bleed cover, title, artist and album, five controls in the app theme, no progress bar or time |
+| Small | 2×2 | Cover art and play/pause |
+| Strip | 4×1 | Compact title and controls |
+| Medium | 4×2 | Cover, progress bar, shuffle, prev, play, next, repeat |
+| Large | 4×4 | Full controls plus Up Next queue |
+| Player | 4×4 | Full cover art with title, artist, album, and themed buttons |
 
-- Buttons act on the running playback service, and the playing state comes from the live player
-- Medium and Large refresh every 10 seconds to keep the progress bar current; the Player widget does not
-- Widgets do not support seeking
+## Themes, Fonts & Tablets
 
-## Appearance
-
-- Default palette **Ink & Ember**: warm near-black (`#0E1013`) with an amber accent (`#F4B266`)
-- Theme Studio: true-black OLED, colors from the artwork, the wallpaper's Material You palette, or a custom theme (accent hue, saturation, dark, light or OLED base)
-- Home screen widgets: see [Widgets](#widgets)
-- Persian and English, full RTL, switchable inside the app
+- **Album Art** dynamic theme by default, plus Ink & Ember, Pure Black OLED, Material You wallpaper colors, built-in presets, and a Custom Theme Studio.
+- **Vazirmatn** as the default font, plus System Font, paired English + Persian font options, and the ability to import your own `.ttf` / `.otf` font files.
+- Smooth floating bottom bar on phones, and Navigation Rail + two-pane Settings on tablets and foldables.
+- Full English and Persian (RTL) interface, switchable inside the app.

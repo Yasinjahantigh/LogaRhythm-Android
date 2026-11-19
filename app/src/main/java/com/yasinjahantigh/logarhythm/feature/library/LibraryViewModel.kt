@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.yasinjahantigh.logarhythm.core.utils.PermissionUtils
 import com.yasinjahantigh.logarhythm.data.datastore.PreferencesManager
+import com.yasinjahantigh.logarhythm.data.repository.ArtistPhotoRepository
 import com.yasinjahantigh.logarhythm.domain.model.Album
 import com.yasinjahantigh.logarhythm.domain.model.Artist
 import com.yasinjahantigh.logarhythm.domain.model.Folder
@@ -45,6 +46,8 @@ class LibraryViewModel @Inject constructor(
     private val playlistRepository: PlaylistRepository,
     private val playerController: PlayerController,
     private val preferencesManager: PreferencesManager,
+    private val artistPhotoRepository: ArtistPhotoRepository,
+    private val batchTagFixerManager: com.yasinjahantigh.logarhythm.feature.tools.BatchTagFixerManager,
     @param:ApplicationContext private val context: Context
 ) : ViewModel() {
 
@@ -67,8 +70,22 @@ class LibraryViewModel @Inject constructor(
     val currentTrack: StateFlow<Track?> = playerController.currentTrack
     val isPlaying: StateFlow<Boolean> = playerController.isPlaying
 
+    val isTagFixerBusy: StateFlow<Boolean> = combine(
+        batchTagFixerManager.findingFixes,
+        batchTagFixerManager.applyingProgress
+    ) { scanning, applying -> scanning || applying != null }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+
     val allPlaylists: StateFlow<List<Playlist>> = playlistRepository.getAllPlaylists()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val artistPhotos: StateFlow<Map<String, String>> = artistPhotoRepository.photos
+
+    fun prefetchArtistPhotos(artists: List<Artist>) {
+        if (artists.isNotEmpty()) {
+            artistPhotoRepository.prefetchBatch(artists.map { it.name })
+        }
+    }
 
     private val sortOptionFlow = MutableStateFlow(initialSort)
     private val trackFilterFlow = MutableStateFlow(TrackFilter.ALL)
@@ -120,8 +137,8 @@ class LibraryViewModel @Inject constructor(
 
     /**
      * One pipeline for all five lists plus play counts and filter sets. Mapping and sorting
-     * thousands of songs runs on a background dispatcher, so scrolling and launch never pay the
-     * comparison cost on the main thread.
+     * thousands of songs runs on a background dispatcher, and incremental memoization skips
+     * re-sorting lists whose inputs did not change (e.g. playStats updates when sorted by title).
      */
     private fun observeLibraryData() {
         viewModelScope.launch {
@@ -140,97 +157,165 @@ class LibraryViewModel @Inject constructor(
                 trackRepository.getDownloadedTrackUris()
             ) { stats, favorites, downloads -> Triple(stats, favorites, downloads) }
 
-            combine(libraryFlow, extrasFlow) { library, extras ->
-                library.copy(
+            var lastRawTracks: List<Track>? = null
+            var lastRawAlbums: List<Album>? = null
+            var lastRawArtists: List<Artist>? = null
+            var lastSort: SortOption? = null
+            var lastSeed: Long = Long.MIN_VALUE
+            var lastPlayStats: Map<String, TrackPlayStat>? = null
+            var lastFilter: TrackFilter? = null
+            var lastFavorites: Set<String>? = null
+            var lastDownloaded: Set<String>? = null
+
+            var cachedTracks: List<Track> = emptyList()
+            var cachedVisibleTracks: List<Track> = emptyList()
+            var cachedAlbums: List<Album> = emptyList()
+            var cachedArtists: List<Artist> = emptyList()
+
+            combine(libraryFlow, extrasFlow, sortOptionFlow, trackFilterFlow) { library, extras, sort, filter ->
+                val full = library.copy(
                     playStats = extras.first,
                     favorites = extras.second,
                     downloadedUris = extras.third
                 )
-            }.flatMapLatest { library ->
-                combine(sortOptionFlow, trackFilterFlow) { sort, filter ->
-                    sortAndFilter(library, sort, filter)
+                val seed = randomSeed
+                val sortChanged = sort != lastSort || (sort.field == SortField.RANDOM && seed != lastSeed)
+                val playStatSort = sort.field == SortField.PLAY_COUNT || sort.field == SortField.LAST_PLAYED
+                val tracksNeedSort = lastRawTracks !== full.tracks ||
+                    sortChanged ||
+                    (playStatSort && lastPlayStats != full.playStats)
+                if (tracksNeedSort) {
+                    cachedTracks = sortTracks(full.tracks, sort, full.playStats, seed)
                 }
+
+                val filterNeedsRecompute = tracksNeedSort ||
+                    filter != lastFilter ||
+                    (filter == TrackFilter.FAVORITES && lastFavorites != full.favorites) ||
+                    (filter == TrackFilter.DOWNLOADED && lastDownloaded != full.downloadedUris)
+                if (filterNeedsRecompute) {
+                    cachedVisibleTracks = filterTracks(cachedTracks, filter, full)
+                }
+
+                if (lastRawAlbums !== full.albums || sortChanged) {
+                    cachedAlbums = sortAlbums(full.albums, sort, seed)
+                }
+                if (lastRawArtists !== full.artists || sortChanged) {
+                    cachedArtists = sortArtists(full.artists, sort, seed)
+                }
+
+                lastRawTracks = full.tracks
+                lastRawAlbums = full.albums
+                lastRawArtists = full.artists
+                lastSort = sort
+                lastSeed = seed
+                lastPlayStats = full.playStats
+                lastFilter = filter
+                lastFavorites = full.favorites
+                lastDownloaded = full.downloadedUris
+
+                full.copy(
+                    tracks = cachedTracks,
+                    visibleTracks = cachedVisibleTracks,
+                    albums = cachedAlbums,
+                    artists = cachedArtists,
+                    genres = full.genres,
+                    folders = full.folders
+                )
             }
                 .flowOn(Dispatchers.Default)
                 .collect { sorted ->
-                    _uiState.update {
-                        it.copy(
-                            tracks = sorted.tracks,
-                            visibleTracks = sorted.visibleTracks,
-                            albums = sorted.albums,
-                            artists = sorted.artists,
-                            genres = sorted.genres,
-                            folders = sorted.folders,
-                            isLoading = false
-                        )
+                    _uiState.update { current ->
+                        if (!current.isLoading &&
+                            current.tracks === sorted.tracks &&
+                            current.visibleTracks === sorted.visibleTracks &&
+                            current.albums === sorted.albums &&
+                            current.artists === sorted.artists &&
+                            current.genres === sorted.genres &&
+                            current.folders === sorted.folders
+                        ) {
+                            current
+                        } else {
+                            current.copy(
+                                tracks = sorted.tracks,
+                                visibleTracks = sorted.visibleTracks,
+                                albums = sorted.albums,
+                                artists = sorted.artists,
+                                genres = sorted.genres,
+                                folders = sorted.folders,
+                                isLoading = false
+                            )
+                        }
                     }
                 }
         }
     }
 
-    private fun sortAndFilter(
-        library: SortedLibrary,
+    private fun <T> List<T>.orderedBy(asc: Boolean, comparator: Comparator<T>): List<T> =
+        if (asc) sortedWith(comparator) else sortedWith(comparator.reversed())
+
+    private fun sortTracks(
+        tracks: List<Track>,
         sort: SortOption,
-        filter: TrackFilter
-    ): SortedLibrary {
+        playStats: Map<String, TrackPlayStat>,
+        seed: Long
+    ): List<Track> {
         val asc = sort.direction == SortDirection.ASCENDING
         val text = String.CASE_INSENSITIVE_ORDER
-        val random = Random(randomSeed)
-
-        fun <T> List<T>.orderedBy(comparator: Comparator<T>): List<T> =
-            if (asc) sortedWith(comparator) else sortedWith(comparator.reversed())
-
-        val tracks = when (sort.field) {
-            SortField.TITLE -> library.tracks.orderedBy(compareBy(text) { it.title })
-            SortField.ARTIST -> library.tracks.orderedBy(compareBy(text) { it.artist })
-            SortField.ALBUM -> library.tracks.orderedBy(compareBy(text) { it.album })
-            SortField.DATE_ADDED -> library.tracks.orderedBy(compareBy { it.dateAdded })
-            SortField.DATE_MODIFIED -> library.tracks.orderedBy(compareBy { it.dateModified })
-            SortField.DURATION -> library.tracks.orderedBy(compareBy { it.durationMs })
-            SortField.YEAR -> library.tracks.orderedBy(compareBy { it.year })
-            SortField.PLAY_COUNT -> library.tracks.orderedBy(
-                compareBy<Track> { library.playStats[it.id]?.playCount ?: 0 }
+        return when (sort.field) {
+            SortField.TITLE -> tracks.orderedBy(asc, compareBy(text) { it.title })
+            SortField.ARTIST -> tracks.orderedBy(asc, compareBy(text) { it.artist })
+            SortField.ALBUM -> tracks.orderedBy(asc, compareBy(text) { it.album })
+            SortField.DATE_ADDED -> tracks.orderedBy(asc, compareBy { it.dateAdded })
+            SortField.DATE_MODIFIED -> tracks.orderedBy(asc, compareBy { it.dateModified })
+            SortField.DURATION -> tracks.orderedBy(asc, compareBy { it.durationMs })
+            SortField.YEAR -> tracks.orderedBy(asc, compareBy { it.year })
+            SortField.PLAY_COUNT -> tracks.orderedBy(
+                asc,
+                compareBy<Track> { playStats[it.id]?.playCount ?: 0 }
                     .thenBy(text) { it.title }
             )
-            SortField.LAST_PLAYED -> library.tracks.orderedBy(
-                compareBy<Track> { library.playStats[it.id]?.lastPlayedAt ?: 0L }
+            SortField.LAST_PLAYED -> tracks.orderedBy(
+                asc,
+                compareBy<Track> { playStats[it.id]?.lastPlayedAt ?: 0L }
                     .thenBy(text) { it.title }
             )
-            SortField.RANDOM -> library.tracks.shuffled(random)
-            SortField.TRACK_COUNT -> library.tracks.orderedBy(compareBy(text) { it.title })
+            SortField.RANDOM -> tracks.shuffled(Random(seed))
+            SortField.TRACK_COUNT -> tracks.orderedBy(asc, compareBy(text) { it.title })
         }
+    }
 
-        val albums = when (sort.field) {
-            SortField.ARTIST -> library.albums.orderedBy(
+    private fun sortAlbums(albums: List<Album>, sort: SortOption, seed: Long): List<Album> {
+        val asc = sort.direction == SortDirection.ASCENDING
+        val text = String.CASE_INSENSITIVE_ORDER
+        return when (sort.field) {
+            SortField.ARTIST -> albums.orderedBy(
+                asc,
                 compareBy<Album, String>(text) { it.artist }.thenBy(text) { it.name }
             )
-            SortField.YEAR -> library.albums.orderedBy(
+            SortField.YEAR -> albums.orderedBy(
+                asc,
                 compareBy<Album> { it.year }.thenBy(text) { it.name }
             )
-            SortField.TRACK_COUNT -> library.albums.orderedBy(
+            SortField.TRACK_COUNT -> albums.orderedBy(
+                asc,
                 compareBy<Album> { it.trackCount }.thenBy(text) { it.name }
             )
-            SortField.RANDOM -> library.albums.shuffled(random)
-            else -> library.albums.orderedBy(compareBy(text) { it.name })
+            SortField.RANDOM -> albums.shuffled(Random(seed))
+            else -> albums.orderedBy(asc, compareBy(text) { it.name })
         }
+    }
 
-        val artists = when (sort.field) {
-            SortField.TRACK_COUNT -> library.artists.orderedBy(
+    private fun sortArtists(artists: List<Artist>, sort: SortOption, seed: Long): List<Artist> {
+        val asc = sort.direction == SortDirection.ASCENDING
+        val text = String.CASE_INSENSITIVE_ORDER
+        return when (sort.field) {
+            SortField.TRACK_COUNT -> artists.orderedBy(
+                asc,
                 compareBy<Artist> { it.trackCount }.thenBy(text) { it.name }
             )
-            SortField.RANDOM -> library.artists.shuffled(random)
-            else -> library.artists.orderedBy(compareBy(text) { it.name })
+            SortField.RANDOM -> artists.shuffled(Random(seed))
+            else -> artists.orderedBy(asc, compareBy(text) { it.name })
         }
-
-        val visibleTracks = filterTracks(tracks, filter, library)
-        return library.copy(
-            tracks = tracks,
-            visibleTracks = visibleTracks,
-            albums = albums,
-            artists = artists,
-            genres = library.genres.sortedWith(compareBy(text) { it.name }),
-            folders = library.folders.sortedWith(compareBy(text) { it.name })
-        )
     }
 
     private fun filterTracks(
@@ -331,7 +416,7 @@ class LibraryViewModel @Inject constructor(
 
     fun addTracksToPlaylist(playlistId: Long, trackIds: List<String>) {
         viewModelScope.launch {
-            trackIds.forEach { playlistRepository.addTrackToPlaylist(playlistId, it) }
+            playlistRepository.addTracksToPlaylist(playlistId, trackIds)
         }
     }
 

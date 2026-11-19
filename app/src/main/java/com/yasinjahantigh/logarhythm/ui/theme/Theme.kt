@@ -11,6 +11,7 @@ import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
@@ -19,12 +20,13 @@ import androidx.core.view.WindowCompat
 @Composable
 fun LogaRhythmTheme(
     themeMode: String = "system",
-    themeStyle: String = "default",
+    themeStyle: String = "album_art",
     themePresetId: String = ThemePresets.DEFAULT_ID,
     customAccentColor: Color = Color(0xFFF4B266),
     customBase: String = "dark",
     cornerRoundness: String = "standard",
-    appFont: String = "default",
+    appFont: String = "vazirmatn",
+    customFontPath: String? = null,
     seedArtworkColor: Color? = null,
     hasCustomBackground: Boolean = false,
     darkTheme: Boolean = when (themeMode) {
@@ -36,33 +38,45 @@ fun LogaRhythmTheme(
 ) {
     val context = LocalContext.current
     val view = LocalView.current
-    val selectedPreset = if (themeStyle == "preset") ThemePresets.byId(themePresetId) else null
+    val selectedPreset = remember(themeStyle, themePresetId) {
+        if (themeStyle == "preset") ThemePresets.byId(themePresetId) else null
+    }
     val effectiveDark = when (themeStyle) {
         "oled" -> true
         "preset" -> selectedPreset?.isDark ?: true
         "custom" -> customBase != "light"
         else -> darkTheme
     }
-    val fallback = if (effectiveDark) DarkColorScheme else LightColorScheme
-    val rawColorScheme = when (themeStyle) {
-        "oled" -> OledColorScheme
-        "preset" -> selectedPreset?.toColorScheme() ?: fallback
-        "album_art" -> seedArtworkColor?.let { generateDynamicSchemeFromSeed(it, effectiveDark) } ?: fallback
-        "wallpaper" -> if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            if (effectiveDark) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
+    val colorScheme = remember(
+        themeStyle,
+        selectedPreset,
+        effectiveDark,
+        seedArtworkColor,
+        customAccentColor,
+        customBase,
+        hasCustomBackground
+    ) {
+        val fallback = if (effectiveDark) DarkColorScheme else LightColorScheme
+        val rawColorScheme = when (themeStyle) {
+            "oled" -> OledColorScheme
+            "preset" -> selectedPreset?.toColorScheme() ?: fallback
+            "album_art" -> seedArtworkColor?.let { generateDynamicSchemeFromSeed(it, effectiveDark) } ?: fallback
+            "wallpaper" -> if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                if (effectiveDark) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
+            } else {
+                fallback
+            }
+            "custom" -> {
+                val generated = generateDynamicSchemeFromSeed(customAccentColor, effectiveDark)
+                if (customBase == "oled") generated.withBlackSurfaces() else generated
+            }
+            else -> fallback
+        }
+        if (hasCustomBackground) {
+            rawColorScheme.copy(background = Color.Transparent)
         } else {
-            fallback
+            rawColorScheme
         }
-        "custom" -> {
-            val generated = generateDynamicSchemeFromSeed(customAccentColor, effectiveDark)
-            if (customBase == "oled") generated.withBlackSurfaces() else generated
-        }
-        else -> fallback
-    }
-    val colorScheme = if (hasCustomBackground) {
-        rawColorScheme.copy(background = Color.Transparent)
-    } else {
-        rawColorScheme
     }
 
     if (!view.isInEditMode) {
@@ -75,10 +89,15 @@ fun LogaRhythmTheme(
         }
     }
 
+    val typography = remember(appFont, customFontPath) {
+        typographyForFont(appFont, context = context, customFontPath = customFontPath)
+    }
+    val shapes = remember(cornerRoundness) { getAppShapes(cornerRoundness) }
+
     MaterialTheme(
         colorScheme = colorScheme,
-        typography = typographyForFont(appFont),
-        shapes = getAppShapes(cornerRoundness),
+        typography = typography,
+        shapes = shapes,
         content = content
     )
 }

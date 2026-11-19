@@ -19,6 +19,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -40,6 +41,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.yasinjahantigh.logarhythm.R
 
+private val SwipeShape = RoundedCornerShape(22.dp)
+
 /**
  * Spotify-style gesture: dragging a row to the right past the threshold queues it as the next
  * track. The accent background and label only exist while the finger is moving, so rows at rest
@@ -59,19 +62,19 @@ fun SwipeToPlayNext(
 
     val haptics = LocalHapticFeedback.current
     val density = LocalDensity.current
-    val threshold = with(density) { 80.dp.toPx() }
-    val maxOffset = with(density) { 128.dp.toPx() }
-    val playNextLabel = stringResource(R.string.swipe_play_next)
+    val threshold = remember(density) { with(density) { 80.dp.toPx() } }
+    val maxOffset = remember(density) { with(density) { 128.dp.toPx() } }
     val accessibilityLabel = stringResource(R.string.swipe_play_next_action)
     val accent = MaterialTheme.colorScheme.primaryContainer
     val onAccent = MaterialTheme.colorScheme.onPrimaryContainer
     var offset by remember { mutableFloatStateOf(0f) }
     var crossedThreshold by remember { mutableStateOf(false) }
+    val isSwiping by remember { derivedStateOf { offset > 0f } }
 
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(22.dp))
+            .then(if (isSwiping) Modifier.clip(SwipeShape) else Modifier)
             .drawBehind {
                 if (offset > 0f) drawRect(accent)
             }
@@ -84,7 +87,8 @@ fun SwipeToPlayNext(
                 )
             }
     ) {
-        if (offset > 0f) {
+        if (isSwiping) {
+            val playNextLabel = stringResource(R.string.swipe_play_next)
             Row(
                 modifier = Modifier
                     .matchParentSize()

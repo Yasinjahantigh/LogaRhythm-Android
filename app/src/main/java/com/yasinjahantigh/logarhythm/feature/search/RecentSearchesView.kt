@@ -28,6 +28,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.yasinjahantigh.logarhythm.R
+import com.yasinjahantigh.logarhythm.feature.library.LibraryEmptyHint
 
 @Composable
 fun RecentSearchesView(
@@ -38,16 +39,11 @@ fun RecentSearchesView(
     modifier: Modifier = Modifier
 ) {
     if (recentSearches.isEmpty()) {
-        Box(
-            modifier = modifier.fillMaxSize().padding(32.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(
-                text = stringResource(R.string.search_empty_message),
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
+        LibraryEmptyHint(
+            text = stringResource(R.string.search_empty_message),
+            icon = Icons.Default.History,
+            modifier = modifier
+        )
     } else {
         Column(modifier = modifier.fillMaxSize()) {
             Row(
@@ -97,7 +93,7 @@ fun RecentSearchesView(
                         )
                         IconButton(
                             onClick = { onRemoveRecent(term) },
-                            modifier = Modifier.size(36.dp)
+                            modifier = Modifier.size(48.dp)
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Close,

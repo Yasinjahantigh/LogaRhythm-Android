@@ -1,12 +1,9 @@
 package com.yasinjahantigh.logarhythm.feature.library
 
-import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -27,7 +24,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -47,6 +44,9 @@ import com.yasinjahantigh.logarhythm.ui.components.ArtworkImage
 import com.yasinjahantigh.logarhythm.ui.components.SwipeToPlayNext
 import com.yasinjahantigh.logarhythm.ui.components.cleanMetaOrNull
 import com.yasinjahantigh.logarhythm.ui.theme.LogaRhythmTheme
+
+private val TrackRowShape = RoundedCornerShape(22.dp)
+private val TrackArtShape = RoundedCornerShape(16.dp)
 
 /**
  * The track row used across the app. Untagged songs get a generated gradient cover, and the
@@ -74,12 +74,21 @@ fun TrackListItem(
         else -> Color.Transparent
     }
 
-    val title = track.title.cleanMetaOrNull() ?: stringResource(R.string.unknown_title)
-    val artist = track.artist.cleanMetaOrNull()
-        ?: track.albumArtist.cleanMetaOrNull()
-        ?: stringResource(R.string.unknown_artist)
-    val album = track.album.cleanMetaOrNull()
-    val subtitle = if (album != null) "$artist · $album" else artist
+    val unknownTitle = stringResource(R.string.unknown_title)
+    val unknownArtist = stringResource(R.string.unknown_artist)
+    val title = remember(track.title, unknownTitle) {
+        track.title.cleanMetaOrNull() ?: unknownTitle
+    }
+    val subtitle = remember(track.artist, track.albumArtist, track.album, unknownArtist) {
+        val artist = track.artist.cleanMetaOrNull()
+            ?: track.albumArtist.cleanMetaOrNull()
+            ?: unknownArtist
+        val album = track.album.cleanMetaOrNull()
+        if (album != null) "$artist · $album" else artist
+    }
+    val durationText = remember(track.durationMs) {
+        TimeUtils.formatDuration(track.durationMs)
+    }
 
     SwipeToPlayNext(
         onPlayNext = onPlayNext ?: {},
@@ -90,7 +99,7 @@ fun TrackListItem(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(vertical = 1.dp)
-                .clip(RoundedCornerShape(22.dp))
+                .clip(TrackRowShape)
                 .background(container)
                 .defaultMinSize(minHeight = 64.dp)
                 .testTag("track_item_${track.id}")
@@ -133,14 +142,14 @@ fun TrackListItem(
                     uri = track.artworkUri,
                     fallbackKey = title,
                     modifier = Modifier.fillMaxSize(),
-                    shape = RoundedCornerShape(16.dp),
+                    shape = TrackArtShape,
                     contentDescription = stringResource(R.string.cd_artwork, title)
                 )
                 if (isCurrentTrack) {
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
-                            .clip(RoundedCornerShape(16.dp))
+                            .clip(TrackArtShape)
                             .background(Color.Black.copy(alpha = 0.48f)),
                         contentAlignment = Alignment.Center
                     ) {
@@ -177,7 +186,7 @@ fun TrackListItem(
             Spacer(modifier = Modifier.width(8.dp))
 
             Text(
-                text = TimeUtils.formatDuration(track.durationMs),
+                text = durationText,
                 style = MaterialTheme.typography.labelMedium,
                 color = scheme.onSurfaceVariant,
                 maxLines = 1
@@ -187,7 +196,7 @@ fun TrackListItem(
                 IconButton(
                     onClick = onMenuClick,
                     modifier = Modifier
-                        .size(44.dp)
+                        .size(48.dp)
                         .testTag("track_menu_button_${track.id}")
                 ) {
                     Icon(

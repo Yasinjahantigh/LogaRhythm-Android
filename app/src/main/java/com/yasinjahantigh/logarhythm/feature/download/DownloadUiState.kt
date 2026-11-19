@@ -17,6 +17,7 @@ data class DownloadCollectionUiState(
     val albums: List<DownloadSearchResult> = emptyList(),
     val tracks: List<DownloadSearchResult> = emptyList(),
     val loading: Boolean = false,
+    val loadingMore: Boolean = false,
     val fromCache: Boolean = false,
     val error: String? = null
 )

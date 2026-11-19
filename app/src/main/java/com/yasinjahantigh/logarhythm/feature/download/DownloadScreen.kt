@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
@@ -90,6 +91,8 @@ fun DownloadScreen(
     val popularResults by viewModel.popularResults.collectAsStateWithLifecycle()
     val qualityPref by viewModel.downloadQualityPref.collectAsStateWithLifecycle()
     val pendingShareText by viewModel.pendingShareText.collectAsStateWithLifecycle()
+    val routingStatus by viewModel.routingStatus.collectAsStateWithLifecycle()
+    var inspectedTrack by remember { mutableStateOf<DownloadSearchResult?>(null) }
 
     val context = LocalContext.current
     val haptics = LocalHapticFeedback.current
@@ -259,6 +262,14 @@ fun DownloadScreen(
                     onBack = onNavigateBack,
                     onOpenSettings = { showSettings = true }
                 )
+                com.yasinjahantigh.logarhythm.ui.components.FeatureMicroTip(
+                    hintId = com.yasinjahantigh.logarhythm.ui.components.FeatureHintIds.DOWNLOAD_PREVIEW,
+                    text = stringResource(R.string.tip_download_preview),
+                    icon = Icons.Filled.Download,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 4.dp)
+                )
                 TabRow(
                     selectedTabIndex = selectedTab,
                     containerColor = MaterialTheme.colorScheme.surface
@@ -307,12 +318,14 @@ fun DownloadScreen(
                                 bottomPadding = bottomPadding,
                                 onResultClick = { item ->
                                     if (item.kind == com.yasinjahantigh.logarhythm.domain.model.DownloadResultKind.TRACK) {
-                                        startDownload(item)
+                                        inspectedTrack = item
                                     } else {
                                         viewModel.openCollection(item)
                                     }
                                 },
+                                onDownloadTrack = { item -> startDownload(item) },
                                 onDownloadAlbum = viewModel::previewAlbum,
+                                routingStatus = routingStatus,
                                 previewState = previewState,
                                 onTogglePreview = viewModel::togglePreview,
                                 freshResults = freshResults,
@@ -358,8 +371,26 @@ fun DownloadScreen(
                 viewModel.downloadAllFromCollection(detail.header.title, tracks)
                 viewModel.closeCollection()
             },
-            onTrackClick = { track -> startDownload(track) },
+            onTrackClick = { track -> inspectedTrack = track },
+            onTrackDownload = { track -> startDownload(track) },
             onAlbumClick = { albumItem -> viewModel.openCollection(albumItem) }
+        )
+    }
+
+    inspectedTrack?.let { track ->
+        val activeItem = history.firstOrNull {
+            it.sourceUrl == track.url || (it.videoId == track.id && it.source == track.source)
+        }
+        val pKey = viewModel.isPreviewKey(track)
+        OnlineTrackDetailSheet(
+            result = track,
+            activeItem = activeItem,
+            isPreviewLoading = previewState.trackKey == pKey && previewState.isLoading,
+            isPreviewPlaying = previewState.trackKey == pKey && previewState.isPlaying,
+            onTogglePreview = { viewModel.togglePreview(track) },
+            onDownload = { startDownload(track) },
+            onDownloadAlbum = { viewModel.previewAlbum(track) },
+            onDismiss = { inspectedTrack = null }
         )
     }
 

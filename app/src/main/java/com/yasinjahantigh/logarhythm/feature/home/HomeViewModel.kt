@@ -38,6 +38,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
 @HiltViewModel
@@ -102,6 +103,12 @@ class HomeViewModel @Inject constructor(
         }
     }
 
+    fun dismissRadarRelease(release: ArtistReleaseEntity) {
+        viewModelScope.launch {
+            artistFollowRepository.dismissRelease(release)
+        }
+    }
+
     /** Index the device's music now (after permission is granted or on a manual rescan). */
     fun rescanLibrary() = librarySync.requestRefresh(force = true)
 
@@ -155,8 +162,7 @@ class HomeViewModel @Inject constructor(
 
     private val allPlayEvents = statsRepository.getAllPlayEvents()
 
-    private val favoritesTrackIds = playlistRepository.getPlaylistTracks(1L)
-        .map { tracks -> tracks.map { it.id }.toSet() }
+    private val favoritesTrackIds = trackRepository.getFavoriteTrackIds()
 
     /** What the listener's own history says about their taste; empty until there is history. */
     private val tasteProfile: StateFlow<TasteProfile> = combine(
@@ -184,14 +190,17 @@ class HomeViewModel @Inject constructor(
         allTracks,
         allPlayEvents,
         favoritesTrackIds,
+        tasteProfile,
         currentDay
-    ) { tracks, events, favIds, seedDate ->
+    ) { tracks, events, favIds, profile, seedDate ->
+        if (tracks.isEmpty()) return@combine emptyList()
         val exposure = preferencesManager.mixExposureHistory.first()
         val mixes = dailyMixGenerator.generateMixes(
             allTracks = tracks,
             playEvents = events,
             favoriteTrackIds = favIds,
             seedDate = seedDate,
+            tasteProfile = profile,
             recentExposureDays = exposure
         )
         if (mixes.isNotEmpty()) {
@@ -343,8 +352,11 @@ class HomeViewModel @Inject constructor(
         viewModelScope.launch {
             // A tap should create one playlist from the current library snapshot. Keeping a
             // collect alive here can unexpectedly restart playback after every library update.
-            val tracks = trackRepository.getAllTracks().first()
-            val moodTracks = TrackCuration.generateMoodPlaylist(mood, tracks, profile = tasteProfile.value)
+            val tracks = allTracks.value.ifEmpty { trackRepository.getAllTracks().first() }
+            val profile = tasteProfile.value
+            val moodTracks = withContext(Dispatchers.Default) {
+                TrackCuration.generateMoodPlaylist(mood, tracks, profile = profile)
+            }
             if (moodTracks.isNotEmpty()) {
                 playerController.play(moodTracks, 0)
             } else {

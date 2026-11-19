@@ -5,6 +5,7 @@ import android.content.Context
 import android.os.Build
 import android.provider.MediaStore
 import com.yasinjahantigh.logarhythm.core.library.AudioLibraryFilter
+import com.yasinjahantigh.logarhythm.data.room.TrackEntity
 import com.yasinjahantigh.logarhythm.data.tagger.engine.TagEngines
 import com.yasinjahantigh.logarhythm.domain.library.MetadataNormalizer
 import com.yasinjahantigh.logarhythm.domain.library.TagSuggestionCleaner
@@ -39,6 +40,7 @@ class LocalMusicSource @Inject constructor(
             "Alarms",
             "Sounds"
         )
+        private val AUDIO_EXT_REGEX = Regex("""(?i)\.(mp3|m4a|flac|wav|ogg|opus|aac|wma)$""")
     }
 
     override val sourceType: SourceType = SourceType.LOCAL
@@ -54,10 +56,12 @@ class LocalMusicSource @Inject constructor(
         excludedFolders: Set<String> = emptySet(),
         showSystemAudio: Boolean = false,
         whitelistMode: Boolean = false,
-        whitelistedFolders: Set<String> = emptySet()
+        whitelistedFolders: Set<String> = emptySet(),
+        existingById: Map<String, TrackEntity> = emptyMap()
     ): List<Track> = withContext(Dispatchers.IO) {
-        val effectiveExcludedFolders = excludedFolders
-        val tracks = mutableListOf<Track>()
+        val excludedLower = if (excludedFolders.isEmpty()) emptySet() else excludedFolders.mapTo(HashSet(excludedFolders.size * 2)) { it.lowercase() }
+        val whitelistedLower = if (whitelistedFolders.isEmpty()) emptySet() else whitelistedFolders.mapTo(HashSet(whitelistedFolders.size * 2)) { it.lowercase() }
+        val tracks = ArrayList<Track>()
         val collection = MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
 
         val projection = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
@@ -174,18 +178,14 @@ class LocalMusicSource @Inject constructor(
                     cleanMetadataField(cursor.getString(composerCol) ?: "", "")
                 } else ""
 
-                val folderName = when {
-                    !filePath.isNullOrBlank() -> {
-                        File(filePath).parentFile?.name ?: "Music"
-                    }
-                    else -> "Music"
-                }
+                val folderName = extractParentFolderName(filePath) ?: "Music"
+                val folderLower = folderName.lowercase()
 
                 if (whitelistMode) {
-                    if (whitelistedFolders.none { allowed -> folderName.equals(allowed, ignoreCase = true) }) {
+                    if (folderLower !in whitelistedLower) {
                         continue
                     }
-                } else if (effectiveExcludedFolders.any { excluded -> folderName.equals(excluded, ignoreCase = true) }) {
+                } else if (folderLower in excludedLower) {
                     continue
                 }
                 val isMusicFlag = if (isMusicCol != -1 && !cursor.isNull(isMusicCol)) {
@@ -197,7 +197,7 @@ class LocalMusicSource @Inject constructor(
                     AudioLibraryFilter.isHidden(
                         filePath = filePath,
                         folderName = folderName,
-                        fileName = filePath?.let { File(it).name },
+                        fileName = extractFileName(filePath),
                         isMusic = isMusicFlag,
                         durationMs = duration,
                         hasArtistOrAlbum = hasArtistOrAlbum
@@ -206,11 +206,17 @@ class LocalMusicSource @Inject constructor(
                     continue
                 }
 
+                val trackId = "local:$mediaStoreId"
                 var title = cleanTitle(rawTitle, filePath)
                 var artist = cleanMetadataField(rawArtist, "Unknown Artist")
                 var album = cleanMetadataField(rawAlbum, "Unknown Album")
 
-                val needsEmbeddedFallback = !filePath.isNullOrBlank() && (
+                val existing = existingById[trackId]
+                val unchangedInDb = existing != null &&
+                    existing.dateModified == dateModified &&
+                    existing.filePath == filePath.orEmpty()
+
+                val needsEmbeddedFallback = !unchangedInDb && !filePath.isNullOrBlank() && (
                     MetadataNormalizer.isPlaceholderField(rawTitle) ||
                         MetadataNormalizer.isPlaceholderField(title) ||
                         MetadataNormalizer.isPlaceholderField(artist) ||
@@ -330,17 +336,36 @@ class LocalMusicSource @Inject constructor(
         val cleaned = MetadataNormalizer.cleanDisplayText(title)
         if (cleaned.isEmpty() || MetadataNormalizer.isPlaceholderField(cleaned)) {
             if (!filePath.isNullOrBlank()) {
-                val fileName = MetadataNormalizer.cleanDisplayText(File(filePath).nameWithoutExtension)
+                val rawName = extractFileName(filePath).orEmpty()
+                val baseName = rawName.substringBeforeLast('.', rawName)
+                val fileName = MetadataNormalizer.cleanDisplayText(baseName)
                 if (fileName.isNotBlank() && !MetadataNormalizer.isPlaceholderField(fileName)) {
                     return fileName.replace('_', ' ').trim()
                 }
             }
             return "Unknown Title"
         }
-        val clean = cleaned
-            .replace(Regex("""(?i)\.(mp3|m4a|flac|wav|ogg|opus|aac|wma)$"""), "")
-            .trim()
+        val clean = if (cleaned.indexOf('.') >= 0) {
+            cleaned.replace(AUDIO_EXT_REGEX, "").trim()
+        } else {
+            cleaned
+        }
         return clean.ifBlank { "Unknown Title" }
+    }
+
+    private fun extractFileName(filePath: String?): String? {
+        if (filePath.isNullOrBlank()) return null
+        val slash = filePath.lastIndexOf('/')
+        return if (slash >= 0) filePath.substring(slash + 1) else filePath
+    }
+
+    private fun extractParentFolderName(filePath: String?): String? {
+        if (filePath.isNullOrBlank()) return null
+        val lastSlash = filePath.lastIndexOf('/')
+        if (lastSlash <= 0) return null
+        val prevSlash = filePath.lastIndexOf('/', lastSlash - 1)
+        val name = if (prevSlash >= 0) filePath.substring(prevSlash + 1, lastSlash) else filePath.substring(0, lastSlash)
+        return name.ifBlank { null }
     }
 
     override suspend fun getTrackById(id: String): Track? = withContext(Dispatchers.IO) {
@@ -369,12 +394,9 @@ class LocalMusicSource @Inject constructor(
                 val dataCol = cursor.getColumnIndex(MediaStore.Audio.Media.DATA)
                 if (dataCol != -1) {
                     while (cursor.moveToNext()) {
-                        val filePath = cursor.getString(dataCol)
-                        if (!filePath.isNullOrBlank()) {
-                            val parent = File(filePath).parentFile?.name
-                            if (!parent.isNullOrBlank()) {
-                                folders.add(parent)
-                            }
+                        val parent = extractParentFolderName(cursor.getString(dataCol))
+                        if (!parent.isNullOrBlank()) {
+                            folders.add(parent)
                         }
                     }
                 }

@@ -4,6 +4,7 @@ import com.yasinjahantigh.logarhythm.data.download.metadata.DeezerClient
 import com.yasinjahantigh.logarhythm.data.download.musicman.MusicManClient
 import com.yasinjahantigh.logarhythm.data.download.radiojavan.RadioJavanClient
 import com.yasinjahantigh.logarhythm.data.download.saavn.SaavnClient
+import com.yasinjahantigh.logarhythm.domain.download.ArtistMerger
 import com.yasinjahantigh.logarhythm.domain.download.DownloadPipelineException
 import com.yasinjahantigh.logarhythm.domain.model.DownloadErrorKind
 import com.yasinjahantigh.logarhythm.domain.model.DownloadSearchCategory
@@ -32,7 +33,8 @@ class DownloadSearchService @Inject constructor(
     private val musicMan: MusicManClient,
     private val saavn: SaavnClient,
     private val radioJavan: RadioJavanClient,
-    private val deezer: DeezerClient
+    private val deezer: DeezerClient,
+    private val sourceRouter: DownloadSourceRouter
 ) {
 
     data class Outcome(
@@ -50,13 +52,22 @@ class DownloadSearchService @Inject constructor(
         val byBucket = linkedMapOf<String, List<DownloadSearchResult>>()
         val failures = mutableListOf<DownloadErrorKind>()
 
+        // Resolve initial VPN-aware bucket order (MusicMan first when VPN is off; fastest source when VPN is on)
+        var bucketOrder = sourceRouter.rankedSearchBuckets()
+
         suspend fun publish(isFinal: Boolean) {
+            // Re-read fastest order after live timings arrive while VPN is active
+            if (sourceRouter.isVpnActive()) {
+                bucketOrder = sourceRouter.rankedSearchBuckets()
+            }
             mutex.withLock {
-                val ordered = buildList {
-                    listOf("musicman", "deezer", "radiojavan", "saavn", "ytdlp").forEach { key ->
+                val rawOrdered = buildList {
+                    bucketOrder.forEach { key ->
                         addAll(byBucket[key].orEmpty())
                     }
                 }.distinctBy { "${it.kind.name}:${it.source.raw}:${it.id}" }
+
+                val ordered = ArtistMerger.mergeArtistResults(rawOrdered)
 
                 send(
                     Outcome(
@@ -76,10 +87,13 @@ class DownloadSearchService @Inject constructor(
 
         if (source == null || source == DownloadSource.MUSICMAN) {
             jobs += launch(Dispatchers.IO) {
+                val started = System.nanoTime()
                 val outcome = safeRun {
                     withTimeoutOrNull(FAST_API_TIMEOUT_MS) { musicMan.search(query, category) }
                         ?: throw DownloadPipelineException(DownloadErrorKind.NETWORK, "MusicMan timed out")
                 }
+                val elapsedMs = (System.nanoTime() - started) / 1_000_000L
+                sourceRouter.recordLatency(DownloadSource.MUSICMAN, elapsedMs, outcome.failure == null)
                 mutex.withLock {
                     byBucket["musicman"] = outcome.results
                     outcome.failure?.let { failures += it }
@@ -90,6 +104,7 @@ class DownloadSearchService @Inject constructor(
 
         if (source == null || source == DownloadSource.DEEZER) {
             jobs += launch(Dispatchers.IO) {
+                val started = System.nanoTime()
                 val outcome = safeRun {
                     withTimeoutOrNull(FAST_API_TIMEOUT_MS) {
                         when (category) {
@@ -105,6 +120,8 @@ class DownloadSearchService @Inject constructor(
                         }
                     }.orEmpty()
                 }
+                val elapsedMs = (System.nanoTime() - started) / 1_000_000L
+                sourceRouter.recordLatency(DownloadSource.DEEZER, elapsedMs, outcome.failure == null && outcome.results.isNotEmpty())
                 mutex.withLock {
                     byBucket["deezer"] = outcome.results
                     outcome.failure?.let { failures += it }
@@ -114,12 +131,15 @@ class DownloadSearchService @Inject constructor(
         }
 
         if ((source == null || source == DownloadSource.RADIOJAVAN) &&
-            (category == DownloadSearchCategory.ALL || category == DownloadSearchCategory.TRACK)
+            (category == DownloadSearchCategory.ALL || category == DownloadSearchCategory.TRACK || category == DownloadSearchCategory.ARTIST)
         ) {
             jobs += launch(Dispatchers.IO) {
+                val started = System.nanoTime()
                 val outcome = safeRun {
                     withTimeoutOrNull(FAST_API_TIMEOUT_MS) { radioJavan.search(query) }.orEmpty()
                 }
+                val elapsedMs = (System.nanoTime() - started) / 1_000_000L
+                sourceRouter.recordLatency(DownloadSource.RADIOJAVAN, elapsedMs, outcome.failure == null && outcome.results.isNotEmpty())
                 mutex.withLock {
                     byBucket["radiojavan"] = outcome.results
                     outcome.failure?.let { failures += it }
@@ -132,9 +152,12 @@ class DownloadSearchService @Inject constructor(
             (category == DownloadSearchCategory.ALL || category == DownloadSearchCategory.TRACK)
         ) {
             jobs += launch(Dispatchers.IO) {
+                val started = System.nanoTime()
                 val outcome = safeRun {
                     withTimeoutOrNull(FAST_API_TIMEOUT_MS) { saavn.search(query) }.orEmpty()
                 }
+                val elapsedMs = (System.nanoTime() - started) / 1_000_000L
+                sourceRouter.recordLatency(DownloadSource.SAAVN, elapsedMs, outcome.failure == null && outcome.results.isNotEmpty())
                 mutex.withLock {
                     byBucket["saavn"] = outcome.results
                     outcome.failure?.let { failures += it }

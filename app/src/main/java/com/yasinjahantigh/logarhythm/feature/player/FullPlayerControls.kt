@@ -10,9 +10,11 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -36,6 +38,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
@@ -70,11 +74,17 @@ fun FullPlayerControls(
     val skipSize = if (compact) 52.dp else 58.dp
 
     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
-        Row(
+        Box(
             modifier = modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+            contentAlignment = Alignment.Center
         ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .widthIn(max = 400.dp),
+                horizontalArrangement = Arrangement.SpaceEvenly,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
             val isRepeatOne = repeatMode == Player.REPEAT_MODE_ONE
             val isRepeatActive = repeatMode != Player.REPEAT_MODE_OFF
 
@@ -155,6 +165,7 @@ fun FullPlayerControls(
                 onClick = onCycleRepeat,
                 modifier = Modifier.testTag("player_repeat_button")
             )
+            }
         }
     }
 }
@@ -168,8 +179,12 @@ private fun SkipKey(
     modifier: Modifier = Modifier
 ) {
     val scheme = MaterialTheme.colorScheme
+    val haptic = LocalHapticFeedback.current
     FilledIconButton(
-        onClick = onClick,
+        onClick = {
+            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+            onClick()
+        },
         shape = CircleShape,
         modifier = modifier.size(size),
         colors = IconButtonDefaults.filledIconButtonColors(
@@ -194,14 +209,18 @@ private fun ModeToggle(
     modifier: Modifier = Modifier
 ) {
     val scheme = MaterialTheme.colorScheme
+    val haptic = LocalHapticFeedback.current
     val container by animateColorAsState(
         targetValue = if (active) scheme.primaryContainer else scheme.primaryContainer.copy(alpha = 0f),
         label = "mode_toggle_container"
     )
     IconButton(
-        onClick = onClick,
+        onClick = {
+            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+            onClick()
+        },
         modifier = modifier
-            .size(46.dp)
+            .size(48.dp)
             .background(container, CircleShape)
     ) {
         Icon(

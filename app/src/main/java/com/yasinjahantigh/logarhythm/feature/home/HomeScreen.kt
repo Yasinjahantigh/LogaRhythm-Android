@@ -78,7 +78,9 @@ import com.yasinjahantigh.logarhythm.core.utils.rememberMediaStoreConsent
 import com.yasinjahantigh.logarhythm.feature.library.TrackListItem
 import com.yasinjahantigh.logarhythm.feature.ai.MagicPlaylistSheet
 import com.yasinjahantigh.logarhythm.feature.playlist.AddToPlaylistDialog
+import com.yasinjahantigh.logarhythm.feature.playlist.CreatePlaylistDialog
 import com.yasinjahantigh.logarhythm.feature.playlist.SongMenuBottomSheet
+import com.yasinjahantigh.logarhythm.ui.designsystem.staggeredEntrance
 import com.yasinjahantigh.logarhythm.ui.theme.DisplayFontFamily
 import com.yasinjahantigh.logarhythm.domain.discovery.Discovery
 import kotlinx.coroutines.launch
@@ -113,18 +115,15 @@ fun HomeScreen(
 
     var selectedTrackForMenu by remember { mutableStateOf<Track?>(null) }
     var trackForAddToPlaylist by remember { mutableStateOf<Track?>(null) }
+    var showCreatePlaylistDialog by remember { mutableStateOf(false) }
     var selectedMixForDetail by remember { mutableStateOf<DailyMix?>(null) }
     var showMagicPlaylist by remember { mutableStateOf(false) }
     var aiMixBase by remember { mutableStateOf<DailyMix?>(null) }
     val snackbarHostState = remember { SnackbarHostState() }
     val coroutineScope = rememberCoroutineScope()
     val context = androidx.compose.ui.platform.LocalContext.current
-    val uiPrefs = remember(context) { context.getSharedPreferences("logarhythm_ui", android.content.Context.MODE_PRIVATE) }
-    var guideDismissed by remember { mutableStateOf(uiPrefs.getBoolean("feature_guide_dismissed_v2", false)) }
-    var showFeatureGuide by remember { mutableStateOf(false) }
     val mediaStoreConsent = rememberMediaStoreConsent()
     val emptyMoodMessage = stringResource(R.string.mood_empty)
-    val sessionUnavailableMessage = stringResource(R.string.home_session_unavailable)
 
     val isLibraryEmpty = allTracks.isEmpty() && dailyMixes.isEmpty() && recentlyPlayed.isEmpty() && mostPlayed.isEmpty()
 
@@ -244,7 +243,7 @@ fun HomeScreen(
                 LazyColumn(
                     modifier = Modifier
                         .fillMaxSize()
-                        .widthIn(max = 840.dp)
+                        .widthIn(max = 1040.dp)
                         .testTag("home_content_list"),
                     contentPadding = PaddingValues(bottom = bottomPadding + 24.dp)
                 ) {
@@ -252,56 +251,111 @@ fun HomeScreen(
                         HomeHeader(
                             title = rightNow?.let { greetingFor(it.daypart) }
                                 ?: stringResource(id = R.string.home_title),
-                            onSearchClick = onNavigateToSearch
+                            onSearchClick = onNavigateToSearch,
+                            onDownloadClick = onNavigateToDownload,
+                            onStatsClick = if (totalTimeMs > 0L) onNavigateToStats else null,
+                            modifier = Modifier.staggeredEntrance(0)
                         )
                     }
 
                     rightNow?.takeIf { it.tracks.isNotEmpty() }?.let { now ->
                         item(key = "right_now") {
-                            RightNowCard(rightNow = now, onPlay = viewModel::playRightNow)
+                            RightNowCard(
+                                rightNow = now,
+                                onPlay = viewModel::playRightNow,
+                                modifier = Modifier.staggeredEntrance(1)
+                            )
                         }
                     }
 
                     if (allTracks.isNotEmpty()) {
                         item(key = "quick_start") {
-                        Column {
-                            Spacer(modifier = Modifier.height(6.dp))
-                            ListeningSessionCard(
-                                onStartSession = { minutes ->
-                                    viewModel.playListeningSession(minutes) {
-                                        coroutineScope.launch {
-                                            snackbarHostState.showSnackbar(sessionUnavailableMessage)
-                                        }
-                                    }
+                            HomeQuickActionsBar(
+                                onShuffleAll = viewModel::shuffleAllTracks,
+                                onDownloadClick = onNavigateToDownload,
+                                onCreatePlaylistClick = { showCreatePlaylistDialog = true },
+                                onAiMixClick = {
+                                    aiMixBase = null
+                                    showMagicPlaylist = true
                                 },
-                                onShuffleAll = viewModel::shuffleAllTracks
+                                modifier = Modifier.staggeredEntrance(2)
                             )
                         }
                     }
-                    }
 
-                    item(key = "download_banner") {
-                        HomeDownloadBanner(onClick = onNavigateToDownload)
-                    }
-
-                    item(key = "ai_banner") {
-                        HomeAiBanner(
-                            onClick = {
-                                aiMixBase = null
-                                showMagicPlaylist = true
-                            }
-                        )
-                    }
-
-                    if (!guideDismissed) {
-                        item(key = "feature_spotlight") {
-                            com.yasinjahantigh.logarhythm.ui.components.FeatureSpotlightBanner(
-                                onOpenGuide = { showFeatureGuide = true },
-                                onDismiss = {
-                                    guideDismissed = true
-                                    uiPrefs.edit().putBoolean("feature_guide_dismissed_v2", true).apply()
+                    // One shelf instead of three: recently played / new / on repeat share a row.
+                    if (activeShelf != null) {
+                        item(key = "jump_back_in") {
+                            Column(modifier = Modifier.staggeredEntrance(3)) {
+                                HomeSectionHeader(title = stringResource(R.string.home_jump_back_in))
+                                if (shelves.size > 1) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .horizontalScroll(rememberScrollState())
+                                            .padding(start = 16.dp, end = 16.dp, bottom = 12.dp),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        shelves.forEach { (kind, _) ->
+                                            FilterChip(
+                                                selected = kind == activeShelf.first,
+                                                onClick = { shelf = kind },
+                                                label = { Text(stringResource(kind.titleRes)) },
+                                                shape = CircleShape,
+                                                modifier = Modifier.testTag("home_shelf_${kind.name.lowercase()}")
+                                            )
+                                        }
+                                    }
                                 }
-                            )
+                                androidx.compose.animation.AnimatedContent(
+                                    targetState = activeShelf,
+                                    transitionSpec = {
+                                        androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(220))
+                                            .togetherWith(androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(160)))
+                                    },
+                                    label = "home_shelf_transition"
+                                ) { shelfPair ->
+                                    TrackShelf(
+                                        tracks = shelfPair.second,
+                                        tagPrefix = "home_shelf_${shelfPair.first.name.lowercase()}",
+                                        onPlay = { list, index -> viewModel.playTracks(list, index) }
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    if (dailyMixes.isNotEmpty()) {
+                        item(key = "daily_mixes") {
+                            Column {
+                                HomeSectionHeader(title = stringResource(R.string.home_daily_mixes))
+                                LazyRow(
+                                    contentPadding = PaddingValues(horizontal = 16.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                    modifier = Modifier.testTag("daily_mixes_row")
+                                ) {
+                                    items(dailyMixes, key = { it.id }) { mix ->
+                                        DailyMixCard(
+                                            mix = mix,
+                                            onClick = { selectedMixForDetail = mix },
+                                            onPlayMix = { viewModel.playTracks(mix.tracks, 0) }
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    becauseYouPlayed?.let { because ->
+                        item(key = "because_played") {
+                            Column {
+                                HomeSectionHeader(title = stringResource(R.string.home_because_played, because.seed.title))
+                                TrackShelf(
+                                    tracks = because.tracks,
+                                    tagPrefix = "because_played",
+                                    onPlay = { list, index -> viewModel.playTracks(list, index) }
+                                )
+                            }
                         }
                     }
 
@@ -340,6 +394,7 @@ fun HomeScreen(
                                         }
                                     }
                                 },
+                                onDismissRelease = viewModel::dismissRadarRelease,
                                 onMarkSeen = viewModel::markRadarSeen,
                                 onUnfollowArtist = viewModel::unfollowArtist,
                                 onSetRadarEnabled = viewModel::setReleaseRadarEnabled
@@ -347,118 +402,40 @@ fun HomeScreen(
                         }
                     }
 
-                    // One shelf instead of three: recently played / new / on repeat share a row.
-                    if (activeShelf != null) {
-                        item(key = "jump_back_in") {
+                    item(key = "moods") {
                         Column {
-                            HomeSectionHeader(title = stringResource(R.string.home_jump_back_in))
-                            if (shelves.size > 1) {
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .horizontalScroll(rememberScrollState())
-                                        .padding(start = 16.dp, end = 16.dp, bottom = 12.dp),
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    shelves.forEach { (kind, _) ->
-                                        FilterChip(
-                                            selected = kind == activeShelf.first,
-                                            onClick = { shelf = kind },
-                                            label = { Text(stringResource(kind.titleRes)) },
-                                            shape = CircleShape,
-                                            modifier = Modifier.testTag("home_shelf_${kind.name.lowercase()}")
-                                        )
-                                    }
-                                }
-                            }
-                            androidx.compose.animation.AnimatedContent(
-                                targetState = activeShelf,
-                                transitionSpec = {
-                                    androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(220))
-                                        .togetherWith(androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(160)))
-                                },
-                                label = "home_shelf_transition"
-                            ) { shelfPair ->
-                                TrackShelf(
-                                    tracks = shelfPair.second,
-                                    tagPrefix = "home_shelf_${shelfPair.first.name.lowercase()}",
-                                    onPlay = { list, index -> viewModel.playTracks(list, index) }
-                                )
-                            }
-                        }
-                    }
-                    }
-
-                    becauseYouPlayed?.let { because ->
-                        item(key = "because_played") {
-                        Column {
-                            HomeSectionHeader(title = stringResource(R.string.home_because_played, because.seed.title))
-                            TrackShelf(
-                                tracks = because.tracks,
-                                tagPrefix = "because_played",
-                                onPlay = { list, index -> viewModel.playTracks(list, index) }
-                            )
-                        }
-                    }
-                    }
-
-                    if (dailyMixes.isNotEmpty()) {
-                        item(key = "daily_mixes") {
-                        Column {
-                            HomeSectionHeader(title = stringResource(R.string.home_daily_mixes))
-                            LazyRow(
-                                contentPadding = PaddingValues(horizontal = 16.dp),
-                                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                                modifier = Modifier.testTag("daily_mixes_row")
+                            HomeSectionHeader(title = stringResource(R.string.home_mixes_title))
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .horizontalScroll(rememberScrollState())
+                                    .padding(horizontal = 16.dp),
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
                             ) {
-                                items(dailyMixes, key = { it.id }) { mix ->
-                                    DailyMixCard(
-                                        mix = mix,
-                                        onClick = { selectedMixForDetail = mix },
-                                        onPlayMix = { viewModel.playTracks(mix.tracks, 0) }
+                                TrackCuration.Mood.entries.forEach { mood ->
+                                    MoodChip(
+                                        mood = mood,
+                                        onClick = {
+                                            viewModel.playMoodPlaylist(mood) {
+                                                coroutineScope.launch {
+                                                    snackbarHostState.showSnackbar(emptyMoodMessage)
+                                                }
+                                            }
+                                        }
                                     )
                                 }
                             }
                         }
                     }
-                    }
-
-                    item(key = "moods") {
-                        Column {
-                        HomeSectionHeader(title = stringResource(R.string.home_mixes_title))
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .horizontalScroll(rememberScrollState())
-                                .padding(horizontal = 16.dp),
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            TrackCuration.Mood.entries.forEach { mood ->
-                                MoodChip(
-                                    mood = mood,
-                                    onClick = {
-                                        viewModel.playMoodPlaylist(mood) {
-                                            coroutineScope.launch {
-                                                snackbarHostState.showSnackbar(emptyMoodMessage)
-                                            }
-                                        }
-                                    }
-                                )
-                            }
-                        }
-                    }
-                    }
 
                     if (totalTimeMs > 0L) {
                         item(key = "stats") {
-                        Column {
-                            Spacer(modifier = Modifier.height(10.dp))
                             HomeStatsBanner(
                                 totalTimeMs = totalTimeMs,
-                                onClick = onNavigateToStats
+                                onClick = onNavigateToStats,
+                                modifier = Modifier.staggeredEntrance(6)
                             )
                         }
-                    }
                     }
                 }
             }
@@ -537,9 +514,16 @@ fun HomeScreen(
         )
     }
 
-    if (showFeatureGuide) {
-        com.yasinjahantigh.logarhythm.ui.components.FeatureGuideSheet(
-            onDismiss = { showFeatureGuide = false }
+    if (showCreatePlaylistDialog) {
+        CreatePlaylistDialog(
+            onDismiss = { showCreatePlaylistDialog = false },
+            onConfirm = { name ->
+                viewModel.createPlaylist(name)
+                showCreatePlaylistDialog = false
+                coroutineScope.launch {
+                    snackbarHostState.showSnackbar(context.getString(R.string.playlist_created_toast, name))
+                }
+            }
         )
     }
 

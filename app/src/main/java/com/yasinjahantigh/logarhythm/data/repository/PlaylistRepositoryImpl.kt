@@ -138,9 +138,10 @@ class PlaylistRepositoryImpl @Inject constructor(
     override suspend fun addFavorites(trackIds: List<String>) = withContext(Dispatchers.IO) {
         if (trackIds.isEmpty()) return@withContext
         ensureFavoritesPlaylist()
+        val existing = playlistDao.getPlaylistTrackIds(Playlist.FAVORITES_ID).toHashSet()
         var nextIndex = (playlistDao.getMaxOrderIndex(Playlist.FAVORITES_ID) ?: -1) + 1
         trackIds.distinct().forEach { trackId ->
-            if (!playlistDao.isTrackInPlaylist(Playlist.FAVORITES_ID, trackId).first()) {
+            if (existing.add(trackId)) {
                 playlistDao.insertPlaylistTrack(
                     PlaylistTrackEntity(
                         playlistId = Playlist.FAVORITES_ID,

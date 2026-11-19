@@ -30,6 +30,7 @@ import coil.compose.AsyncImage
 import com.yasinjahantigh.logarhythm.core.library.LibrarySync
 import com.yasinjahantigh.logarhythm.core.utils.ArtworkColorExtractor
 import com.yasinjahantigh.logarhythm.data.datastore.PreferencesManager
+import com.yasinjahantigh.logarhythm.data.datastore.ThemePreferences
 import com.yasinjahantigh.logarhythm.data.download.ShareLinkResolver
 import com.yasinjahantigh.logarhythm.data.update.UpdateManager
 import com.yasinjahantigh.logarhythm.feature.onboarding.OnboardingScreen
@@ -129,17 +130,19 @@ class MainActivity : ComponentActivity() {
             PreferencesManager.BOOTSTRAP_PREFS, Context.MODE_PRIVATE
         ).getBoolean(PreferencesManager.BOOTSTRAP_ONBOARDING_KEY, false)
         setContent {
-            val themeMode by preferencesManager.themeMode.collectAsStateWithLifecycle(initialValue = "system")
-            val themeStyle by preferencesManager.themeStyle.collectAsStateWithLifecycle(initialValue = "default")
-            val themePresetId by preferencesManager.themePresetId.collectAsStateWithLifecycle(
-                initialValue = com.yasinjahantigh.logarhythm.ui.theme.ThemePresets.DEFAULT_ID
+            val themePrefs by preferencesManager.themePreferences.collectAsStateWithLifecycle(
+                initialValue = ThemePreferences()
             )
-            val customAccent by preferencesManager.customAccentColor.collectAsStateWithLifecycle(initialValue = 0xFFF4B266)
-            val customBase by preferencesManager.customBase.collectAsStateWithLifecycle(initialValue = "dark")
-            val cornerRoundness by preferencesManager.cornerRoundness.collectAsStateWithLifecycle(initialValue = "standard")
-            val customBackgroundUri by preferencesManager.customBackgroundUri.collectAsStateWithLifecycle(initialValue = null)
-            val customBackgroundAlpha by preferencesManager.customBackgroundAlpha.collectAsStateWithLifecycle(initialValue = 0.35f)
-            val appFont by preferencesManager.appFont.collectAsStateWithLifecycle(initialValue = "default")
+            val themeMode = themePrefs.themeMode
+            val themeStyle = themePrefs.themeStyle
+            val themePresetId = themePrefs.themePresetId
+            val customAccent = themePrefs.customAccentColor
+            val customBase = themePrefs.customBase
+            val cornerRoundness = themePrefs.cornerRoundness
+            val customBackgroundUri = themePrefs.customBackgroundUri
+            val customBackgroundAlpha = themePrefs.customBackgroundAlpha
+            val appFont = themePrefs.appFont
+            val customFontPath = themePrefs.customFontPath
             val isOnboardingCompleted by preferencesManager.isOnboardingCompleted.collectAsStateWithLifecycle(
                 initialValue = onboardingBootstrap
             )
@@ -185,6 +188,7 @@ class MainActivity : ComponentActivity() {
                 customBase = customBase,
                 cornerRoundness = cornerRoundness,
                 appFont = appFont,
+                customFontPath = customFontPath,
                 seedArtworkColor = seedArtworkColor,
                 hasCustomBackground = customBackgroundUri != null && isOnboardingCompleted
             ) {

@@ -119,7 +119,9 @@ data class DownloadSearchResult(
     val trackCount: Int = 0,
     val collectionId: String? = null,
     val artistId: String? = null,
-    val hasReadyAudio: Boolean = true
+    val hasReadyAudio: Boolean = true,
+    val matchedSources: Set<DownloadSource> = setOf(source),
+    val sourceArtistIds: Map<DownloadSource, String> = emptyMap()
 )
 
 /** UI/worker view of a persisted download. */

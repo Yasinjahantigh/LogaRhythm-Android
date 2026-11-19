@@ -7,8 +7,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -27,8 +25,6 @@ import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import coil.size.Precision
 import com.yasinjahantigh.logarhythm.core.artwork.ArtworkVersionStore
-import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.map
 
 /** Deterministic warm gradients for artists, genres and songs without embedded artwork. */
 private val ArtPalette: List<Pair<Color, Color>> = listOf(
@@ -42,21 +38,34 @@ private val ArtPalette: List<Pair<Color, Color>> = listOf(
     Color(0xFFEE9B8A) to Color(0xFFA8412E)
 )
 
-/** The two colours that belong to [key]. */
-fun artColorsFor(key: String): Pair<Color, Color> {
-    val index = (key.lowercase().hashCode() and Int.MAX_VALUE) % ArtPalette.size
-    return ArtPalette[index]
+private val ArtBrushes: List<Brush> = ArtPalette.map { (start, end) ->
+    Brush.linearGradient(listOf(start, end))
 }
+
+private val DefaultArtShape = RoundedCornerShape(14.dp)
+
+private fun paletteIndexFor(key: String): Int {
+    var h = 0
+    for (i in key.indices) {
+        h = 31 * h + key[i].lowercaseChar().code
+    }
+    return (h and Int.MAX_VALUE) % ArtPalette.size
+}
+
+/** The two colours that belong to [key]. */
+fun artColorsFor(key: String): Pair<Color, Color> = ArtPalette[paletteIndexFor(key)]
 
 /** A diagonal gradient that belongs to [key]. */
-fun artBrushFor(key: String): Brush {
-    val (start, end) = artColorsFor(key)
-    return Brush.linearGradient(listOf(start, end))
-}
+fun artBrushFor(key: String): Brush = ArtBrushes[paletteIndexFor(key)]
 
 /** First readable character of [name], used as a monogram on generated artwork. */
-fun monogramOf(name: String): String =
-    name.trim().firstOrNull { it.isLetterOrDigit() }?.uppercaseChar()?.toString() ?: "♪"
+fun monogramOf(name: String): String {
+    for (i in name.indices) {
+        val c = name[i]
+        if (c.isLetterOrDigit()) return c.uppercaseChar().toString()
+    }
+    return "♪"
+}
 
 /** Draws the real artwork over its gradient fallback, so missing or broken images stay invisible. */
 @Composable
@@ -64,7 +73,7 @@ fun ArtworkImage(
     uri: String?,
     fallbackKey: String,
     modifier: Modifier = Modifier,
-    shape: Shape = RoundedCornerShape(14.dp),
+    shape: Shape = DefaultArtShape,
     icon: ImageVector? = null,
     glyphSize: TextUnit = 22.sp,
     contentDescription: String? = null
@@ -72,10 +81,7 @@ fun ArtworkImage(
     val brush = remember(fallbackKey) { artBrushFor(fallbackKey) }
     val monogram = remember(fallbackKey) { monogramOf(fallbackKey) }
     val context = LocalContext.current
-    val versionFlow = remember(uri) {
-        uri?.let { key -> ArtworkVersionStore.versions.map { it[key] ?: 0L }.distinctUntilChanged() }
-    }
-    val version = if (versionFlow != null) versionFlow.collectAsState(initial = 0L).value else 0L
+    val version = if (uri.isNullOrBlank()) 0L else ArtworkVersionStore.stateVersionOf(uri)
     val isLargeHero = glyphSize.value > 26f
 
     Box(
@@ -101,10 +107,11 @@ fun ArtworkImage(
         }
         if (!uri.isNullOrBlank()) {
             val request = remember(uri, version, isLargeHero) {
+                val cacheKey = "$uri#v$version"
                 ImageRequest.Builder(context)
                     .data(uri)
-                    .memoryCacheKey("$uri#v$version")
-                    .diskCacheKey("$uri#v$version")
+                    .memoryCacheKey(cacheKey)
+                    .diskCacheKey(cacheKey)
                     .allowRgb565(!isLargeHero)
                     .precision(Precision.INEXACT)
                     .crossfade(isLargeHero)

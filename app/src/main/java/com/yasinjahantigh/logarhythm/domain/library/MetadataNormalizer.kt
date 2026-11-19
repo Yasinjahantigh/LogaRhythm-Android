@@ -2,6 +2,7 @@ package com.yasinjahantigh.logarhythm.domain.library
 
 import java.text.Normalizer
 import java.util.Locale
+import java.util.concurrent.ConcurrentHashMap
 
 /**
  * Pure JVM helpers for cleaning and unifying bilingual (English + Persian/Arabic)
@@ -19,6 +20,11 @@ object MetadataNormalizer {
     private val persianScriptChar = Regex("""[\u0600-\u06FF\u0750-\u077F\uFB50-\uFDFF\uFE70-\uFEFF]""")
     private val id3v1GenrePattern = Regex("""^\(?(\d{1,3})\)?(?:[\s\-:]*(.+))?$""")
     private val genreSplitPattern = Regex("""[,;|/]+""")
+
+    private const val MAX_CACHE_SIZE = 4096
+    private val normCache = ConcurrentHashMap<String, String>()
+    private val genreGroupCache = ConcurrentHashMap<String, String>()
+    private val canonicalGenreCache = ConcurrentHashMap<String, String>()
 
     private val commonPlaceholders = setOf(
         "<unknown>",
@@ -50,7 +56,7 @@ object MetadataNormalizer {
         "متفرقه"
     )
 
-    // Standard ID3v1 / Winamp genre table (codes 0..147 cover virtually all legacy MP3 tags).
+    // Standard ID3v1 / Winamp genre table (codes 0..191 cover virtually all legacy MP3 tags).
     private val id3v1Genres: Map<Int, String> = mapOf(
         0 to "Blues",
         1 to "Classic Rock",
@@ -317,7 +323,7 @@ object MetadataNormalizer {
         "world music" to "World"
     )
 
-    private val genreFamilyRules: List<Pair<String, List<String>>> = listOf(
+    private val rawGenreFamilyRules: List<Pair<String, List<String>>> = listOf(
         "metal" to listOf("metal", "متال", "هوی متال", "راک سنگین"),
         "rap" to listOf("rap", "hip hop", "hiphop", "trap", "drill", "boom bap", "grime", "رپ", "هیپ هاپ", "ترپ", "دریل", "گنگ"),
         "rnb" to listOf("r b", "rnb", "soul", "neo soul", "motown", "سول", "آر اند بی", "ار اند بی"),
@@ -339,26 +345,93 @@ object MetadataNormalizer {
         "pop" to listOf("pop", "k pop", "j pop", "funk", "پاپ", "فیوژن پاپ")
     )
 
+    /** Pre-normalized genre family keywords computed once instead of ~200 NFD+regex passes per call. */
+    private val normalizedGenreFamilyRules: List<Pair<String, List<String>>> by lazy {
+        rawGenreFamilyRules.map { (family, keywords) ->
+            family to keywords.map { computeNormalizedComparison(it) }.filter { it.isNotEmpty() }.distinct()
+        }
+    }
+
     /**
      * Normalizes display strings without altering valid script characters:
      * unifies Arabic `ك`/`ي`/`ى` -> Persian `ک`/`ی`, removes invisible bidi/zero-width
      * noise, cleans edge ZWNJs, decodes common HTML entities, and collapses spaces.
      */
     fun cleanDisplayText(text: String): String {
-        if (text.isEmpty()) return ""
+        val len = text.length
+        if (len == 0) return ""
+
+        // Fast path for already-clean ASCII strings (covers the vast majority of local audio tags).
+        var isSimpleCleanAscii = true
+        var prevSpace = false
+        for (i in 0 until len) {
+            val ch = text[i]
+            val code = ch.code
+            if (code >= 0x80 || ch == '&') {
+                isSimpleCleanAscii = false
+                break
+            }
+            if (ch <= ' ') {
+                if (ch != ' ' || i == 0 || i == len - 1 || prevSpace) {
+                    isSimpleCleanAscii = false
+                    break
+                }
+                prevSpace = true
+            } else {
+                prevSpace = false
+            }
+        }
+        if (isSimpleCleanAscii) return text
+
         var s = unifyPersianScript(text)
-            .replace("&amp;", "&")
-            .replace("&quot;", "\"")
-            .replace("&#39;", "'")
-            .replace("&apos;", "'")
-            .replace("&ndash;", "-")
-            .replace("&mdash;", "-")
-            .replace("&nbsp;", " ")
-        s = s.replace(invisibleMarks, "")
-        s = s.replace(multiZwnj, "\u200C")
-        s = s.replace(zwnjSpaceEdge, " ")
-        s = s.replace(whitespace, " ").trim().trim('\u200C', ' ')
-        return s
+        if (s.indexOf('&') >= 0) {
+            s = s.replace("&amp;", "&")
+                .replace("&quot;", "\"")
+                .replace("&#39;", "'")
+                .replace("&apos;", "'")
+                .replace("&ndash;", "-")
+                .replace("&mdash;", "-")
+                .replace("&nbsp;", " ")
+        }
+        var hasNonAscii = false
+        for (i in 0 until s.length) {
+            if (s[i].code >= 0x80) {
+                hasNonAscii = true
+                break
+            }
+        }
+        if (hasNonAscii) {
+            s = s.replace(invisibleMarks, "")
+            if (s.indexOf('\u200C') >= 0) {
+                s = s.replace(multiZwnj, "\u200C")
+                s = s.replace(zwnjSpaceEdge, " ")
+            }
+        }
+        return collapseAsciiWhitespace(s).trim('\u200C', ' ')
+    }
+
+    private fun collapseAsciiWhitespace(s: String): String {
+        val len = s.length
+        if (len == 0) return ""
+        val sb = StringBuilder(len)
+        var inSpace = true
+        for (i in 0 until len) {
+            val ch = s[i]
+            if (ch.isWhitespace()) {
+                if (!inSpace) {
+                    sb.append(' ')
+                    inSpace = true
+                }
+            } else {
+                sb.append(ch)
+                inSpace = false
+            }
+        }
+        val outLen = sb.length
+        if (outLen > 0 && sb[outLen - 1] == ' ') {
+            sb.setLength(outLen - 1)
+        }
+        return sb.toString()
     }
 
     /**
@@ -367,38 +440,101 @@ object MetadataNormalizer {
      * replaces punctuation with single spaces.
      */
     fun normalizeForComparison(value: String): String {
+        if (value.isEmpty()) return ""
+        normCache[value]?.let { return it }
+        val result = computeNormalizedComparison(value)
+        if (normCache.size >= MAX_CACHE_SIZE) normCache.clear()
+        normCache[value] = result
+        return result
+    }
+
+    private fun computeNormalizedComparison(value: String): String {
+        val len = value.length
+        if (len == 0) return ""
+
+        // Fast single-pass ASCII path (no NFD normalization, no Regex engine).
+        var isAsciiNoEntity = true
+        for (i in 0 until len) {
+            val ch = value[i]
+            if (ch.code >= 0x80 || ch == '&') {
+                isAsciiNoEntity = false
+                break
+            }
+        }
+        if (isAsciiNoEntity) {
+            val sb = StringBuilder(len)
+            var prevSpace = true
+            for (i in 0 until len) {
+                val ch = value[i]
+                when {
+                    ch in 'a'..'z' || ch in '0'..'9' -> {
+                        sb.append(ch)
+                        prevSpace = false
+                    }
+                    ch in 'A'..'Z' -> {
+                        sb.append((ch.code + 32).toChar())
+                        prevSpace = false
+                    }
+                    else -> {
+                        if (!prevSpace) {
+                            sb.append(' ')
+                            prevSpace = true
+                        }
+                    }
+                }
+            }
+            val outLen = sb.length
+            if (outLen > 0 && sb[outLen - 1] == ' ') sb.setLength(outLen - 1)
+            return sb.toString()
+        }
+
         if (value.isBlank()) return ""
-        var s = cleanDisplayText(value)
-            .replace('\u0629', '\u0647') // ة -> ه
-            .replace('\u0624', '\u0648') // ؤ -> و
-            .replace('\u06C0', '\u0647') // ۀ -> ه
-            .replace('\u0623', '\u0627') // أ -> ا
-            .replace('\u0625', '\u0627') // إ -> ا
-            .replace('\u0622', '\u0627') // آ -> ا
-            .replace('\u0671', '\u0627') // ٱ -> ا
-            .replace(arabicDiacritics, "")
-            .replace('\u200C', ' ')
-        s = asciiDigits(s)
-        s = Normalizer.normalize(s, Normalizer.Form.NFD).replace(combiningMarks, "")
-        return s.lowercase(Locale.ROOT)
+        val cleaned = cleanDisplayText(value)
+        val sb = StringBuilder(cleaned.length)
+        for (i in 0 until cleaned.length) {
+            val ch = cleaned[i]
+            when (ch) {
+                '\u0629', '\u06C0' -> sb.append('\u0647') // ة, ۀ -> ه
+                '\u0624' -> sb.append('\u0648') // ؤ -> و
+                '\u0623', '\u0625', '\u0622', '\u0671' -> sb.append('\u0627') // أ, إ, آ, ٱ -> ا
+                '\u200C' -> sb.append(' ')
+                in '\u06F0'..'\u06F9' -> sb.append(('0'.code + (ch.code - '\u06F0'.code)).toChar())
+                in '\u0660'..'\u0669' -> sb.append(('0'.code + (ch.code - '\u0660'.code)).toChar())
+                in '\u064B'..'\u065F', '\u0670', in '\u06D6'..'\u06ED', '\u0640' -> { /* strip Arabic diacritics */ }
+                else -> sb.append(ch)
+            }
+        }
+        val nfd = Normalizer.normalize(sb.toString(), Normalizer.Form.NFD).replace(combiningMarks, "")
+        return nfd.lowercase(Locale.ROOT)
             .replace(nonWordChars, " ")
             .replace(whitespace, " ")
             .trim()
     }
 
-    fun containsPersian(text: String): Boolean = persianScriptChar.containsMatchIn(text)
+    fun containsPersian(text: String): Boolean {
+        for (i in 0 until text.length) {
+            val c = text[i].code
+            if ((c in 0x0600..0x06FF) || (c in 0x0750..0x077F) || (c in 0xFB50..0xFDFF) || (c in 0xFE70..0xFEFF)) {
+                return true
+            }
+        }
+        return false
+    }
 
     fun isPlaceholderField(value: String?): Boolean {
-        val norm = normalizeForComparison(value.orEmpty())
-        val rawLower = cleanDisplayText(value.orEmpty()).lowercase(Locale.ROOT)
-        return norm.isEmpty() || rawLower in commonPlaceholders || norm in commonPlaceholders
+        if (value.isNullOrBlank()) return true
+        val norm = normalizeForComparison(value)
+        if (norm.isEmpty() || norm in commonPlaceholders) return true
+        val rawLower = cleanDisplayText(value).lowercase(Locale.ROOT)
+        return rawLower in commonPlaceholders
     }
 
     fun isPlaceholderGenre(value: String?): Boolean {
-        if (isPlaceholderField(value)) return true
-        val norm = normalizeForComparison(value.orEmpty())
-        val rawLower = cleanDisplayText(value.orEmpty()).lowercase(Locale.ROOT)
-        return norm in extraGenrePlaceholders || rawLower in extraGenrePlaceholders
+        if (value.isNullOrBlank()) return true
+        val norm = normalizeForComparison(value)
+        if (norm.isEmpty() || norm in commonPlaceholders || norm in extraGenrePlaceholders) return true
+        val rawLower = cleanDisplayText(value).lowercase(Locale.ROOT)
+        return rawLower in commonPlaceholders || rawLower in extraGenrePlaceholders
     }
 
     /**
@@ -407,34 +543,48 @@ object MetadataNormalizer {
      * preserving readable Persian genre labels.
      */
     fun canonicalizeGenre(raw: String?, fallback: String = "Unknown Genre"): String {
-        val cleaned = cleanDisplayText(raw.orEmpty())
-        if (cleaned.isEmpty() || isPlaceholderGenre(cleaned)) return fallback
+        if (raw.isNullOrBlank()) return fallback
+        val cached = canonicalGenreCache[raw]
+        if (cached != null) return if (cached.isEmpty()) fallback else cached
 
-        val id3Match = id3v1GenrePattern.matchEntire(cleaned)
-        if (id3Match != null) {
-            val code = id3Match.groupValues[1].toIntOrNull()
-            val tail = cleanDisplayText(id3Match.groupValues[2])
-            if (tail.isNotEmpty() && !isPlaceholderGenre(tail)) {
-                return canonicalizeSingleOrListGenre(tail, fallback)
-            }
-            val mapped = code?.let { id3v1Genres[it] }
-            if (mapped != null && !isPlaceholderGenre(mapped)) {
-                return mapped
-            }
-            return fallback
-        }
-
-        return canonicalizeSingleOrListGenre(cleaned, fallback)
+        val resolved = computeCanonicalGenre(raw)
+        if (canonicalGenreCache.size >= MAX_CACHE_SIZE) canonicalGenreCache.clear()
+        canonicalGenreCache[raw] = resolved
+        return if (resolved.isEmpty()) fallback else resolved
     }
 
-    private fun canonicalizeSingleOrListGenre(cleaned: String, fallback: String): String {
+    private fun computeCanonicalGenre(raw: String): String {
+        val cleaned = cleanDisplayText(raw)
+        if (cleaned.isEmpty() || isPlaceholderGenre(cleaned)) return ""
+
+        val first = cleaned[0]
+        if (first == '(' || first in '0'..'9') {
+            val id3Match = id3v1GenrePattern.matchEntire(cleaned)
+            if (id3Match != null) {
+                val code = id3Match.groupValues[1].toIntOrNull()
+                val tail = cleanDisplayText(id3Match.groupValues[2])
+                if (tail.isNotEmpty() && !isPlaceholderGenre(tail)) {
+                    return canonicalizeSingleOrListGenre(tail)
+                }
+                val mapped = code?.let { id3v1Genres[it] }
+                if (mapped != null && !isPlaceholderGenre(mapped)) {
+                    return mapped
+                }
+                return ""
+            }
+        }
+
+        return canonicalizeSingleOrListGenre(cleaned)
+    }
+
+    private fun canonicalizeSingleOrListGenre(cleaned: String): String {
         val normFull = normalizeForComparison(cleaned)
         latinDisplayCanonical[normFull]?.let { return it }
 
         val parts = genreSplitPattern.split(cleaned)
             .map { cleanDisplayText(it) }
             .filter { it.isNotEmpty() && !isPlaceholderGenre(it) }
-        if (parts.isEmpty()) return fallback
+        if (parts.isEmpty()) return ""
 
         if (parts.size == 1) {
             val single = parts.first()
@@ -475,19 +625,24 @@ object MetadataNormalizer {
      * Returns `""` for unknown/placeholder genres.
      */
     fun genreGroupKey(raw: String?): String {
+        if (raw.isNullOrBlank()) return ""
+        genreGroupCache[raw]?.let { return it }
+
+        val result = computeGenreGroupKey(raw)
+        if (genreGroupCache.size >= MAX_CACHE_SIZE) genreGroupCache.clear()
+        genreGroupCache[raw] = result
+        return result
+    }
+
+    private fun computeGenreGroupKey(raw: String): String {
         val canonical = canonicalizeGenre(raw, fallback = "")
         if (canonical.isEmpty()) return ""
         val norm = normalizeForComparison(canonical)
         if (norm.isEmpty()) return ""
 
-        for ((family, keywords) in genreFamilyRules) {
-            for (keyword in keywords) {
-                val kwNorm = normalizeForComparison(keyword)
-                if (norm == kwNorm ||
-                    norm.startsWith("$kwNorm ") ||
-                    norm.endsWith(" $kwNorm") ||
-                    norm.contains(" $kwNorm ")
-                ) {
+        for ((family, keywords) in normalizedGenreFamilyRules) {
+            for (kwNorm in keywords) {
+                if (matchesWholeTokenOrPhrase(norm, kwNorm)) {
                     return family
                 }
             }
@@ -495,27 +650,40 @@ object MetadataNormalizer {
         return norm
     }
 
+    private fun matchesWholeTokenOrPhrase(norm: String, kwNorm: String): Boolean {
+        if (norm == kwNorm) return true
+        val idx = norm.indexOf(kwNorm)
+        if (idx < 0) return false
+        var pos = idx
+        val kwLen = kwNorm.length
+        val normLen = norm.length
+        while (pos >= 0) {
+            val leftOk = pos == 0 || norm[pos - 1] == ' '
+            val rightPos = pos + kwLen
+            val rightOk = rightPos == normLen || norm[rightPos] == ' '
+            if (leftOk && rightOk) return true
+            pos = norm.indexOf(kwNorm, pos + 1)
+        }
+        return false
+    }
+
     private fun unifyPersianScript(text: String): String {
+        var needsChange = false
+        for (i in 0 until text.length) {
+            val ch = text[i]
+            if (ch == '\u0643' || ch == '\u064A' || ch == '\u0649') {
+                needsChange = true
+                break
+            }
+        }
+        if (!needsChange) return text
         val sb = StringBuilder(text.length)
-        for (ch in text) {
+        for (i in 0 until text.length) {
+            val ch = text[i]
             sb.append(
                 when (ch) {
                     '\u0643' -> '\u06A9' // ك -> ک
                     '\u064A', '\u0649' -> '\u06CC' // ي, ى -> ی
-                    else -> ch
-                }
-            )
-        }
-        return sb.toString()
-    }
-
-    private fun asciiDigits(text: String): String {
-        val sb = StringBuilder(text.length)
-        for (ch in text) {
-            sb.append(
-                when (ch) {
-                    in '\u06F0'..'\u06F9' -> ('0'.code + (ch.code - '\u06F0'.code)).toChar()
-                    in '\u0660'..'\u0669' -> ('0'.code + (ch.code - '\u0660'.code)).toChar()
                     else -> ch
                 }
             )

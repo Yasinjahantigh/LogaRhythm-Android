@@ -196,32 +196,35 @@ fun PlaybackTimeline(
             ) {
                 Text(
                     text = TimeUtils.formatDuration(shownMs),
-                    style = MaterialTheme.typography.labelLarge,
+                    style = MaterialTheme.typography.labelMedium,
                     color = if (dragging) active else MaterialTheme.colorScheme.onSurfaceVariant,
                     fontWeight = if (dragging) FontWeight.Bold else FontWeight.Medium,
                     modifier = Modifier.padding(start = 2.dp)
                 )
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                     IconButton(
                         onClick = onRewind10,
-                        modifier = Modifier.size(40.dp).testTag("player_rewind_10_button")
+                        modifier = Modifier.size(48.dp).testTag("player_rewind_10_button")
                     ) {
                         Icon(
                             imageVector = Icons.Default.Replay10,
                             contentDescription = stringResource(R.string.cd_rewind_10),
                             tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(24.dp)
+                            modifier = Modifier.size(22.dp)
                         )
                     }
                     IconButton(
                         onClick = onForward10,
-                        modifier = Modifier.size(40.dp).testTag("player_forward_10_button")
+                        modifier = Modifier.size(48.dp).testTag("player_forward_10_button")
                     ) {
                         Icon(
                             imageVector = Icons.Default.Forward10,
                             contentDescription = stringResource(R.string.cd_forward_10),
                             tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(24.dp)
+                            modifier = Modifier.size(22.dp)
                         )
                     }
                 }
@@ -231,11 +234,11 @@ fun PlaybackTimeline(
                     } else {
                         TimeUtils.formatDuration(durationMs)
                     },
-                    style = MaterialTheme.typography.labelLarge,
+                    style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier
                         .clickable(onClick = onRemainingTimeClick)
-                        .padding(end = 2.dp)
+                        .padding(end = 2.dp, top = 8.dp, bottom = 8.dp)
                 )
             }
         }

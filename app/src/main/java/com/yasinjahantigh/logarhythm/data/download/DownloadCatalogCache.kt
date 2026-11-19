@@ -2,6 +2,7 @@ package com.yasinjahantigh.logarhythm.data.download
 
 import com.yasinjahantigh.logarhythm.data.room.DownloadCatalogDao
 import com.yasinjahantigh.logarhythm.data.room.DownloadCatalogEntity
+import com.yasinjahantigh.logarhythm.domain.download.ArtistMerger
 import com.yasinjahantigh.logarhythm.domain.model.DownloadResultKind
 import com.yasinjahantigh.logarhythm.domain.model.DownloadSearchCategory
 import com.yasinjahantigh.logarhythm.domain.model.DownloadSearchResult
@@ -138,8 +139,12 @@ class DownloadCatalogCache @Inject constructor(
     }
 
     fun collectionKey(item: DownloadSearchResult): String {
-        val type = if (item.kind == DownloadResultKind.ARTIST) "artist" else "album"
-        return "$type:${item.source.raw}:${item.id}"
+        return if (item.kind == DownloadResultKind.ARTIST) {
+            val canonical = ArtistMerger.getCanonicalArtistKey(item.title)
+            "artist:unified:$canonical"
+        } else {
+            "album:${item.source.raw}:${item.id}"
+        }
     }
 
     private fun searchKey(
@@ -168,6 +173,10 @@ class DownloadCatalogCache @Inject constructor(
         .put("collectionId", collectionId ?: JSONObject.NULL)
         .put("artistId", artistId ?: JSONObject.NULL)
         .put("hasReadyAudio", hasReadyAudio)
+        .put("matchedSources", JSONArray(matchedSources.map { it.raw }))
+        .put("sourceArtistIds", JSONObject().apply {
+            sourceArtistIds.forEach { (src, aid) -> put(src.raw, aid) }
+        })
 
     private fun JSONArray.toResults(): List<DownloadSearchResult> =
         (0 until length()).mapNotNull { optJSONObject(it)?.toResult() }
@@ -177,11 +186,32 @@ class DownloadCatalogCache @Inject constructor(
         val title = optString("title").takeIf { it.isNotBlank() } ?: return null
         val kind = runCatching { DownloadResultKind.valueOf(optString("kind")) }
             .getOrDefault(DownloadResultKind.TRACK)
+        val src = DownloadSource.fromRaw(optString("source"))
+
+        val matchedSourcesRaw = optJSONArray("matchedSources")
+        val matchedSources = if (matchedSourcesRaw != null && matchedSourcesRaw.length() > 0) {
+            (0 until matchedSourcesRaw.length()).mapNotNull { idx ->
+                val r = matchedSourcesRaw.optString(idx)
+                if (!r.isNullOrBlank()) DownloadSource.fromRaw(r) else null
+            }.toSet()
+        } else {
+            setOf(src)
+        }
+
+        val sourceArtistIdsJson = optJSONObject("sourceArtistIds")
+        val sourceArtistIds = mutableMapOf<DownloadSource, String>()
+        sourceArtistIdsJson?.keys()?.forEach { k ->
+            val v = sourceArtistIdsJson.optString(k)
+            if (!v.isNullOrBlank()) {
+                sourceArtistIds[DownloadSource.fromRaw(k)] = v
+            }
+        }
+
         return DownloadSearchResult(
             id = id,
             title = title,
             artist = optString("artist"),
-            source = DownloadSource.fromRaw(optString("source")),
+            source = src,
             url = optString("url"),
             durationMs = optLong("durationMs", 0L),
             thumbnailUrl = optString("thumbnailUrl").takeIf { it.isNotBlank() && it != "null" },
@@ -192,7 +222,9 @@ class DownloadCatalogCache @Inject constructor(
             trackCount = optInt("trackCount", 0),
             collectionId = optString("collectionId").takeIf { it.isNotBlank() && it != "null" },
             artistId = optString("artistId").takeIf { it.isNotBlank() && it != "null" },
-            hasReadyAudio = optBoolean("hasReadyAudio", true)
+            hasReadyAudio = optBoolean("hasReadyAudio", true),
+            matchedSources = matchedSources,
+            sourceArtistIds = sourceArtistIds
         )
     }
 }

@@ -32,7 +32,7 @@ fun getVersionInfo(): Pair<Int, String> {
     val name = "$major.$minor.$patch"
     Pair(code, name)
   } else {
-    Pair(10901, "1.9.1")
+    Pair(20003, "2.0.3")
   }
 }
 
@@ -49,13 +49,13 @@ val installEndpoint = System.getenv("INSTALL_ENDPOINT")?.trim()
 
 android {
   namespace = "com.yasinjahantigh.logarhythm"
-  compileSdk = 36
-  buildToolsVersion = "36.1.0"
+  compileSdk = 35
+  buildToolsVersion = "35.0.0"
 
   defaultConfig {
     applicationId = "com.yasinjahantigh.logarhythm"
     minSdk = 26
-    targetSdk = 36
+    targetSdk = 35
     versionCode = appVersionCode
     versionName = appVersionName
     buildConfigField("String", "INSTALL_ENDPOINT", "\"$installEndpoint\"")
@@ -74,6 +74,12 @@ android {
   }
 
   signingConfigs {
+    create("debugConfig") {
+      storeFile = file("${rootDir}/debug.keystore")
+      storePassword = "android"
+      keyAlias = "androiddebugkey"
+      keyPassword = "android"
+    }
     if (hasSigningSecrets) {
       create("release") {
         storeFile = File(ksPath!!)
@@ -95,6 +101,7 @@ android {
     debug {
       applicationIdSuffix = ".debug"
       versionNameSuffix = "-debug"
+      signingConfig = signingConfigs.getByName("debugConfig")
     }
   }
   compileOptions {
@@ -136,7 +143,7 @@ android {
   }
   splits {
     abi {
-      isEnable = true
+      isEnable = gradle.startParameter.taskNames.any { it.contains("Release", ignoreCase = true) }
       reset()
       include("armeabi-v7a", "arm64-v8a", "x86", "x86_64")
       isUniversalApk = true
@@ -151,6 +158,10 @@ android {
 
 ksp {
   arg("room.schemaLocation", "$projectDir/schemas")
+}
+
+composeCompiler {
+  featureFlags.add(org.jetbrains.kotlin.compose.compiler.gradle.ComposeFeatureFlag.StrongSkipping)
 }
 
 dependencies {

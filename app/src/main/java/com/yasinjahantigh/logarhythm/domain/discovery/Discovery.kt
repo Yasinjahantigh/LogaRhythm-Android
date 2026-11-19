@@ -52,18 +52,25 @@ object Discovery {
         val daypart = daypartOf(hour)
         if (limit <= 0 || library.isEmpty()) return RightNow(daypart, emptyList(), 0)
 
-        val habitual = library.distinctBy { it.id }
-            .asSequence()
-            .filter { !profile.isDisliked(it.id) && profile.affinity(it.id) >= 0.0 }
-            .map { it to profile.hourWeight(it.id, hour) }
-            .filter { (_, weight) -> weight >= MIN_HABIT_WEIGHT }
-            .sortedByDescending { (track, weight) ->
-                weight * (1.0 + profile.affinity(track.id).coerceIn(0.0, 4.0) * 0.1 +
-                    profile.tasteMatchScore(track).coerceIn(0.0, 3.0) * 0.08) -
-                    profile.sessionPenalty(track) * 0.5
-            }
-            .map { it.first }
-            .toList()
+        val seenIds = HashSet<String>(library.size)
+        val habitualScored = ArrayList<Pair<Track, Double>>()
+        for (i in library.indices) {
+            val track = library[i]
+            val id = track.id
+            if (!seenIds.add(id)) continue
+            val aff = profile.affinity(id)
+            if (aff < 0.0 || profile.isDisliked(id)) continue
+            val weight = profile.hourWeight(id, hour)
+            if (weight < MIN_HABIT_WEIGHT) continue
+            val sessionPen = profile.sessionPenalty(track)
+            val tasteMatch = profile.tasteMatchScoreWithPrecomputed(track, dna = null, sessionPen = sessionPen)
+            val score = weight * (1.0 + aff.coerceIn(0.0, 4.0) * 0.1 +
+                tasteMatch.coerceIn(0.0, 3.0) * 0.08) -
+                sessionPen * 0.5
+            habitualScored.add(track to score)
+        }
+        habitualScored.sortByDescending { it.second }
+        val habitual = habitualScored.map { it.first }
         val habitualCapped = capPerArtist(habitual, perArtist = 2).take(limit)
 
         val taken = habitualCapped.mapTo(HashSet()) { it.id }
@@ -107,15 +114,23 @@ object Discovery {
     ): BecauseYouPlayed? {
         if (limit <= 0 || library.size < 3) return null
         val byId = library.associateBy { it.id }
-        val recentLiked = events.asSequence()
-            .filter { !it.skipped }
-            .sortedByDescending { it.timestamp }
-            .mapNotNull { byId[it.trackId] }
-            .filter { profile.affinity(it.id) > 0.0 || profile.tasteMatchScore(it) > 0.5 }
-            .toList()
-        val seed = recentLiked.firstOrNull { profile.sessionPenalty(it) < 0.7 }
-            ?: recentLiked.firstOrNull()
-            ?: return null
+        val sortedCompleted = events.filter { !it.skipped }.sortedByDescending { it.timestamp }
+        val checkedIds = HashSet<String>()
+        var preferredSeed: Track? = null
+        var fallbackSeed: Track? = null
+        for (i in sortedCompleted.indices) {
+            val trackId = sortedCompleted[i].trackId
+            if (!checkedIds.add(trackId)) continue
+            val track = byId[trackId] ?: continue
+            val liked = profile.affinity(trackId) > 0.0 || profile.tasteMatchScore(track) > 0.5
+            if (!liked) continue
+            if (fallbackSeed == null) fallbackSeed = track
+            if (profile.sessionPenalty(track) < 0.7) {
+                preferredSeed = track
+                break
+            }
+        }
+        val seed = preferredSeed ?: fallbackSeed ?: return null
         val picks = TrackCuration.recommendNextTracks(seed, library, limit = limit, profile = profile)
         return if (picks.size >= MIN_SHELF_SIZE) BecauseYouPlayed(seed, picks) else null
     }

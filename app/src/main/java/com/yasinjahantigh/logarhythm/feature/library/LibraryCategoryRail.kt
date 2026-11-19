@@ -1,20 +1,18 @@
 package com.yasinjahantigh.logarhythm.feature.library
 
 import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -31,11 +29,8 @@ import com.yasinjahantigh.logarhythm.ui.components.formatCount
 import com.yasinjahantigh.logarhythm.ui.designsystem.bounceOnPress
 
 /**
- * The library's category switcher.
- *
- * Instead of anonymous chips, every category is a small card that shows its icon and how much it
- * holds ("Albums · 98"), so the rail also works as an at-a-glance overview. The selected card
- * fills with the accent colour; the rest stay quiet.
+ * The library's category switcher: compact single-line pills with inline counts so most tabs
+ * remain visible at once and vertical list space stays generous.
  */
 @Composable
 fun LibraryCategoryRail(
@@ -46,7 +41,7 @@ fun LibraryCategoryRail(
 ) {
     LazyRow(
         modifier = modifier.testTag("library_tabs"),
-        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp),
+        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         items(items = LibraryTab.entries, key = { it.name }) { tab ->
@@ -76,48 +71,43 @@ private fun CategoryCard(
         targetValue = if (isSelected) scheme.onPrimary else scheme.onSurface,
         label = "category_content"
     )
-    val scale by animateFloatAsState(
-        targetValue = if (isSelected) 1.03f else 1f,
-        animationSpec = spring(dampingRatio = 0.62f, stiffness = 360f),
-        label = "category_scale"
-    )
     val interactionSource = androidx.compose.runtime.remember { MutableInteractionSource() }
 
     Surface(
         onClick = onClick,
         interactionSource = interactionSource,
-        shape = RoundedCornerShape(20.dp),
+        shape = CircleShape,
         color = container,
         contentColor = content,
         modifier = Modifier
+            .defaultMinSize(minHeight = 44.dp)
             .bounceOnPress(interactionSource, 0.94f)
             .testTag("library_tab_${tab.name}")
     ) {
         Row(
-            modifier = Modifier.padding(start = 14.dp, end = 16.dp, top = 9.dp, bottom = 9.dp),
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Icon(
                 imageVector = tab.icon,
                 contentDescription = null,
-                modifier = Modifier.size(20.dp)
+                modifier = Modifier.size(18.dp)
             )
-            Spacer(modifier = Modifier.width(10.dp))
-            Column {
+            Spacer(modifier = Modifier.width(6.dp))
+            Text(
+                text = stringResource(tab.titleRes),
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.SemiBold,
+                maxLines = 1
+            )
+            if (count != null && count > 0) {
+                Spacer(modifier = Modifier.width(6.dp))
                 Text(
-                    text = stringResource(tab.titleRes),
-                    style = MaterialTheme.typography.labelLarge,
-                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.SemiBold,
+                    text = formatCount(count),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = content.copy(alpha = if (isSelected) 0.85f else 0.68f),
                     maxLines = 1
                 )
-                if (count != null) {
-                    Text(
-                        text = formatCount(count),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = content.copy(alpha = 0.72f),
-                        maxLines = 1
-                    )
-                }
             }
         }
     }

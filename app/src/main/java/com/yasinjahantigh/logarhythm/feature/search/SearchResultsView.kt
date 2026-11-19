@@ -17,11 +17,13 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -50,6 +52,7 @@ fun SearchResultsView(
     onArtistClick: (String) -> Unit,
     modifier: Modifier = Modifier,
     onClearQuery: () -> Unit = {},
+    onSearchOnline: ((String) -> Unit)? = null,
     onTrackMenuClick: ((Track) -> Unit)? = null,
     onTrackPlayNext: ((Track) -> Unit)? = null
 ) {
@@ -69,14 +72,37 @@ fun SearchResultsView(
                 Text(
                     text = stringResource(R.string.search_no_results, query),
                     style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onSurface
+                    color = MaterialTheme.colorScheme.onSurface,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
                 )
                 Text(
-                    text = stringResource(R.string.search_no_results_hint),
+                    text = stringResource(
+                        if (onSearchOnline != null) R.string.search_online_download_hint else R.string.search_no_results_hint
+                    ),
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
                 )
-                Button(onClick = onClearQuery, modifier = Modifier.testTag("search_clear_from_empty_button")) {
+                if (onSearchOnline != null && query.isNotBlank()) {
+                    Button(
+                        onClick = { onSearchOnline(query.trim()) },
+                        shape = RoundedCornerShape(16.dp),
+                        modifier = Modifier.testTag("search_online_download_button")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.CloudDownload,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(stringResource(R.string.search_online_download_cta, query.trim()))
+                    }
+                }
+                OutlinedButton(
+                    onClick = onClearQuery,
+                    shape = RoundedCornerShape(16.dp),
+                    modifier = Modifier.testTag("search_clear_from_empty_button")
+                ) {
                     Text(stringResource(R.string.search_clear_query_action))
                 }
             }
@@ -88,7 +114,7 @@ fun SearchResultsView(
             modifier = modifier.fillMaxSize().testTag("search_results_list")
         ) {
             if (results.songs.isNotEmpty()) {
-                item {
+                item(key = "header_songs") {
                     SectionHeader(
                         title = stringResource(R.string.search_section_songs),
                         count = results.songs.size
@@ -105,7 +131,7 @@ fun SearchResultsView(
             }
 
             if (results.albums.isNotEmpty()) {
-                item {
+                item(key = "header_albums") {
                     SectionHeader(
                         title = stringResource(R.string.search_section_albums),
                         count = results.albums.size
@@ -117,7 +143,7 @@ fun SearchResultsView(
             }
 
             if (results.artists.isNotEmpty()) {
-                item {
+                item(key = "header_artists") {
                     SectionHeader(
                         title = stringResource(R.string.search_section_artists),
                         count = results.artists.size

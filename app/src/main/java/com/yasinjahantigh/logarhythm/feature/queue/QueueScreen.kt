@@ -326,13 +326,19 @@ fun QueueScreen(
                             },
                             label = { Text(slot.name) },
                             trailingIcon = {
-                                Icon(
-                                    imageVector = Icons.Default.Close,
-                                    contentDescription = stringResource(R.string.btn_delete),
+                                Box(
                                     modifier = Modifier
-                                        .size(16.dp)
-                                        .clickable { viewModel.deleteSavedQueueSlot(slot.queueId) }
-                                )
+                                        .size(28.dp)
+                                        .clip(CircleShape)
+                                        .clickable { viewModel.deleteSavedQueueSlot(slot.queueId) },
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Close,
+                                        contentDescription = stringResource(R.string.btn_delete),
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
                             },
                             shape = CircleShape
                         )

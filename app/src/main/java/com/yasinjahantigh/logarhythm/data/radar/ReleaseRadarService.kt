@@ -40,6 +40,7 @@ data class RadarCandidate(
 
 data class ArtistCheckResult(
     val newReleases: List<ArtistReleaseEntity>,
+    val recentCatalog: List<ArtistReleaseEntity> = emptyList(),
     val updatedArtist: FollowedArtistEntity,
     val reachable: Boolean,
     val suggestVpn: Boolean
@@ -112,7 +113,23 @@ class ReleaseRadarService @Inject constructor(
             anyNetworkFailure = true
         }
 
-        // 3. Direct Deezer fallback if earlier sources returned nothing or failed.
+        // 3. Direct iTunes Search API fallback when worker/MusicMan returned few or zero results.
+        if (allCandidates.size < 3) {
+            try {
+                val itunesList = fetchFromItunesDirect(artist.displayName)
+                anySourceSucceeded = true
+                if (resolvedArtwork.isNullOrBlank()) {
+                    resolvedArtwork = itunesList.firstOrNull { !it.artworkUrl.isNullOrBlank() }?.artworkUrl
+                }
+                allCandidates += itunesList
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                anyNetworkFailure = true
+            }
+        }
+
+        // 4. Direct Deezer fallback if earlier sources returned nothing or failed.
         if (allCandidates.isEmpty()) {
             try {
                 val dzList = fetchFromDeezer(artist.displayName)
@@ -129,11 +146,40 @@ class ReleaseRadarService @Inject constructor(
         }
 
         val deduplicated = deduplicateCandidates(allCandidates)
+            .sortedWith(
+                compareByDescending<RadarCandidate> { it.releaseTimestampMs > 0L }
+                    .thenByDescending { it.releaseTimestampMs }
+            )
         val knownIds = parseKnownIds(artist.knownTrackIdsJson)
 
         val isInitialBaseline = artist.lastCheckedAt == 0L || knownIds.isEmpty()
         val updatedKnown = LinkedHashSet<String>(knownIds.size + deduplicated.size)
         updatedKnown.addAll(knownIds)
+
+        fun RadarCandidate.toEntity(seen: Boolean, discoveredAtMs: Long) = ArtistReleaseEntity(
+            releaseId = releaseId,
+            artistKey = artist.artistKey,
+            artistName = artist.displayName,
+            title = title,
+            album = album,
+            artworkUrl = artworkUrl,
+            source = source,
+            sourceUrl = sourceUrl,
+            durationMs = durationMs,
+            discoveredAt = discoveredAtMs,
+            isSeen = seen
+        )
+
+        val recentCatalogEntities = deduplicated
+            .take(MAX_SEED_RELEASES)
+            .mapIndexed { idx, candidate ->
+                val ts = if (candidate.releaseTimestampMs > 0L) {
+                    candidate.releaseTimestampMs
+                } else {
+                    nowMs - idx * 60_000L
+                }
+                candidate.toEntity(seen = true, discoveredAtMs = ts)
+            }
 
         val discoveredEntities = if (isInitialBaseline) {
             deduplicated.forEach {
@@ -151,19 +197,8 @@ class ReleaseRadarService @Inject constructor(
                 updatedKnown.add(titleKey(it.artistName, it.title))
             }
             newOnes.take(MAX_NEW_PER_CHECK).map { candidate ->
-                ArtistReleaseEntity(
-                    releaseId = candidate.releaseId,
-                    artistKey = artist.artistKey,
-                    artistName = artist.displayName,
-                    title = candidate.title,
-                    album = candidate.album,
-                    artworkUrl = candidate.artworkUrl,
-                    source = candidate.source,
-                    sourceUrl = candidate.sourceUrl,
-                    durationMs = candidate.durationMs,
-                    discoveredAt = nowMs,
-                    isSeen = false
-                )
+                val ts = if (candidate.releaseTimestampMs > 0L) candidate.releaseTimestampMs else nowMs
+                candidate.toEntity(seen = false, discoveredAtMs = ts)
             }
         }
 
@@ -182,6 +217,7 @@ class ReleaseRadarService @Inject constructor(
 
         ArtistCheckResult(
             newReleases = discoveredEntities,
+            recentCatalog = recentCatalogEntities,
             updatedArtist = updatedArtist,
             reachable = anySourceSucceeded,
             suggestVpn = !anySourceSucceeded && anyNetworkFailure
@@ -296,6 +332,54 @@ class ReleaseRadarService @Inject constructor(
         }
     }
 
+    private fun fetchFromItunesDirect(artistName: String): List<RadarCandidate> {
+        val encoded = URLEncoder.encode(artistName.trim(), "UTF-8")
+        val req = Request.Builder()
+            .url("https://itunes.apple.com/search?term=$encoded&entity=song&limit=15")
+            .header("Accept", "application/json")
+            .get()
+            .build()
+        client.newCall(req).execute().use { resp ->
+            if (!resp.isSuccessful) throw IOException("iTunes HTTP ${resp.code}")
+            val body = resp.body?.string().orEmpty()
+            val results = JSONObject(body).optJSONArray("results") ?: return emptyList()
+            val out = mutableListOf<RadarCandidate>()
+            for (i in 0 until results.length()) {
+                val obj = results.optJSONObject(i) ?: continue
+                val rowArtist = obj.optString("artistName").trim()
+                if (!isArtistMatch(rowArtist, artistName)) continue
+                val trackId = obj.optLong("trackId", 0L)
+                val collectionId = obj.optLong("collectionId", 0L)
+                val id = when {
+                    trackId > 0L -> "it_trk:$trackId"
+                    collectionId > 0L -> "it_alb:$collectionId"
+                    else -> continue
+                }
+                val title = obj.optString("trackName").ifBlank { obj.optString("collectionName") }.trim()
+                if (title.isBlank()) continue
+                val album = obj.optString("collectionName").trim()
+                val art = upgradeItunesArt(obj.optString("artworkUrl100").trim())
+                val viewUrl = obj.optString("trackViewUrl")
+                    .ifBlank { obj.optString("collectionViewUrl") }
+                    .ifBlank { "search://$title $rowArtist" }
+                val durMs = obj.optLong("trackTimeMillis", 0L).coerceAtLeast(0L)
+                val releaseDateMs = parseReleaseTimestampMs(obj.optString("releaseDate"))
+                out += RadarCandidate(
+                    releaseId = id,
+                    title = title,
+                    album = album,
+                    artistName = rowArtist.ifBlank { artistName },
+                    artworkUrl = art,
+                    source = "itunes",
+                    sourceUrl = viewUrl,
+                    durationMs = durMs,
+                    releaseTimestampMs = releaseDateMs
+                )
+            }
+            return out
+        }
+    }
+
     private suspend fun fetchFromDeezer(artistName: String): List<RadarCandidate> {
         val albums = deezerClient.searchAlbums(artistName, limit = 10)
         return albums.filter { isArtistMatch(it.artist, artistName) }.map { item ->
@@ -324,6 +408,7 @@ class ReleaseRadarService @Inject constructor(
             "https://logarhythm-installs.yasinjahantigh.workers.dev/hit"
         private const val MAX_KNOWN_IDS = 360
         private const val MAX_NEW_PER_CHECK = 6
+        private const val MAX_SEED_RELEASES = 6
         private const val THIRTY_DAYS_MS = 30L * 24L * 60L * 60L * 1000L
         private val COMBINING_MARKS = Regex("""\p{Mn}+""")
         private val WHITESPACE = Regex("""\s+""")
@@ -382,13 +467,27 @@ class ReleaseRadarService @Inject constructor(
 
         internal fun deduplicateCandidates(candidates: List<RadarCandidate>): List<RadarCandidate> {
             val seenIds = HashSet<String>()
-            val seenTitleKeys = HashSet<String>()
+            val indexByTitleKey = HashMap<String, Int>()
             val result = mutableListOf<RadarCandidate>()
             for (c in candidates) {
                 if (!seenIds.add(c.releaseId)) continue
                 val titleKey = "${normalizeArtistKey(c.artistName)}::${normalizeArtistKey(c.title)}"
-                if (seenTitleKeys.add(titleKey)) {
+                val existingIdx = indexByTitleKey[titleKey]
+                if (existingIdx == null) {
+                    indexByTitleKey[titleKey] = result.size
                     result += c
+                } else {
+                    val existing = result[existingIdx]
+                    val mergedTs = if (existing.releaseTimestampMs > 0L) existing.releaseTimestampMs else c.releaseTimestampMs
+                    val mergedArt = existing.artworkUrl?.takeIf { it.isNotBlank() } ?: c.artworkUrl
+                    val mergedDur = if (existing.durationMs > 0L) existing.durationMs else c.durationMs
+                    if (mergedTs != existing.releaseTimestampMs || mergedArt != existing.artworkUrl || mergedDur != existing.durationMs) {
+                        result[existingIdx] = existing.copy(
+                            releaseTimestampMs = mergedTs,
+                            artworkUrl = mergedArt,
+                            durationMs = mergedDur
+                        )
+                    }
                 }
             }
             return result

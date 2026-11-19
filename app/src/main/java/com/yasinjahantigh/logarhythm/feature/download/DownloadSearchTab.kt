@@ -37,6 +37,7 @@ import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.SearchOff
+import androidx.compose.material.icons.filled.VpnLock
 import androidx.compose.material.icons.filled.WifiOff
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -102,7 +103,10 @@ fun DownloadSearchTab(
     preparing: Boolean,
     bottomPadding: Dp,
     onResultClick: (DownloadSearchResult) -> Unit,
+    onDownloadTrack: (DownloadSearchResult) -> Unit = onResultClick,
     onDownloadAlbum: (DownloadSearchResult) -> Unit = {},
+    routingStatus: com.yasinjahantigh.logarhythm.data.download.SourceRoutingStatus =
+        com.yasinjahantigh.logarhythm.data.download.SourceRoutingStatus(),
     previewState: com.yasinjahantigh.logarhythm.data.download.StreamPreviewState =
         com.yasinjahantigh.logarhythm.data.download.StreamPreviewState(),
     onTogglePreview: (DownloadSearchResult) -> Unit = {},
@@ -124,11 +128,8 @@ fun DownloadSearchTab(
             placeholder = {
                 Text(text = stringResource(R.string.download_search_hint), maxLines = 1)
             },
-            leadingIcon = {
-                Icon(imageVector = Icons.Filled.Search, contentDescription = null)
-            },
             trailingIcon = {
-                Row {
+                Row(verticalAlignment = Alignment.CenterVertically) {
                     if (query.isNotBlank()) {
                         IconButton(onClick = { onQueryChange("") }) {
                             Icon(
@@ -143,7 +144,8 @@ fun DownloadSearchTab(
                     ) {
                         Icon(
                             imageVector = Icons.Filled.Search,
-                            contentDescription = stringResource(R.string.download_tab_search)
+                            contentDescription = stringResource(R.string.download_tab_search),
+                            tint = MaterialTheme.colorScheme.primary
                         )
                     }
                 }
@@ -154,9 +156,7 @@ fun DownloadSearchTab(
                 focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
                 unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
                 focusedBorderColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f),
-                unfocusedBorderColor = Color.Transparent,
-                focusedLeadingIconColor = MaterialTheme.colorScheme.primary,
-                unfocusedLeadingIconColor = MaterialTheme.colorScheme.onSurfaceVariant
+                unfocusedBorderColor = Color.Transparent
             ),
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
             keyboardActions = KeyboardActions(
@@ -174,6 +174,72 @@ fun DownloadSearchTab(
             onSelect = onSourceFilterChange
         )
 
+        var showVpnTip by remember { androidx.compose.runtime.mutableStateOf(true) }
+        if (showVpnTip) {
+            val fastestLabel = stringResource(downloadSourceLabelRes(routingStatus.fastestSource))
+            val bannerText = when {
+                routingStatus.isVpnActive && routingStatus.isBenchmarking ->
+                    stringResource(R.string.download_routing_vpn_probing)
+                routingStatus.isVpnActive ->
+                    stringResource(R.string.download_routing_vpn_fastest, fastestLabel)
+                else ->
+                    stringResource(R.string.download_routing_no_vpn_musicman)
+            }
+            Surface(
+                shape = RoundedCornerShape(14.dp),
+                color = if (routingStatus.isVpnActive) {
+                    MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.65f)
+                } else {
+                    MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.58f)
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 4.dp)
+            ) {
+                Row(
+                    modifier = Modifier.padding(start = 12.dp, end = 4.dp, top = 6.dp, bottom = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.VpnLock,
+                        contentDescription = null,
+                        tint = if (routingStatus.isVpnActive) {
+                            MaterialTheme.colorScheme.onPrimaryContainer
+                        } else {
+                            MaterialTheme.colorScheme.onSecondaryContainer
+                        },
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = bannerText,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = if (routingStatus.isVpnActive) {
+                            MaterialTheme.colorScheme.onPrimaryContainer
+                        } else {
+                            MaterialTheme.colorScheme.onSecondaryContainer
+                        },
+                        modifier = Modifier.weight(1f)
+                    )
+                    IconButton(
+                        onClick = { showVpnTip = false },
+                        modifier = Modifier.size(32.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Close,
+                            contentDescription = stringResource(R.string.btn_close),
+                            tint = if (routingStatus.isVpnActive) {
+                                MaterialTheme.colorScheme.onPrimaryContainer
+                            } else {
+                                MaterialTheme.colorScheme.onSecondaryContainer
+                            },
+                            modifier = Modifier.size(15.dp)
+                        )
+                    }
+                }
+            }
+        }
+
         if (preparing && sourceFilter != DownloadSource.MUSICMAN && sourceFilter != DownloadSource.SAAVN && sourceFilter != DownloadSource.RADIOJAVAN && sourceFilter != DownloadSource.DEEZER) {
             PreparingRow()
         }
@@ -190,28 +256,18 @@ fun DownloadSearchTab(
             state.searching && state.results.isEmpty() -> SearchSkeleton()
             state.error == DownloadErrorKind.NETWORK && state.results.isEmpty() -> NetworkErrorCard(onRetry = onRetry)
             state.error != null && state.results.isEmpty() -> ContentErrorCard(onRetry = onRetry)
-            !state.hasSearched -> Column(modifier = Modifier.fillMaxSize()) {
-                if (freshResults.isNotEmpty() || popularResults.isNotEmpty()) {
-                    DiscoveryFeedsShelf(
-                        freshResults = freshResults,
-                        popularResults = popularResults,
-                        onResultClick = onResultClick
-                    )
-                }
-                if (savedCollections.isNotEmpty()) {
-                    SavedCollectionsRow(
-                        collections = savedCollections,
-                        onOpen = onOpenSavedCollection
-                    )
-                }
-                IntroAndRecent(
-                    recentSearches = recentSearches,
-                    onSelectRecent = onSelectRecent,
-                    onRemoveRecent = onRemoveRecent,
-                    onClearRecent = onClearRecent,
-                    bottomPadding = bottomPadding
-                )
-            }
+            !state.hasSearched -> PreSearchDiscoveryContent(
+                freshResults = freshResults,
+                popularResults = popularResults,
+                savedCollections = savedCollections,
+                recentSearches = recentSearches,
+                onResultClick = onResultClick,
+                onOpenSavedCollection = onOpenSavedCollection,
+                onSelectRecent = onSelectRecent,
+                onRemoveRecent = onRemoveRecent,
+                onClearRecent = onClearRecent,
+                bottomPadding = bottomPadding
+            )
             state.results.isEmpty() -> NoResults()
             else -> LazyColumn(
                 state = listState,
@@ -230,6 +286,9 @@ fun DownloadSearchTab(
                         result = result,
                         activeItem = history.firstOrNull { it.sourceUrl == result.url },
                         onClick = { onResultClick(result) },
+                        onDownloadClick = if (result.kind == DownloadResultKind.TRACK) {
+                            { onDownloadTrack(result) }
+                        } else null,
                         onDownloadAlbum = if (result.kind == DownloadResultKind.TRACK) {
                             { onDownloadAlbum(result) }
                         } else null,
@@ -587,6 +646,12 @@ private fun ContentErrorCard(onRetry: () -> Unit) {
                     fontWeight = FontWeight.Bold
                 )
             }
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(
+                text = stringResource(R.string.download_error_vpn_or_musicman),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
             Spacer(modifier = Modifier.height(12.dp))
             TextButton(onClick = onRetry) {
                 Text(text = stringResource(R.string.download_retry))
@@ -624,12 +689,24 @@ private fun NoResults() {
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center
         )
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+            text = stringResource(R.string.vpn_proactive_download_hint),
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.primary,
+            textAlign = TextAlign.Center
+        )
     }
 }
 
 @Composable
-private fun IntroAndRecent(
+private fun PreSearchDiscoveryContent(
+    freshResults: List<DownloadSearchResult>,
+    popularResults: List<DownloadSearchResult>,
+    savedCollections: List<DownloadCatalogCache.SavedCollectionSummary>,
     recentSearches: List<String>,
+    onResultClick: (DownloadSearchResult) -> Unit,
+    onOpenSavedCollection: (String) -> Unit,
     onSelectRecent: (String) -> Unit,
     onRemoveRecent: (String) -> Unit,
     onClearRecent: () -> Unit,
@@ -638,16 +715,33 @@ private fun IntroAndRecent(
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(
-            start = 16.dp,
-            end = 16.dp,
-            top = 8.dp,
-            bottom = bottomPadding
+            top = 4.dp,
+            bottom = bottomPadding + 12.dp
         )
     ) {
+        if (freshResults.isNotEmpty() || popularResults.isNotEmpty()) {
+            item(key = "discovery_feeds") {
+                DiscoveryFeedsShelf(
+                    freshResults = freshResults,
+                    popularResults = popularResults,
+                    onResultClick = onResultClick
+                )
+            }
+        }
+        if (savedCollections.isNotEmpty()) {
+            item(key = "saved_collections") {
+                SavedCollectionsRow(
+                    collections = savedCollections,
+                    onOpen = onOpenSavedCollection
+                )
+            }
+        }
         if (recentSearches.isNotEmpty()) {
             item(key = "recent_header") {
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 16.dp, end = 8.dp, top = 8.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -665,9 +759,10 @@ private fun IntroAndRecent(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
+                        .padding(horizontal = 12.dp)
                         .clip(RoundedCornerShape(14.dp))
                         .clickable { onSelectRecent(term) }
-                        .padding(start = 12.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
+                        .padding(start = 12.dp, end = 2.dp, top = 2.dp, bottom = 2.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Icon(
@@ -686,13 +781,13 @@ private fun IntroAndRecent(
                     )
                     IconButton(
                         onClick = { onRemoveRecent(term) },
-                        modifier = Modifier.size(36.dp)
+                        modifier = Modifier.size(48.dp)
                     ) {
                         Icon(
                             imageVector = Icons.Filled.Close,
-                            contentDescription = null,
+                            contentDescription = stringResource(R.string.close),
                             tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(16.dp)
+                            modifier = Modifier.size(18.dp)
                         )
                     }
                 }
@@ -703,23 +798,28 @@ private fun IntroAndRecent(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(top = if (recentSearches.isEmpty()) 48.dp else 28.dp, bottom = 24.dp),
+                    .padding(
+                        start = 24.dp,
+                        end = 24.dp,
+                        top = if (recentSearches.isEmpty() && freshResults.isEmpty()) 48.dp else 24.dp,
+                        bottom = 24.dp
+                    ),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Icon(
                     imageVector = Icons.Filled.CloudDownload,
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f),
-                    modifier = Modifier.size(56.dp)
+                    modifier = Modifier.size(48.dp)
                 )
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(10.dp))
                 Text(
                     text = stringResource(R.string.download_search_intro_title),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                     textAlign = TextAlign.Center
                 )
-                Spacer(modifier = Modifier.height(6.dp))
+                Spacer(modifier = Modifier.height(4.dp))
                 Text(
                     text = stringResource(R.string.download_search_intro_desc),
                     style = MaterialTheme.typography.bodySmall,

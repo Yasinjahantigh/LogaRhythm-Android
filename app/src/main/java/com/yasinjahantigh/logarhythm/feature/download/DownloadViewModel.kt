@@ -17,8 +17,11 @@ import com.yasinjahantigh.logarhythm.data.download.YtDlpRuntime
 import com.yasinjahantigh.logarhythm.data.download.YtdlpUpdateState
 import com.yasinjahantigh.logarhythm.data.download.metadata.DeezerClient
 import com.yasinjahantigh.logarhythm.data.download.musicman.MusicManClient
+import com.yasinjahantigh.logarhythm.data.download.radiojavan.RadioJavanClient
+import com.yasinjahantigh.logarhythm.data.download.saavn.SaavnClient
 import com.yasinjahantigh.logarhythm.data.radar.ArtistFollowRepository
 import com.yasinjahantigh.logarhythm.data.radar.ReleaseRadarService
+import com.yasinjahantigh.logarhythm.domain.download.ArtistMerger
 import com.yasinjahantigh.logarhythm.domain.model.DownloadErrorKind
 import com.yasinjahantigh.logarhythm.domain.model.DownloadItem
 import com.yasinjahantigh.logarhythm.domain.model.DownloadResultKind
@@ -31,7 +34,9 @@ import com.yasinjahantigh.logarhythm.domain.repository.DownloadRepository
 import com.yasinjahantigh.logarhythm.playback.PlayerController
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -42,6 +47,8 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import javax.inject.Inject
 
 @HiltViewModel
@@ -51,6 +58,8 @@ class DownloadViewModel @Inject constructor(
     private val itunesClient: com.yasinjahantigh.logarhythm.data.download.metadata.ItunesClient,
     private val musicManClient: MusicManClient,
     private val deezerClient: DeezerClient,
+    private val radioJavanClient: RadioJavanClient,
+    private val saavnClient: SaavnClient,
     private val catalogCache: DownloadCatalogCache,
     private val notifications: com.yasinjahantigh.logarhythm.data.download.DownloadNotifications,
     private val prefs: PreferencesManager,
@@ -60,7 +69,9 @@ class DownloadViewModel @Inject constructor(
     private val events: DownloadEvents,
     private val artistFollowRepository: ArtistFollowRepository,
     private val streamPreviewPlayer: StreamPreviewPlayer,
-    private val shareLinkResolver: ShareLinkResolver
+    private val shareLinkResolver: ShareLinkResolver,
+    private val sourceRouter: com.yasinjahantigh.logarhythm.data.download.DownloadSourceRouter,
+    savedStateHandle: androidx.lifecycle.SavedStateHandle
 ) : ViewModel() {
 
     private val _query = MutableStateFlow("")
@@ -97,6 +108,8 @@ class DownloadViewModel @Inject constructor(
     val cookiesImported: StateFlow<Boolean> = cookies.imported
     val previewState: StateFlow<StreamPreviewState> = streamPreviewPlayer.state
     val pendingShareText: StateFlow<String?> = shareLinkResolver.pendingShareText
+    val routingStatus: StateFlow<com.yasinjahantigh.logarhythm.data.download.SourceRoutingStatus> =
+        sourceRouter.status
 
     val downloadQualityPref: StateFlow<String> = prefs.downloadQualityPref
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), "best")
@@ -146,8 +159,16 @@ class DownloadViewModel @Inject constructor(
             }
         }
         viewModelScope.launch {
+            sourceRouter.ensureFreshRanking(force = false)
+        }
+        viewModelScope.launch {
             runCatching { musicManClient.fetchFresh(16) }.getOrNull()?.let { _freshResults.value = it }
             runCatching { musicManClient.fetchPopular(16) }.getOrNull()?.let { _popularResults.value = it }
+        }
+        val initialQuery = savedStateHandle.get<String>("query")?.trim().orEmpty()
+        if (initialQuery.isNotBlank()) {
+            _query.value = initialQuery
+            search(initialQuery)
         }
     }
 
@@ -247,15 +268,24 @@ class DownloadViewModel @Inject constructor(
         }
     }
 
+    private var collectionJob: Job? = null
+
     fun openCollection(item: DownloadSearchResult, forceRefresh: Boolean = false) {
-        viewModelScope.launch {
+        collectionJob?.cancel()
+        collectionJob = viewModelScope.launch {
             val cached = runCatching { catalogCache.getCollection(item) }.getOrNull()
-            if (cached != null && !forceRefresh) {
+            // Older caches for artists were capped at 50 tracks; auto-expand them while showing cached items immediately.
+            val cachedLooksTruncated = cached != null &&
+                item.kind == DownloadResultKind.ARTIST &&
+                cached.tracks.size <= 50
+
+            if (cached != null && !forceRefresh && !cachedLooksTruncated) {
                 _collectionDetail.value = DownloadCollectionUiState(
                     header = cached.header,
                     albums = cached.albums,
                     tracks = cached.tracks,
                     loading = false,
+                    loadingMore = false,
                     fromCache = true
                 )
                 return@launch
@@ -265,41 +295,175 @@ class DownloadViewModel @Inject constructor(
                 header = cached?.header ?: item,
                 albums = cached?.albums.orEmpty(),
                 tracks = cached?.tracks.orEmpty(),
-                loading = true,
+                loading = cached == null,
+                loadingMore = cached != null,
                 fromCache = cached != null
             )
 
             try {
-                val detail = when (item.source) {
-                    DownloadSource.MUSICMAN -> {
-                        if (item.kind == DownloadResultKind.ARTIST) {
-                            musicManClient.fetchArtistCatalog(item.artistId ?: item.id)
-                        } else {
-                            musicManClient.lookupAlbum(item.collectionId ?: item.id)
+                if (item.kind == DownloadResultKind.ARTIST) {
+                    val sourcesToQuery = (item.matchedSources + item.sourceArtistIds.keys + item.source).toSet()
+                    val mutex = Mutex()
+                    val combinedAlbums = LinkedHashMap<String, DownloadSearchResult>()
+                    val combinedTracks = LinkedHashMap<String, DownloadSearchResult>()
+
+                    cached?.albums?.forEach { a -> combinedAlbums[ArtistMerger.normalizeRawString(a.title)] = a }
+                    cached?.tracks?.forEach { t -> combinedTracks[ArtistMerger.normalizeRawString(t.title)] = t }
+
+                    fun mergeAlbums(newAlbums: List<DownloadSearchResult>) {
+                        for (a in newAlbums) {
+                            val key = ArtistMerger.normalizeRawString(a.title)
+                            if (key.isNotBlank()) {
+                                combinedAlbums.putIfAbsent(key, a)
+                            }
                         }
                     }
-                    DownloadSource.DEEZER -> {
-                        if (item.kind == DownloadResultKind.ARTIST) {
-                            val (albums, tracks) = deezerClient.fetchArtistCatalog(item.artistId ?: item.id)
-                            MusicManClient.CollectionDetail(item, albums, tracks)
-                        } else {
+
+                    fun mergeTracks(newTracks: List<DownloadSearchResult>) {
+                        for (t in newTracks) {
+                            val key = ArtistMerger.normalizeRawString(t.title)
+                            if (key.isNotBlank()) {
+                                val existing = combinedTracks[key]
+                                if (existing == null) {
+                                    combinedTracks[key] = t
+                                } else if (!existing.hasReadyAudio && t.hasReadyAudio) {
+                                    combinedTracks[key] = t
+                                }
+                            }
+                        }
+                    }
+
+                    suspend fun emitState(loadingMore: Boolean = true) {
+                        val albumList = combinedAlbums.values.toList()
+                        val trackList = combinedTracks.values.toList()
+                        _collectionDetail.value = DownloadCollectionUiState(
+                            header = item,
+                            albums = albumList,
+                            tracks = trackList,
+                            loading = false,
+                            loadingMore = loadingMore,
+                            fromCache = false
+                        )
+                    }
+
+                    coroutineScope {
+                        if (sourcesToQuery.contains(DownloadSource.MUSICMAN)) {
+                            launch(Dispatchers.IO) {
+                                try {
+                                    val mmId = item.sourceArtistIds[DownloadSource.MUSICMAN]
+                                        ?: (if (item.source == DownloadSource.MUSICMAN) (item.artistId ?: item.id) else null)
+                                    val mmArtistId = mmId ?: run {
+                                        val searchRes = musicManClient.search(item.title, category = DownloadSearchCategory.ARTIST, limit = 3)
+                                        searchRes.firstOrNull { ArtistMerger.areArtistsMatching(it.title, item.title) }?.id
+                                    }
+                                    if (mmArtistId != null) {
+                                        musicManClient.fetchFullArtistCatalog(
+                                            artistId = mmArtistId,
+                                            onProgress = { partial ->
+                                                mutex.withLock {
+                                                    mergeAlbums(partial.albums)
+                                                    mergeTracks(partial.tracks)
+                                                }
+                                                emitState()
+                                            }
+                                        )
+                                    }
+                                } catch (_: Exception) {}
+                            }
+                        }
+
+                        if (sourcesToQuery.contains(DownloadSource.DEEZER)) {
+                            launch(Dispatchers.IO) {
+                                try {
+                                    val dzId = item.sourceArtistIds[DownloadSource.DEEZER]
+                                        ?: (if (item.source == DownloadSource.DEEZER) (item.artistId ?: item.id) else null)
+                                    val dzArtistId = dzId ?: run {
+                                        val dzSearch = deezerClient.searchArtists(item.title, limit = 3)
+                                        dzSearch.firstOrNull { ArtistMerger.areArtistsMatching(it.title, item.title) }?.id
+                                    }
+                                    if (dzArtistId != null) {
+                                        deezerClient.fetchArtistCatalog(
+                                            artistId = dzArtistId,
+                                            onProgress = { partialAlbums, partialTracks ->
+                                                mutex.withLock {
+                                                    mergeAlbums(partialAlbums)
+                                                    mergeTracks(partialTracks)
+                                                }
+                                                emitState()
+                                            }
+                                        )
+                                    }
+                                } catch (_: Exception) {}
+                            }
+                        }
+
+                        if (sourcesToQuery.contains(DownloadSource.RADIOJAVAN) || sourcesToQuery.isEmpty()) {
+                            launch(Dispatchers.IO) {
+                                try {
+                                    val rjId = item.sourceArtistIds[DownloadSource.RADIOJAVAN]
+                                        ?: (if (item.source == DownloadSource.RADIOJAVAN) (item.artistId ?: item.id) else null)
+                                        ?: item.title
+                                    val rjTracks = radioJavanClient.lookupArtistTracks(rjId)
+                                    if (rjTracks.isNotEmpty()) {
+                                        mutex.withLock {
+                                            mergeTracks(rjTracks)
+                                        }
+                                        emitState()
+                                    }
+                                } catch (_: Exception) {}
+                            }
+                        }
+
+                        if (sourcesToQuery.contains(DownloadSource.SAAVN)) {
+                            launch(Dispatchers.IO) {
+                                try {
+                                    val saavnTracks = saavnClient.search(item.title, limit = 30)
+                                    if (saavnTracks.isNotEmpty()) {
+                                        mutex.withLock {
+                                            mergeTracks(saavnTracks)
+                                        }
+                                        emitState()
+                                    }
+                                } catch (_: Exception) {}
+                            }
+                        }
+                    }
+
+                    val finalAlbums = combinedAlbums.values.toList()
+                    val finalTracks = combinedTracks.values.toList()
+                    if (finalAlbums.isNotEmpty() || finalTracks.isNotEmpty()) {
+                        catalogCache.saveCollection(item, finalAlbums, finalTracks)
+                    }
+                    _collectionDetail.value = DownloadCollectionUiState(
+                        header = item,
+                        albums = finalAlbums,
+                        tracks = finalTracks,
+                        loading = false,
+                        loadingMore = false,
+                        fromCache = false
+                    )
+                } else {
+                    val detail = when (item.source) {
+                        DownloadSource.MUSICMAN -> musicManClient.lookupAlbum(item.collectionId ?: item.id)
+                        DownloadSource.DEEZER -> {
                             val (header, tracks) = deezerClient.lookupAlbumTracks(item.collectionId ?: item.id)
                             MusicManClient.CollectionDetail(header ?: item, emptyList(), tracks)
                         }
+                        else -> MusicManClient.CollectionDetail(item, emptyList(), emptyList())
                     }
-                    else -> MusicManClient.CollectionDetail(item, emptyList(), emptyList())
+                    val finalHeader = detail.header ?: item
+                    if (detail.tracks.isNotEmpty() || detail.albums.isNotEmpty()) {
+                        catalogCache.saveCollection(finalHeader, detail.albums, detail.tracks)
+                    }
+                    _collectionDetail.value = DownloadCollectionUiState(
+                        header = finalHeader,
+                        albums = detail.albums,
+                        tracks = detail.tracks,
+                        loading = false,
+                        loadingMore = false,
+                        fromCache = false
+                    )
                 }
-                val finalHeader = detail.header ?: item
-                if (detail.tracks.isNotEmpty() || detail.albums.isNotEmpty()) {
-                    catalogCache.saveCollection(finalHeader, detail.albums, detail.tracks)
-                }
-                _collectionDetail.value = DownloadCollectionUiState(
-                    header = finalHeader,
-                    albums = detail.albums,
-                    tracks = detail.tracks,
-                    loading = false,
-                    fromCache = false
-                )
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (_: Exception) {
@@ -309,11 +473,13 @@ class DownloadViewModel @Inject constructor(
                         albums = cached.albums,
                         tracks = cached.tracks,
                         loading = false,
+                        loadingMore = false,
                         fromCache = true
                     )
                 } else {
                     _collectionDetail.value = _collectionDetail.value?.copy(
                         loading = false,
+                        loadingMore = false,
                         error = "Could not load tracks."
                     )
                 }
@@ -329,12 +495,14 @@ class DownloadViewModel @Inject constructor(
                 albums = cached.albums,
                 tracks = cached.tracks,
                 loading = false,
+                loadingMore = false,
                 fromCache = true
             )
         }
     }
 
     fun closeCollection() {
+        collectionJob?.cancel()
         _collectionDetail.value = null
     }
 

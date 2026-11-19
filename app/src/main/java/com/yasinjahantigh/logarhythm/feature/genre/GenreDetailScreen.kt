@@ -55,6 +55,7 @@ import com.yasinjahantigh.logarhythm.ui.components.DetailHero
 import com.yasinjahantigh.logarhythm.R
 import com.yasinjahantigh.logarhythm.core.utils.TimeUtils
 import com.yasinjahantigh.logarhythm.domain.model.Track
+import com.yasinjahantigh.logarhythm.feature.library.LibraryEmptyHint
 import com.yasinjahantigh.logarhythm.feature.library.TrackListItem
 import com.yasinjahantigh.logarhythm.feature.playlist.AddToPlaylistDialog
 import com.yasinjahantigh.logarhythm.feature.playlist.PlaylistViewModel
@@ -150,14 +151,11 @@ fun GenreDetailScreen(
 
             if (tracks.isEmpty()) {
                 item {
-                    Box(
-                        modifier = Modifier.fillMaxWidth().padding(48.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
+                    Box(modifier = Modifier.fillMaxWidth().height(260.dp)) {
+                        LibraryEmptyHint(
                             text = stringResource(R.string.empty_genre_tracks),
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            icon = Icons.Filled.MusicNote,
+                            modifier = Modifier.fillMaxSize()
                         )
                     }
                 }

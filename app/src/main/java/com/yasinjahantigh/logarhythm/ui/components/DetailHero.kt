@@ -14,8 +14,10 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material3.Button
@@ -23,6 +25,7 @@ import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -63,7 +66,8 @@ fun DetailHero(
     backTag: String = "detail_back_button",
     playTag: String = "detail_play_button",
     shuffleTag: String = "detail_shuffle_button",
-    topEndAction: (@Composable () -> Unit)? = null
+    topEndAction: (@Composable () -> Unit)? = null,
+    onEditArtwork: (() -> Unit)? = null
 ) {
     val surface = MaterialTheme.colorScheme.surface
     val tint = artColorsFor(title).first
@@ -103,17 +107,48 @@ fun DetailHero(
 
             Spacer(modifier = Modifier.height(4.dp))
 
-            ArtworkImage(
-                uri = artworkUri,
-                fallbackKey = title,
-                shape = coverShape,
-                icon = icon,
-                glyphSize = 72.sp,
-                contentDescription = title,
-                modifier = Modifier
-                    .size(208.dp)
-                    .shadow(24.dp, coverShape, ambientColor = tint, spotColor = tint)
-            )
+            Box(
+                modifier = Modifier.size(208.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                ArtworkImage(
+                    uri = artworkUri,
+                    fallbackKey = title,
+                    shape = coverShape,
+                    icon = icon,
+                    glyphSize = 72.sp,
+                    contentDescription = title,
+                    modifier = Modifier
+                        .size(208.dp)
+                        .shadow(24.dp, coverShape, ambientColor = tint, spotColor = tint)
+                        .let { base ->
+                            if (onEditArtwork != null) base.clickable(onClick = onEditArtwork) else base
+                        }
+                )
+                if (onEditArtwork != null) {
+                    Surface(
+                        onClick = onEditArtwork,
+                        shape = CircleShape,
+                        color = MaterialTheme.colorScheme.primaryContainer,
+                        border = BorderStroke(2.dp, MaterialTheme.colorScheme.surface),
+                        shadowElevation = 4.dp,
+                        modifier = Modifier
+                            .align(Alignment.BottomEnd)
+                            .padding(end = 4.dp, bottom = 4.dp)
+                            .size(46.dp)
+                            .testTag("detail_edit_artwork_button")
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector = Icons.Filled.Edit,
+                                contentDescription = stringResource(R.string.artist_photo_edit_title),
+                                tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    }
+                }
+            }
 
             Spacer(modifier = Modifier.height(18.dp))
 

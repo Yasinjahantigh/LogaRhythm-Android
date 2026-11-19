@@ -31,12 +31,14 @@ import androidx.compose.ui.unit.dp
 import com.yasinjahantigh.logarhythm.R
 import com.yasinjahantigh.logarhythm.core.utils.TimeUtils
 import com.yasinjahantigh.logarhythm.domain.model.ArtistStat
+import com.yasinjahantigh.logarhythm.domain.model.StatsSortBy
 
 @Composable
 fun StatsArtistsTab(
     artists: List<ArtistStat>,
     onArtistClick: (String) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    sortBy: StatsSortBy = StatsSortBy.PLAY_COUNT
 ) {
     if (artists.isEmpty()) {
         StatsEmptyTabContent(
@@ -56,6 +58,7 @@ fun StatsArtistsTab(
             ArtistStatRow(
                 rank = index + 1,
                 stat = stat,
+                sortBy = sortBy,
                 onClick = { onArtistClick(stat.artist) }
             )
         }
@@ -66,6 +69,7 @@ fun StatsArtistsTab(
 private fun ArtistStatRow(
     rank: Int,
     stat: ArtistStat,
+    sortBy: StatsSortBy,
     onClick: () -> Unit
 ) {
     val rankContainerColor = when (rank) {
@@ -141,13 +145,24 @@ private fun ArtistStatRow(
             val playsStr = stringResource(R.string.stats_play_count, stat.playCount)
             val tracksStr = stringResource(R.string.album_track_count, stat.trackCount)
             val timeStr = TimeUtils.formatListeningTimeSummary(stat.totalListenTimeMs)
-            Text(
-                text = "$tracksStr • $playsStr • $timeStr",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
+            val primaryMetric = if (sortBy == StatsSortBy.LISTEN_TIME) timeStr else playsStr
+            val secondaryMetric = if (sortBy == StatsSortBy.LISTEN_TIME) playsStr else timeStr
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = primaryMetric,
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.primary,
+                    maxLines = 1
+                )
+                Text(
+                    text = " • $secondaryMetric • $tracksStr",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
         }
     }
 }

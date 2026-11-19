@@ -164,6 +164,59 @@ class MusicManClient @Inject constructor(
         )
     }
 
+    /**
+     * Fetches the artist's full paginated catalog (not capped at a single 50-track page),
+     * streaming progressive snapshots via [onProgress] as each page arrives.
+     */
+    suspend fun fetchFullArtistCatalog(
+        artistId: String,
+        pageSize: Int = 50,
+        maxPages: Int = 20,
+        onProgress: suspend (CollectionDetail) -> Unit = {}
+    ): CollectionDetail = withContext(Dispatchers.IO) {
+        var header: DownloadSearchResult? = null
+        val allTracks = LinkedHashMap<String, DownloadSearchResult>()
+        val allAlbums = LinkedHashMap<String, DownloadSearchResult>()
+
+        for (page in 1..maxPages) {
+            val detail = try {
+                fetchArtistCatalog(artistId = artistId, page = page, limit = pageSize)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (e: Exception) {
+                if (page == 1) throw e else break
+            }
+
+            if (header == null && detail.header != null) header = detail.header
+            var addedThisPage = 0
+            for (alb in detail.albums) {
+                allAlbums.putIfAbsent(alb.id, alb)
+            }
+            for (tr in detail.tracks) {
+                if (allTracks.putIfAbsent(tr.id, tr) == null) {
+                    addedThisPage++
+                }
+            }
+
+            val snapshot = CollectionDetail(
+                header = header,
+                albums = allAlbums.values.toList(),
+                tracks = allTracks.values.toList()
+            )
+            onProgress(snapshot)
+
+            if (detail.tracks.isEmpty() || addedThisPage == 0 || detail.tracks.size < pageSize) {
+                break
+            }
+        }
+
+        CollectionDetail(
+            header = header,
+            albums = allAlbums.values.toList(),
+            tracks = allTracks.values.toList()
+        )
+    }
+
     suspend fun fetchFresh(limit: Int = 20): List<DownloadSearchResult> = fetchFeed("fresh", limit)
 
     suspend fun fetchPopular(limit: Int = 20): List<DownloadSearchResult> = fetchFeed("popular", limit)

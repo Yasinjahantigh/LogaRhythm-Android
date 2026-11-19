@@ -71,6 +71,15 @@ class LyricsViewModel @Inject constructor(
     val isAnyOnlineEnabled: StateFlow<Boolean> = preferencesManager.anyLyricsSourceEnabled
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
 
+    val lyricsLineSpacingDp: StateFlow<Float> = preferencesManager.lyricsLineSpacing
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 12f)
+
+    fun setLyricsLineSpacing(spacingDp: Float) {
+        viewModelScope.launch(Dispatchers.IO) {
+            preferencesManager.setLyricsLineSpacing(spacingDp)
+        }
+    }
+
     /** Live playback position; only the active karaoke line collects it. */
     val livePositionMs: StateFlow<Long> = positionMs
 

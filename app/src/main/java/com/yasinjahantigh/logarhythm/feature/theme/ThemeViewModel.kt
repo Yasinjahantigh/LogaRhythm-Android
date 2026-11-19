@@ -1,13 +1,17 @@
 package com.yasinjahantigh.logarhythm.feature.theme
 
+import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.yasinjahantigh.logarhythm.data.datastore.PreferencesManager
 import com.yasinjahantigh.logarhythm.ui.theme.CuratedThemePreset
 import com.yasinjahantigh.logarhythm.ui.theme.ThemePresets
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -18,7 +22,7 @@ class ThemeViewModel @Inject constructor(
 ) : ViewModel() {
 
     val themeStyle: StateFlow<String> = preferencesManager.themeStyle
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "default")
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "album_art")
 
     val themePresetId: StateFlow<String> = preferencesManager.themePresetId
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ThemePresets.DEFAULT_ID)
@@ -39,7 +43,16 @@ class ThemeViewModel @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0.35f)
 
     val appFont: StateFlow<String> = preferencesManager.appFont
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "default")
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "vazirmatn")
+
+    val customFontName: StateFlow<String?> = preferencesManager.customFontName
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
+    val customFontPath: StateFlow<String?> = preferencesManager.customFontPath
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
+    private val _fontImportResult = MutableSharedFlow<Result<String>>(extraBufferCapacity = 2)
+    val fontImportResult: SharedFlow<Result<String>> = _fontImportResult.asSharedFlow()
 
     fun setThemeStyle(style: String) {
         viewModelScope.launch { preferencesManager.setThemeStyle(style) }
@@ -88,5 +101,18 @@ class ThemeViewModel @Inject constructor(
 
     fun setAppFont(font: String) {
         viewModelScope.launch { preferencesManager.setAppFont(font) }
+    }
+
+    fun importCustomFont(uri: Uri) {
+        viewModelScope.launch {
+            val result = preferencesManager.importCustomFont(uri)
+            _fontImportResult.tryEmit(result)
+        }
+    }
+
+    fun clearCustomFont() {
+        viewModelScope.launch {
+            preferencesManager.clearCustomFont()
+        }
     }
 }

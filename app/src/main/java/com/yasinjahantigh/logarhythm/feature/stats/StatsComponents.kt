@@ -16,6 +16,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Headphones
 import androidx.compose.material.icons.filled.QueryStats
+import androidx.compose.material.icons.filled.Repeat
+import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -34,6 +36,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.yasinjahantigh.logarhythm.R
 import com.yasinjahantigh.logarhythm.core.utils.TimeUtils
+import com.yasinjahantigh.logarhythm.domain.model.StatsSortBy
 import com.yasinjahantigh.logarhythm.domain.model.TimeRange
 
 @Composable
@@ -67,6 +70,54 @@ fun TimeRangeSelector(
                 modifier = Modifier.testTag("range_chip_${range.name}")
             )
         }
+    }
+}
+
+@Composable
+fun StatsSortSelector(
+    selectedSort: StatsSortBy,
+    onSortSelected: (StatsSortBy) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 6.dp)
+            .testTag("stats_sort_selector"),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = stringResource(R.string.stats_sort_label),
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        FilterChip(
+            selected = selectedSort == StatsSortBy.PLAY_COUNT,
+            onClick = { onSortSelected(StatsSortBy.PLAY_COUNT) },
+            leadingIcon = {
+                Icon(
+                    imageVector = Icons.Filled.Repeat,
+                    contentDescription = null,
+                    modifier = Modifier.size(16.dp)
+                )
+            },
+            label = { Text(text = stringResource(R.string.stats_sort_by_plays)) },
+            modifier = Modifier.testTag("stats_sort_plays")
+        )
+        FilterChip(
+            selected = selectedSort == StatsSortBy.LISTEN_TIME,
+            onClick = { onSortSelected(StatsSortBy.LISTEN_TIME) },
+            leadingIcon = {
+                Icon(
+                    imageVector = Icons.Filled.Schedule,
+                    contentDescription = null,
+                    modifier = Modifier.size(16.dp)
+                )
+            },
+            label = { Text(text = stringResource(R.string.stats_sort_by_time)) },
+            modifier = Modifier.testTag("stats_sort_time")
+        )
     }
 }
 

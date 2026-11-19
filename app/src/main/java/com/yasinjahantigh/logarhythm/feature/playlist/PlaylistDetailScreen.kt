@@ -65,7 +65,9 @@ import com.yasinjahantigh.logarhythm.ui.components.DetailHero
 import com.yasinjahantigh.logarhythm.R
 import com.yasinjahantigh.logarhythm.core.utils.TimeUtils
 import com.yasinjahantigh.logarhythm.domain.model.Track
+import com.yasinjahantigh.logarhythm.feature.library.LibraryEmptyHint
 import com.yasinjahantigh.logarhythm.feature.library.SelectionAction
+import com.yasinjahantigh.logarhythm.feature.library.LibraryEmptyHint
 import com.yasinjahantigh.logarhythm.feature.library.SelectionActionBar
 import com.yasinjahantigh.logarhythm.feature.library.SelectionTopBar
 import com.yasinjahantigh.logarhythm.feature.library.TrackListItem
@@ -367,8 +369,12 @@ fun PlaylistDetailScreen(
 
                 if (filteredTracks.isEmpty()) {
                     item {
-                        Box(modifier = Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
-                            Text(text = stringResource(R.string.empty_playlist_tracks), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Box(modifier = Modifier.fillMaxWidth().height(260.dp)) {
+                            LibraryEmptyHint(
+                                text = stringResource(R.string.empty_playlist_tracks),
+                                icon = if (isBuiltIn) Icons.Default.Favorite else Icons.AutoMirrored.Filled.QueueMusic,
+                                modifier = Modifier.fillMaxSize()
+                            )
                         }
                     }
                 } else {

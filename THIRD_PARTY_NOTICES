@@ -26,6 +26,11 @@ source is published at https://github.com/Yasinjahantigh/LogaRhythm-Android.
    License: Apache License 2.0 (same license as LogaRhythm).
    Used for cover-photo rotation when a new album artwork is picked.
 
+5. Bundled Typography (SIL Open Font License 1.1 — see app/src/main/assets/OFL.txt)
+   - Vazirmatn (https://github.com/rastikerdar/vazirmatn)
+   - Plus Jakarta Sans, Space Grotesk, Playfair Display, JetBrains Mono
+   - Lalezar, Noto Kufi Arabic, Noto Naskh Arabic (Google Fonts)
+
 The GPL-3.0 text is available at https://www.gnu.org/licenses/gpl-3.0.txt.
 
 Music downloads are intended for content you are allowed to download. Respect

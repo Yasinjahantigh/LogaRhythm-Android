@@ -8,6 +8,7 @@ import com.yasinjahantigh.logarhythm.domain.repository.PlaylistRepository
 import com.yasinjahantigh.logarhythm.domain.repository.SmartMixRepository
 import com.yasinjahantigh.logarhythm.domain.smart.SmartMix
 import com.yasinjahantigh.logarhythm.domain.smart.SmartMixType
+import com.yasinjahantigh.logarhythm.domain.smart.TasteInsights
 import com.yasinjahantigh.logarhythm.playback.PlayerController
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.SharingStarted
@@ -25,13 +26,16 @@ class SmartMixDetailViewModel @Inject constructor(
 ) : ViewModel() {
 
     val type: SmartMixType =
-        SmartMixType.fromRaw(savedStateHandle.get<String>("mixType")) ?: SmartMixType.RECENTLY_ADDED
+        SmartMixType.fromRaw(savedStateHandle.get<String>("mixType")) ?: SmartMixType.FOR_YOU
 
     val mix: StateFlow<SmartMix?> = smartMixRepository.getSmartMix(type)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
     val tracks: StateFlow<List<Track>> = smartMixRepository.getSmartMixTracks(type)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val tasteInsights: StateFlow<TasteInsights?> = smartMixRepository.observeTasteInsights()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
     fun playAll() {
         val list = tracks.value

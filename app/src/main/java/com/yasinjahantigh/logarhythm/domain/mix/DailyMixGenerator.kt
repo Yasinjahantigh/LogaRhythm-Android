@@ -36,11 +36,22 @@ class DailyMixGenerator {
         val library = allTracks.distinctBy { it.id }
         if (library.isEmpty()) return emptyList()
 
-        val completedEvents = playEvents.filter { !it.skipped }
-        val skipCounts = playEvents.filter { it.skipped }.groupingBy { it.trackId }.eachCount()
-        val playCounts = completedEvents.groupingBy { it.trackId }.eachCount()
-        val lastPlayed = completedEvents.groupBy { it.trackId }
-            .mapValues { (_, events) -> events.maxOfOrNull { it.timestamp } ?: 0L }
+        val skipCounts = HashMap<String, Int>()
+        val playCounts = HashMap<String, Int>()
+        val lastPlayed = HashMap<String, Long>()
+        for (i in playEvents.indices) {
+            val ev = playEvents[i]
+            val id = ev.trackId
+            if (ev.skipped) {
+                skipCounts[id] = (skipCounts[id] ?: 0) + 1
+            } else {
+                playCounts[id] = (playCounts[id] ?: 0) + 1
+                val prev = lastPlayed[id]
+                if (prev == null || ev.timestamp > prev) {
+                    lastPlayed[id] = ev.timestamp
+                }
+            }
+        }
 
         // Anchor time-based scoring to the supplied day so a mix cannot reshuffle mid-day.
         val snapshotTimeMs = seedDate * DAY_MS + DAY_MS / 2
@@ -65,40 +76,63 @@ class DailyMixGenerator {
             .take(5)
             .map { it.id }
 
-        fun commonPenalties(track: Track): Double {
-            val dislikedPenalty = if (profile.isDisliked(track.id)) 30.0 else 0.0
-            val skipPenalty = (skipCounts[track.id] ?: 0) * 2.2
-            val sessionSkipPenalty = profile.sessionPenalty(track) * 6.0
-            val replayCooldown = profile.recentPlayPenalty(track.id, snapshotTimeMs) * 4.0
-            val multiDayExposure = exposurePenalty(track.id, seedDate, recentExposureDays)
-            return dislikedPenalty + skipPenalty + sessionSkipPenalty + replayCooldown + multiDayExposure
+        // Precompute per-track tasteMatchScore and commonPenalties once for all 3 mixes.
+        val poolSize = workingPool.size
+        val precomputedTaste = DoubleArray(poolSize)
+        val precomputedPenalty = DoubleArray(poolSize)
+        for (i in 0 until poolSize) {
+            val track = workingPool[i]
+            val id = track.id
+            val sessionPen = profile.sessionPenalty(track)
+            precomputedTaste[i] = profile.tasteMatchScoreWithPrecomputed(track, dna = null, sessionPen = sessionPen)
+            val dislikedPenalty = if (profile.isDisliked(id)) 30.0 else 0.0
+            val skipPenalty = (skipCounts[id] ?: 0) * 2.2
+            val replayCooldown = profile.recentPlayPenalty(id, snapshotTimeMs) * 4.0
+            val multiDayExposure = exposurePenalty(id, seedDate, recentExposureDays)
+            precomputedPenalty[i] = dislikedPenalty + skipPenalty + sessionPen * 6.0 + replayCooldown + multiDayExposure
         }
 
+        val artistKeyCache = HashMap<String, String>()
+        fun cachedArtistKey(track: Track): String =
+            artistKeyCache.getOrPut(track.id) { primaryArtistKey(track) }
+
+        val scoreComparator = compareByDescending<Pair<Track, Double>> { it.second }.thenBy { it.first.id }
+
         // Mix 1: Rotation & Favorites (+ co-listen bridges), kept fresh with daily rotation.
-        val familiarScored = workingPool.map { track ->
-            val plays = (playCounts[track.id] ?: 0).coerceAtMost(12)
-            val favBonus = if (track.id in favoriteTrackIds) 5.5 else 0.0
-            val coListenBoost = bridgeAnchors.maxOfOrNull { anchor ->
-                if (anchor == track.id) 0.0 else profile.coListenStrength(anchor, track.id) * 3.0
-            } ?: 0.0
+        val familiarScored = ArrayList<Pair<Track, Double>>(poolSize)
+        for (i in 0 until poolSize) {
+            val track = workingPool[i]
+            val id = track.id
+            val plays = (playCounts[id] ?: 0).coerceAtMost(12)
+            val favBonus = if (id in favoriteTrackIds) 5.5 else 0.0
+            var coListenBoost = 0.0
+            for (j in bridgeAnchors.indices) {
+                val anchor = bridgeAnchors[j]
+                if (anchor != id) {
+                    val v = profile.coListenStrength(anchor, id) * 3.0
+                    if (v > coListenBoost) coListenBoost = v
+                }
+            }
             val score = plays * 1.0 +
-                profile.affinity(track.id).coerceAtLeast(0.0) * 1.8 +
-                profile.tasteMatchScore(track).coerceAtLeast(0.0) * 1.2 +
+                profile.affinity(id).coerceAtLeast(0.0) * 1.8 +
+                precomputedTaste[i].coerceAtLeast(0.0) * 1.2 +
                 favBonus +
                 coListenBoost +
-                dailyWave(track.id, seedDate, 1L) * 0.85 -
-                commonPenalties(track)
-            track to score
-        }.sortedWith(compareByDescending<Pair<Track, Double>> { it.second }.thenBy { it.first.id })
+                dailyWave(id, seedDate, 1L) * 0.85 -
+                precomputedPenalty[i]
+            familiarScored.add(track to score)
+        }
+        familiarScored.sortWith(scoreComparator)
 
-        val familiarSelected = selectTopDiverse(familiarScored, MIX_SIZE, MAX_PER_ARTIST_IN_MIX)
-        val familiar = sequenceForSmoothFlow(familiarSelected, profile, seedDate, mixSalt = 1L)
+        val familiarSelected = selectTopDiverse(familiarScored, MIX_SIZE, MAX_PER_ARTIST_IN_MIX, ::cachedArtistKey)
+        val familiar = sequenceForSmoothFlow(familiarSelected, profile, seedDate, mixSalt = 1L, ::cachedArtistKey)
         val familiarIds = familiar.mapTo(HashSet()) { it.id }
 
         // Mix 2: Rediscover & Deep Cuts (stale played tracks + deep library cuts).
-        fun rediscoveryScore(track: Track): Double {
-            val count = playCounts[track.id] ?: 0
-            val lastTime = lastPlayed[track.id] ?: 0L
+        fun rediscoveryScore(index: Int, track: Track): Double {
+            val id = track.id
+            val count = playCounts[id] ?: 0
+            val lastTime = lastPlayed[id] ?: 0L
             val staleDays = if (lastTime <= 0L) {
                 MAX_STALE_DAYS
             } else {
@@ -106,54 +140,86 @@ class DailyMixGenerator {
             }
             val staleBonus = if (count > 0 && staleDays >= 7L) staleDays / 8.5 else 0.0
             val neverPlayedScore = if (count == 0) {
-                5.0 + profile.tasteMatchScore(track).coerceIn(0.0, 4.0) * 1.3 + recentAddBonus(track.dateAdded, snapshotTimeMs)
+                5.0 + precomputedTaste[index].coerceIn(0.0, 4.0) * 1.3 + recentAddBonus(track.dateAdded, snapshotTimeMs)
             } else {
                 0.0
             }
-            val favStaleBonus = if (track.id in favoriteTrackIds && staleDays >= 7L) 5.0 else 0.0
+            val favStaleBonus = if (id in favoriteTrackIds && staleDays >= 7L) 5.0 else 0.0
             return staleBonus +
                 neverPlayedScore +
                 favStaleBonus +
-                dailyWave(track.id, seedDate, 2L) -
+                dailyWave(id, seedDate, 2L) -
                 count.coerceAtMost(10) * 1.15 -
-                commonPenalties(track)
+                precomputedPenalty[index]
         }
 
-        val rediscoveryUnique = workingPool.filter { it.id !in familiarIds }
-            .map { it to rediscoveryScore(it) }
-            .sortedWith(compareByDescending<Pair<Track, Double>> { it.second }.thenBy { it.first.id })
-        val rediscoveryFill = workingPool.filter { it.id in familiarIds }
-            .map { it to rediscoveryScore(it) - 10.0 }
-            .sortedWith(compareByDescending<Pair<Track, Double>> { it.second }.thenBy { it.first.id })
-        val rediscoverySelected = selectUniqueThenFill(rediscoveryUnique, rediscoveryFill)
-        val rediscovery = sequenceForSmoothFlow(rediscoverySelected, profile, seedDate, mixSalt = 2L)
+        val rediscoveryUnique = ArrayList<Pair<Track, Double>>(poolSize)
+        for (i in 0 until poolSize) {
+            val track = workingPool[i]
+            if (track.id !in familiarIds) {
+                rediscoveryUnique.add(track to rediscoveryScore(i, track))
+            }
+        }
+        rediscoveryUnique.sortWith(scoreComparator)
+        val rediscoverySelected = if (rediscoveryUnique.size >= MIX_SIZE) {
+            selectTopDiverse(rediscoveryUnique, MIX_SIZE, MAX_PER_ARTIST_IN_MIX, ::cachedArtistKey)
+        } else {
+            val rediscoveryFill = ArrayList<Pair<Track, Double>>()
+            for (i in 0 until poolSize) {
+                val track = workingPool[i]
+                if (track.id in familiarIds) {
+                    rediscoveryFill.add(track to (rediscoveryScore(i, track) - 10.0))
+                }
+            }
+            rediscoveryFill.sortWith(scoreComparator)
+            selectUniqueThenFill(rediscoveryUnique, rediscoveryFill, ::cachedArtistKey)
+        }
+        val rediscovery = sequenceForSmoothFlow(rediscoverySelected, profile, seedDate, mixSalt = 2L, ::cachedArtistKey)
 
         // Mix 3: Taste-Matched Discovery (replaces blind random shuffle with artist/genre/era/DNA fit).
-        val alreadyFeatured = (familiar + rediscovery).mapTo(HashSet()) { it.id }
-        fun discoveryScore(track: Track): Double {
-            val count = playCounts[track.id] ?: 0
+        val alreadyFeatured = HashSet<String>(familiar.size + rediscovery.size)
+        for (t in familiar) alreadyFeatured.add(t.id)
+        for (t in rediscovery) alreadyFeatured.add(t.id)
+
+        fun discoveryScore(index: Int, track: Track): Double {
+            val id = track.id
+            val count = playCounts[id] ?: 0
             val noveltyScore = when {
                 count == 0 -> 4.5
                 count <= 2 -> 2.2
                 else -> (2.0 - count * 0.7).coerceAtLeast(-4.0)
             }
-            val tasteFit = profile.tasteMatchScore(track) * 2.4
+            val tasteFit = precomputedTaste[index] * 2.4
             val freshness = recentAddBonus(track.dateAdded, snapshotTimeMs) * 1.2
             return noveltyScore +
                 tasteFit +
                 freshness +
-                dailyWave(track.id, seedDate, 3L) -
-                commonPenalties(track)
+                dailyWave(id, seedDate, 3L) -
+                precomputedPenalty[index]
         }
 
-        val discoveryUnique = workingPool.filter { it.id !in alreadyFeatured }
-            .map { it to discoveryScore(it) }
-            .sortedWith(compareByDescending<Pair<Track, Double>> { it.second }.thenBy { it.first.id })
-        val discoveryFill = workingPool.filter { it.id in alreadyFeatured }
-            .map { it to discoveryScore(it) - 10.0 }
-            .sortedWith(compareByDescending<Pair<Track, Double>> { it.second }.thenBy { it.first.id })
-        val discoverySelected = selectUniqueThenFill(discoveryUnique, discoveryFill)
-        val discovery = sequenceForSmoothFlow(discoverySelected, profile, seedDate, mixSalt = 3L)
+        val discoveryUnique = ArrayList<Pair<Track, Double>>(poolSize)
+        for (i in 0 until poolSize) {
+            val track = workingPool[i]
+            if (track.id !in alreadyFeatured) {
+                discoveryUnique.add(track to discoveryScore(i, track))
+            }
+        }
+        discoveryUnique.sortWith(scoreComparator)
+        val discoverySelected = if (discoveryUnique.size >= MIX_SIZE) {
+            selectTopDiverse(discoveryUnique, MIX_SIZE, MAX_PER_ARTIST_IN_MIX, ::cachedArtistKey)
+        } else {
+            val discoveryFill = ArrayList<Pair<Track, Double>>()
+            for (i in 0 until poolSize) {
+                val track = workingPool[i]
+                if (track.id in alreadyFeatured) {
+                    discoveryFill.add(track to (discoveryScore(i, track) - 10.0))
+                }
+            }
+            discoveryFill.sortWith(scoreComparator)
+            selectUniqueThenFill(discoveryUnique, discoveryFill, ::cachedArtistKey)
+        }
+        val discovery = sequenceForSmoothFlow(discoverySelected, profile, seedDate, mixSalt = 3L, ::cachedArtistKey)
 
         val sets = listOf(familiar, rediscovery, discovery)
         return sets.mapIndexed { index, selected ->
@@ -247,20 +313,22 @@ class DailyMixGenerator {
 
     private fun selectUniqueThenFill(
         unique: List<Pair<Track, Double>>,
-        fill: List<Pair<Track, Double>>
+        fill: List<Pair<Track, Double>>,
+        artistKeyOf: (Track) -> String
     ): List<Track> {
         if (unique.size >= MIX_SIZE) {
-            return selectTopDiverse(unique, MIX_SIZE, MAX_PER_ARTIST_IN_MIX)
+            return selectTopDiverse(unique, MIX_SIZE, MAX_PER_ARTIST_IN_MIX, artistKeyOf)
         }
-        val fromUnique = selectTopDiverse(unique, unique.size, MAX_PER_ARTIST_IN_MIX)
-        val fromFill = selectTopDiverse(fill, MIX_SIZE - fromUnique.size, MAX_PER_ARTIST_IN_MIX)
+        val fromUnique = selectTopDiverse(unique, unique.size, MAX_PER_ARTIST_IN_MIX, artistKeyOf)
+        val fromFill = selectTopDiverse(fill, MIX_SIZE - fromUnique.size, MAX_PER_ARTIST_IN_MIX, artistKeyOf)
         return fromUnique + fromFill
     }
 
     private fun selectTopDiverse(
         ranked: List<Pair<Track, Double>>,
         limit: Int,
-        maxPerArtist: Int
+        maxPerArtist: Int,
+        artistKeyOf: (Track) -> String
     ): List<Track> {
         if (ranked.isEmpty() || limit <= 0) return emptyList()
         val chosen = ArrayList<Track>(minOf(limit, ranked.size))
@@ -269,7 +337,7 @@ class DailyMixGenerator {
 
         for ((track, _) in ranked) {
             if (chosen.size >= limit) break
-            val key = primaryArtistKey(track)
+            val key = artistKeyOf(track)
             val current = artistCounts[key] ?: 0
             if (current < maxPerArtist) {
                 chosen.add(track)
@@ -289,6 +357,15 @@ class DailyMixGenerator {
         return chosen
     }
 
+    private class FlowNode(
+        val track: Track,
+        val dna: TrackCuration.TrackDna,
+        val artistKey: String,
+        val isRealArtist: Boolean,
+        val genreKey: String,
+        val albumNorm: String?
+    )
+
     /**
      * DJ-style smooth flow ordering: chains tracks along a continuous energy/valence/acoustic
      * curve while favoring co-listened pairs and separating same-artist/album tracks.
@@ -297,62 +374,77 @@ class DailyMixGenerator {
         tracks: List<Track>,
         profile: TasteProfile,
         seedDate: Long,
-        mixSalt: Long
+        mixSalt: Long,
+        artistKeyOf: (Track) -> String
     ): List<Track> {
         if (tracks.size <= 2) return tracks
-        val dnaMap = tracks.associate { it.id to TrackCuration.analyzeTrackDna(it) }
-        val openerPoolSize = minOf(3, tracks.size)
+        val remaining = ArrayList<FlowNode>(tracks.size)
+        for (i in tracks.indices) {
+            val t = tracks[i]
+            val aKey = artistKeyOf(t)
+            val albumNorm = if (MetadataNormalizer.isPlaceholderField(t.album)) {
+                null
+            } else {
+                MetadataNormalizer.normalizeForComparison(t.album).ifEmpty { null }
+            }
+            remaining.add(
+                FlowNode(
+                    track = t,
+                    dna = TrackCuration.analyzeTrackDna(t),
+                    artistKey = aKey,
+                    isRealArtist = !aKey.startsWith("track:"),
+                    genreKey = MetadataNormalizer.genreGroupKey(t.genre),
+                    albumNorm = albumNorm
+                )
+            )
+        }
+        val openerPoolSize = minOf(3, remaining.size)
         val openerIdx = (((seedDate + mixSalt) % openerPoolSize) + openerPoolSize).toInt() % openerPoolSize
-        val remaining = tracks.toMutableList()
-        val ordered = ArrayList<Track>(tracks.size)
-        ordered.add(remaining.removeAt(openerIdx))
+        val orderedNodes = ArrayList<FlowNode>(remaining.size)
+        orderedNodes.add(remaining.removeAt(openerIdx))
 
         while (remaining.isNotEmpty()) {
-            val prev = ordered.last()
-            val prev2 = if (ordered.size >= 2) ordered[ordered.size - 2] else null
-            val prevDna = dnaMap.getValue(prev.id)
-            val prevArtist = primaryArtistKey(prev)
-            val prev2Artist = prev2?.let { primaryArtistKey(it) }
-            val prevGenre = MetadataNormalizer.genreGroupKey(prev.genre)
+            val prev = orderedNodes.last()
+            val prev2 = if (orderedNodes.size >= 2) orderedNodes[orderedNodes.size - 2] else null
+            val prevDna = prev.dna
+            val prevArtist = prev.artistKey
+            val prev2Artist = prev2?.artistKey
+            val prevGenre = prev.genreKey
+            val prevAlbum = prev.albumNorm
 
             var bestIdx = 0
             var bestCost = Float.MAX_VALUE
             for (i in remaining.indices) {
                 val cand = remaining[i]
-                val candDna = dnaMap.getValue(cand.id)
-                val candArtist = primaryArtistKey(cand)
-                val candGenre = MetadataNormalizer.genreGroupKey(cand.genre)
+                val candDna = cand.dna
 
                 var cost = abs(prevDna.energyScore - candDna.energyScore) * 0.45f +
                     abs(prevDna.moodValence - candDna.moodValence) * 0.30f +
                     abs(prevDna.acousticScore - candDna.acousticScore) * 0.15f -
-                    profile.coListenStrength(prev.id, cand.id).toFloat() * 0.35f
+                    profile.coListenStrength(prev.track.id, cand.track.id).toFloat() * 0.35f
 
-                if (prevGenre.isNotEmpty() && prevGenre == candGenre) cost -= 0.08f
-                if (candArtist == prevArtist && !candArtist.startsWith("track:")) cost += 0.80f
-                else if (prev2Artist != null && candArtist == prev2Artist && !candArtist.startsWith("track:")) cost += 0.30f
-                if (hasKnownSameAlbum(prev.album, cand.album)) cost += 0.25f
+                if (prevGenre.isNotEmpty() && prevGenre == cand.genreKey) cost -= 0.08f
+                if (cand.isRealArtist) {
+                    if (cand.artistKey == prevArtist) cost += 0.80f
+                    else if (prev2Artist != null && cand.artistKey == prev2Artist) cost += 0.30f
+                }
+                if (prevAlbum != null && cand.albumNorm != null && prevAlbum == cand.albumNorm) {
+                    cost += 0.25f
+                }
 
                 if (cost < bestCost) {
                     bestCost = cost
                     bestIdx = i
                 }
             }
-            ordered.add(remaining.removeAt(bestIdx))
+            orderedNodes.add(remaining.removeAt(bestIdx))
         }
-        return ordered
+        return orderedNodes.map { it.track }
     }
 
     private fun primaryArtistKey(track: Track): String {
         val primary = ArtistSplitter.split(track.artist).firstOrNull().orEmpty()
         if (MetadataNormalizer.isPlaceholderField(primary)) return "track:${track.id}"
         return MetadataNormalizer.normalizeForComparison(primary).ifBlank { "track:${track.id}" }
-    }
-
-    private fun hasKnownSameAlbum(left: String, right: String): Boolean {
-        if (MetadataNormalizer.isPlaceholderField(left) || MetadataNormalizer.isPlaceholderField(right)) return false
-        val nl = MetadataNormalizer.normalizeForComparison(left)
-        val nr = MetadataNormalizer.normalizeForComparison(right)
-        return nl.isNotEmpty() && nl == nr
     }
 }

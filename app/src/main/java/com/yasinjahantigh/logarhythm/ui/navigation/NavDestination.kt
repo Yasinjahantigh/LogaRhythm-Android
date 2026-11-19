@@ -70,6 +70,10 @@ sealed class NavDestination(
         const val ROUTE_LIBRARY_TOOLS = "library_tools"
         const val ROUTE_THEME = "theme_studio"
         const val ROUTE_DOWNLOAD = "download"
+        const val ROUTE_DOWNLOAD_WITH_ARGS = "download?query={query}"
+
+        fun createDownloadRoute(query: String? = null): String =
+            if (query.isNullOrBlank()) ROUTE_DOWNLOAD else "download?query=${Uri.encode(query.trim())}"
 
         fun createAlbumDetailRoute(albumName: String, albumArtist: String): String =
             "album_detail/${Uri.encode(albumName)}?albumArtist=${Uri.encode(albumArtist)}"

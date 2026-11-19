@@ -19,6 +19,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Equalizer
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Card
@@ -107,6 +108,16 @@ fun EqualizerScreen(
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 20.dp, vertical = 12.dp)
         ) {
+            if (state.isSupported) {
+                com.yasinjahantigh.logarhythm.ui.components.FeatureMicroTip(
+                    hintId = com.yasinjahantigh.logarhythm.ui.components.FeatureHintIds.EQUALIZER_AUTO,
+                    text = stringResource(R.string.tip_equalizer_auto),
+                    icon = Icons.Filled.Equalizer,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 10.dp)
+                )
+            }
             if (!state.isSupported) {
                 Card(
                     colors = CardDefaults.cardColors(

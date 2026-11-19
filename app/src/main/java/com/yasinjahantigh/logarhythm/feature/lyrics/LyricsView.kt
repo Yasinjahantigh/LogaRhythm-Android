@@ -10,6 +10,7 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
@@ -65,6 +66,7 @@ import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material.icons.filled.TouchApp
 import androidx.compose.material.icons.filled.FileUpload
+import androidx.compose.material.icons.filled.FormatLineSpacing
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.OpenInBrowser
 import androidx.compose.material.icons.filled.RestartAlt
@@ -92,6 +94,7 @@ import com.yasinjahantigh.logarhythm.domain.model.LyricsCandidate
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -103,12 +106,14 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.yasinjahantigh.logarhythm.R
@@ -247,6 +252,7 @@ fun LyricsView(
     }
     val isLoading by viewModel.isLoading.collectAsStateWithLifecycle()
     val isAnyOnlineEnabled by viewModel.isAnyOnlineEnabled.collectAsStateWithLifecycle()
+    val lyricsLineSpacingDp by viewModel.lyricsLineSpacingDp.collectAsStateWithLifecycle()
     val isManualEditOpen by viewModel.isManualEditOpen.collectAsStateWithLifecycle()
     val showCandidatePicker by viewModel.showCandidatePicker.collectAsStateWithLifecycle()
     val lyricsCandidates by viewModel.lyricsCandidates.collectAsStateWithLifecycle()
@@ -254,7 +260,16 @@ fun LyricsView(
     val saveMessage by viewModel.saveMessage.collectAsStateWithLifecycle()
 
     var showDeleteConfirmDialog by remember { mutableStateOf(false) }
+    var showLineSpacingDialog by remember { mutableStateOf(false) }
     var trackForLyricsDeletion by remember { mutableStateOf<com.yasinjahantigh.logarhythm.domain.model.Track?>(null) }
+
+    if (showLineSpacingDialog) {
+        LyricsLineSpacingDialog(
+            currentSpacingDp = lyricsLineSpacingDp,
+            onSpacingChange = viewModel::setLyricsLineSpacing,
+            onDismiss = { showLineSpacingDialog = false }
+        )
+    }
 
     val context = LocalContext.current
     val mediaStoreConsent = rememberMediaStoreConsent()
@@ -451,19 +466,20 @@ fun LyricsView(
         )
     }
 
+    val isRtl = LocalLayoutDirection.current == LayoutDirection.Rtl
+
     Surface(
         modifier = modifier
             .fillMaxSize()
             .offset { IntOffset(swipeOffsetX.value.roundToInt(), 0) }
-            .pointerInput(Unit) {
+            .pointerInput(isRtl) {
                 detectHorizontalDragGestures(
                     onDragEnd = {
                         coroutineScope.launch {
                             val current = swipeOffsetX.value
-                            if (current < -120f) {
-                                onNext()
-                            } else if (current > 120f) {
-                                onPrevious()
+                            if (kotlin.math.abs(current) > 120f) {
+                                val goNext = if (isRtl) current > 0 else current < 0
+                                if (goNext) onNext() else onPrevious()
                             }
                             swipeOffsetX.animateTo(0f, spring())
                         }
@@ -483,9 +499,217 @@ fun LyricsView(
         color = Color.Transparent,
         shape = RoundedCornerShape(24.dp)
     ) {
-        Box(modifier = Modifier.fillMaxSize()) {
-            when {
-                isLoading -> {
+        Column(modifier = Modifier.fillMaxSize()) {
+            // Dedicated slim header above lyrics so badges and action icons never overlap scrolled text.
+            if (!isLoading && lyrics != null && !lyrics!!.isEmpty) {
+                com.yasinjahantigh.logarhythm.ui.components.FeatureMicroTip(
+                    hintId = com.yasinjahantigh.logarhythm.ui.components.FeatureHintIds.LYRICS_ACTIONS,
+                    text = stringResource(R.string.tip_lyrics_actions),
+                    icon = Icons.Filled.Share,
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                )
+                var showLyricsMenu by remember { mutableStateOf(false) }
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 8.dp, end = 2.dp, top = 2.dp, bottom = 2.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        modifier = Modifier.weight(1f),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Surface(
+                            shape = CircleShape,
+                            color = if (lyrics!!.isSynced) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHighest
+                        ) {
+                            Text(
+                                text = stringResource(if (lyrics!!.isSynced) R.string.lyrics_synced_badge else R.string.lyrics_plain_badge),
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.SemiBold,
+                                color = if (lyrics!!.isSynced) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                            )
+                        }
+
+                        val lyricsSource = lyrics!!.source.orEmpty()
+                        val sourceLabel = when {
+                            lyricsSource == "embedded" -> stringResource(R.string.lyrics_source_embedded)
+                            lyricsSource == "companion" -> stringResource(R.string.lyrics_source_companion)
+                            lyricsSource == "user_manual" -> stringResource(R.string.lyrics_source_manual)
+                            lyricsSource == "imported_file" -> stringResource(R.string.lyrics_source_imported)
+                            lyricsSource == "user_clipboard" -> stringResource(R.string.lyrics_source_clipboard)
+                            lyricsSource.startsWith("manual") -> stringResource(R.string.lyrics_source_manual)
+                            lyricsSource == "lrclib" -> stringResource(R.string.lyrics_source_online, stringResource(R.string.lyrics_provider_lrclib))
+                            lyricsSource == "netease" -> stringResource(R.string.lyrics_source_online, stringResource(R.string.lyrics_provider_netease))
+                            lyricsSource == "kugou" -> stringResource(R.string.lyrics_source_online, stringResource(R.string.lyrics_provider_kugou))
+                            lyricsSource == "lyrics_ovh" -> stringResource(R.string.lyrics_source_online, stringResource(R.string.lyrics_provider_lyrics_ovh))
+                            lyricsSource == "genius" -> stringResource(R.string.lyrics_source_online, stringResource(R.string.lyrics_provider_genius))
+                            lyricsSource == "custom" -> stringResource(R.string.lyrics_source_online, stringResource(R.string.lyrics_provider_custom))
+                            else -> stringResource(R.string.lyrics_source_cached)
+                        }
+
+                        Text(
+                            text = sourceLabel,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier
+                                .weight(1f, fill = false)
+                                .testTag("lyrics_source_badge")
+                        )
+                    }
+
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(0.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        IconButton(
+                            onClick = { showLyricCardDialog = true },
+                            modifier = Modifier.size(48.dp).testTag("lyrics_top_share_button")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Share,
+                                contentDescription = stringResource(R.string.lyrics_share_card_title),
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        }
+
+                        IconButton(
+                            onClick = { viewModel.searchCandidatesOnline() },
+                            modifier = Modifier.size(48.dp).testTag("lyrics_candidates_search_button")
+                        ) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.ManageSearch,
+                                contentDescription = stringResource(R.string.lyrics_search_candidates_btn),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+
+                        IconButton(
+                            onClick = {
+                                trackForLyricsDeletion = currentTrack
+                                showDeleteConfirmDialog = trackForLyricsDeletion != null
+                            },
+                            modifier = Modifier.size(48.dp).testTag("lyrics_delete_button")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Delete,
+                                contentDescription = stringResource(R.string.action_delete_lyrics),
+                                tint = MaterialTheme.colorScheme.error
+                            )
+                        }
+
+                        Box {
+                            IconButton(
+                                onClick = { showLyricsMenu = true },
+                                modifier = Modifier.size(48.dp).testTag("lyrics_more_button")
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.MoreVert,
+                                    contentDescription = stringResource(R.string.player_more_options),
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            DropdownMenu(
+                                expanded = showLyricsMenu,
+                                onDismissRequest = { showLyricsMenu = false }
+                            ) {
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(R.string.lyrics_edit_action)) },
+                                    leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null) },
+                                    onClick = {
+                                        showLyricsMenu = false
+                                        viewModel.setManualEditOpen(true)
+                                    },
+                                    modifier = Modifier.testTag("lyrics_manual_edit_button")
+                                )
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(R.string.cd_import_lrc)) },
+                                    leadingIcon = { Icon(Icons.Default.FileUpload, contentDescription = null) },
+                                    onClick = {
+                                        showLyricsMenu = false
+                                        filePicker.launch(arrayOf("*/*", "text/*"))
+                                    },
+                                    modifier = Modifier.testTag("lyrics_import_button")
+                                )
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(R.string.action_export_lrc)) },
+                                    leadingIcon = { Icon(Icons.Default.SaveAlt, contentDescription = null) },
+                                    onClick = {
+                                        showLyricsMenu = false
+                                        exportPicker.launch("${currentTrack?.title.orEmpty()}.lrc")
+                                    },
+                                    modifier = Modifier.testTag("lyrics_export_button")
+                                )
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(R.string.action_search_lyrics_google)) },
+                                    leadingIcon = { Icon(Icons.Default.OpenInBrowser, contentDescription = null) },
+                                    onClick = {
+                                        showLyricsMenu = false
+                                        onSearchGoogleLyrics()
+                                    },
+                                    modifier = Modifier.testTag("lyrics_google_search_button")
+                                )
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(R.string.lyrics_line_spacing_action)) },
+                                    leadingIcon = { Icon(Icons.Default.FormatLineSpacing, contentDescription = null) },
+                                    onClick = {
+                                        showLyricsMenu = false
+                                        showLineSpacingDialog = true
+                                    },
+                                    modifier = Modifier.testTag("lyrics_line_spacing_button")
+                                )
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(R.string.lyrics_offset_action)) },
+                                    leadingIcon = { Icon(Icons.Default.Timer, contentDescription = null) },
+                                    onClick = {
+                                        showLyricsMenu = false
+                                        showOffsetDialog = true
+                                    },
+                                    modifier = Modifier.testTag("lyrics_offset_button")
+                                )
+                                if (lyrics?.isSynced == true) {
+                                    DropdownMenuItem(
+                                        text = { Text(stringResource(R.string.lyrics_tap_to_sync)) },
+                                        leadingIcon = { Icon(Icons.Default.TouchApp, contentDescription = null) },
+                                        onClick = {
+                                            showLyricsMenu = false
+                                            isTapToSyncMode = true
+                                        },
+                                        modifier = Modifier.testTag("lyrics_tap_to_sync_button")
+                                    )
+                                }
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(R.string.lyrics_lrc_editor_title)) },
+                                    leadingIcon = { Icon(Icons.Default.Timer, contentDescription = null) },
+                                    onClick = {
+                                        showLyricsMenu = false
+                                        showLrcEditorSheet = true
+                                    },
+                                    modifier = Modifier.testTag("lyrics_lrc_editor_button")
+                                )
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(R.string.lyrics_share_card_title)) },
+                                    leadingIcon = { Icon(Icons.Default.Share, contentDescription = null) },
+                                    onClick = {
+                                        showLyricsMenu = false
+                                        showLyricCardDialog = true
+                                    },
+                                    modifier = Modifier.testTag("lyrics_share_card_button")
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                when {
+                    isLoading -> {
                     Column(
                         modifier = Modifier.fillMaxSize(),
                         horizontalAlignment = Alignment.CenterHorizontally,
@@ -552,9 +776,9 @@ fun LyricsView(
                                     )
                                     IconButton(
                                         onClick = { isTapToSyncMode = false },
-                                        modifier = Modifier.size(28.dp)
+                                        modifier = Modifier.size(48.dp)
                                     ) {
-                                        Icon(Icons.Default.Close, contentDescription = null, modifier = Modifier.size(16.dp))
+                                        Icon(Icons.Default.Close, contentDescription = stringResource(R.string.close), modifier = Modifier.size(18.dp))
                                     }
                                 }
                             }
@@ -564,6 +788,7 @@ fun LyricsView(
                             activeIndex = activeIndex,
                             offsetMs = offsetMs,
                             positionFlow = viewModel.livePositionMs,
+                            lineSpacingDp = lyricsLineSpacingDp,
                             isTapToSyncMode = isTapToSyncMode,
                             onLineClick = { line ->
                                 if (isTapToSyncMode) {
@@ -586,191 +811,12 @@ fun LyricsView(
                 }
 
                 else -> {
-                    PlainLyricsContent(plainText = lyrics?.plainText.orEmpty())
+                    PlainLyricsContent(
+                        plainText = lyrics?.plainText.orEmpty(),
+                        lineSpacingDp = lyricsLineSpacingDp
+                    )
                 }
             }
-
-            // Slim header: what kind of lyrics these are and where they came from on the leading
-            // side; the one action people reach for (find another version) plus an overflow menu.
-            if (!isLoading && lyrics != null && !lyrics!!.isEmpty) {
-                var showLyricsMenu by remember { mutableStateOf(false) }
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .align(Alignment.TopCenter)
-                        .padding(horizontal = 4.dp, vertical = 2.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Row(
-                        modifier = Modifier.weight(1f),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Surface(
-                            shape = CircleShape,
-                            color = if (lyrics!!.isSynced) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHighest
-                        ) {
-                            Text(
-                                text = stringResource(if (lyrics!!.isSynced) R.string.lyrics_synced_badge else R.string.lyrics_plain_badge),
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.SemiBold,
-                                color = if (lyrics!!.isSynced) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
-                            )
-                        }
-
-                        val lyricsSource = lyrics!!.source.orEmpty()
-                        val sourceLabel = when {
-                            lyricsSource == "embedded" -> stringResource(R.string.lyrics_source_embedded)
-                            lyricsSource == "companion" -> stringResource(R.string.lyrics_source_companion)
-                            lyricsSource == "user_manual" -> stringResource(R.string.lyrics_source_manual)
-                            lyricsSource == "imported_file" -> stringResource(R.string.lyrics_source_imported)
-                            lyricsSource == "user_clipboard" -> stringResource(R.string.lyrics_source_clipboard)
-                            lyricsSource.startsWith("manual") -> stringResource(R.string.lyrics_source_manual)
-                            lyricsSource == "lrclib" -> stringResource(R.string.lyrics_source_online, stringResource(R.string.lyrics_provider_lrclib))
-                            lyricsSource == "netease" -> stringResource(R.string.lyrics_source_online, stringResource(R.string.lyrics_provider_netease))
-                            lyricsSource == "kugou" -> stringResource(R.string.lyrics_source_online, stringResource(R.string.lyrics_provider_kugou))
-                            lyricsSource == "lyrics_ovh" -> stringResource(R.string.lyrics_source_online, stringResource(R.string.lyrics_provider_lyrics_ovh))
-                            lyricsSource == "genius" -> stringResource(R.string.lyrics_source_online, stringResource(R.string.lyrics_provider_genius))
-                            lyricsSource == "custom" -> stringResource(R.string.lyrics_source_online, stringResource(R.string.lyrics_provider_custom))
-                            else -> stringResource(R.string.lyrics_source_cached)
-                        }
-
-                        Text(
-                            text = sourceLabel,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier
-                                .weight(1f, fill = false)
-                                .testTag("lyrics_source_badge")
-                        )
-                    }
-
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(0.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        IconButton(
-                            onClick = {
-                                trackForLyricsDeletion = currentTrack
-                                showDeleteConfirmDialog = trackForLyricsDeletion != null
-                            },
-                            modifier = Modifier.size(44.dp).testTag("lyrics_delete_button")
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Delete,
-                                contentDescription = stringResource(R.string.action_delete_lyrics),
-                                tint = MaterialTheme.colorScheme.error
-                            )
-                        }
-
-                        IconButton(
-                            onClick = { viewModel.searchCandidatesOnline() },
-                            modifier = Modifier.size(44.dp).testTag("lyrics_candidates_search_button")
-                        ) {
-                            Icon(
-                                imageVector = Icons.AutoMirrored.Filled.ManageSearch,
-                                contentDescription = stringResource(R.string.lyrics_search_candidates_btn),
-                                tint = MaterialTheme.colorScheme.primary
-                            )
-                        }
-
-                        Box {
-                            IconButton(
-                                onClick = { showLyricsMenu = true },
-                                modifier = Modifier.size(44.dp).testTag("lyrics_more_button")
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.MoreVert,
-                                    contentDescription = stringResource(R.string.player_more_options),
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                            DropdownMenu(
-                                expanded = showLyricsMenu,
-                                onDismissRequest = { showLyricsMenu = false }
-                            ) {
-                                DropdownMenuItem(
-                                    text = { Text(stringResource(R.string.lyrics_edit_action)) },
-                                    leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null) },
-                                    onClick = {
-                                        showLyricsMenu = false
-                                        viewModel.setManualEditOpen(true)
-                                    },
-                                    modifier = Modifier.testTag("lyrics_manual_edit_button")
-                                )
-                                DropdownMenuItem(
-                                    text = { Text(stringResource(R.string.cd_import_lrc)) },
-                                    leadingIcon = { Icon(Icons.Default.FileUpload, contentDescription = null) },
-                                    onClick = {
-                                        showLyricsMenu = false
-                                        filePicker.launch(arrayOf("*/*", "text/*"))
-                                    },
-                                    modifier = Modifier.testTag("lyrics_import_button")
-                                )
-                                DropdownMenuItem(
-                                    text = { Text(stringResource(R.string.action_export_lrc)) },
-                                    leadingIcon = { Icon(Icons.Default.SaveAlt, contentDescription = null) },
-                                    onClick = {
-                                        showLyricsMenu = false
-                                        exportPicker.launch("${currentTrack?.title.orEmpty()}.lrc")
-                                    },
-                                    modifier = Modifier.testTag("lyrics_export_button")
-                                )
-                                DropdownMenuItem(
-                                    text = { Text(stringResource(R.string.action_search_lyrics_google)) },
-                                    leadingIcon = { Icon(Icons.Default.OpenInBrowser, contentDescription = null) },
-                                    onClick = {
-                                        showLyricsMenu = false
-                                        onSearchGoogleLyrics()
-                                    },
-                                    modifier = Modifier.testTag("lyrics_google_search_button")
-                                )
-                                DropdownMenuItem(
-                                    text = { Text(stringResource(R.string.lyrics_offset_action)) },
-                                    leadingIcon = { Icon(Icons.Default.Timer, contentDescription = null) },
-                                    onClick = {
-                                        showLyricsMenu = false
-                                        showOffsetDialog = true
-                                    },
-                                    modifier = Modifier.testTag("lyrics_offset_button")
-                                )
-                                if (lyrics?.isSynced == true) {
-                                    DropdownMenuItem(
-                                        text = { Text(stringResource(R.string.lyrics_tap_to_sync)) },
-                                        leadingIcon = { Icon(Icons.Default.TouchApp, contentDescription = null) },
-                                        onClick = {
-                                            showLyricsMenu = false
-                                            isTapToSyncMode = true
-                                        },
-                                        modifier = Modifier.testTag("lyrics_tap_to_sync_button")
-                                    )
-                                }
-                                DropdownMenuItem(
-                                    text = { Text(stringResource(R.string.lyrics_lrc_editor_title)) },
-                                    leadingIcon = { Icon(Icons.Default.Timer, contentDescription = null) },
-                                    onClick = {
-                                        showLyricsMenu = false
-                                        showLrcEditorSheet = true
-                                    },
-                                    modifier = Modifier.testTag("lyrics_lrc_editor_button")
-                                )
-                                DropdownMenuItem(
-                                    text = { Text(stringResource(R.string.lyrics_share_card_title)) },
-                                    leadingIcon = { Icon(Icons.Default.Share, contentDescription = null) },
-                                    onClick = {
-                                        showLyricsMenu = false
-                                        showLyricCardDialog = true
-                                    },
-                                    modifier = Modifier.testTag("lyrics_share_card_button")
-                                )
-                            }
-                        }
-                    }
-                }
             }
         }
     }
@@ -825,6 +871,7 @@ private fun SyncedLyricsContent(
     activeIndex: Int,
     offsetMs: Long,
     positionFlow: kotlinx.coroutines.flow.StateFlow<Long>,
+    lineSpacingDp: Float = 12f,
     isTapToSyncMode: Boolean = false,
     onLineClick: (com.yasinjahantigh.logarhythm.domain.model.LyricLine) -> Unit
 ) {
@@ -832,9 +879,21 @@ private fun SyncedLyricsContent(
     val configuration = LocalConfiguration.current
     val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
 
+    // Collect live position only to compute whether we are currently inside an instrumental break.
+    val livePosMs by positionFlow.collectAsStateWithLifecycle()
+    val activeGap = remember(lyrics.lines, activeIndex, livePosMs / 250L, offsetMs, isTapToSyncMode) {
+        if (isTapToSyncMode) null
+        else com.yasinjahantigh.logarhythm.domain.lyrics.LyricsInstrumentalDetector.findActiveGap(
+            lines = lyrics.lines,
+            activeIndex = activeIndex,
+            effectivePosMs = livePosMs + offsetMs
+        )
+    }
+
     LaunchedEffect(activeIndex) {
         if (!isTapToSyncMode && activeIndex >= 0 && activeIndex < lyrics.lines.size) {
-            listState.animateScrollToItem((activeIndex - 1).coerceAtLeast(0))
+            // +1 accounts for the intro slot item at index 0
+            listState.animateScrollToItem(activeIndex.coerceAtLeast(0))
         }
     }
 
@@ -845,76 +904,291 @@ private fun SyncedLyricsContent(
         textDirection = TextDirection.Content
     )
     val onSurface = MaterialTheme.colorScheme.onSurface
+    val verticalItemPadding = (lineSpacingDp * (if (isLandscape) 0.45f else 0.55f)).coerceIn(3f, 20f).dp
 
     LazyColumn(
         state = listState,
+        verticalArrangement = Arrangement.spacedBy((lineSpacingDp * 0.35f).coerceIn(1f, 14.dp.value).dp),
         contentPadding = PaddingValues(
-            top = if (isLandscape) 44.dp else 56.dp,
+            top = if (isLandscape) 12.dp else 16.dp,
             bottom = if (isLandscape) 96.dp else 200.dp,
             start = 8.dp,
             end = 8.dp
         ),
         modifier = Modifier
             .fillMaxSize()
-            .fadingEdges(top = 40.dp, bottom = 72.dp)
+            .fadingEdges(top = 24.dp, bottom = 72.dp)
     ) {
-        itemsIndexed(lyrics.lines) { index, line ->
-            val isCurrent = index == activeIndex
-            val targetAlpha = when {
-                isTapToSyncMode -> 0.9f
-                isCurrent -> 1f
-                activeIndex < 0 -> 0.5f
-                index < activeIndex -> if (activeIndex - index == 1) 0.34f else 0.24f
-                index - activeIndex == 1 -> 0.62f
-                index - activeIndex == 2 -> 0.5f
-                else -> 0.4f
-            }
-            val alpha by animateFloatAsState(
-                targetValue = targetAlpha,
-                animationSpec = tween(durationMillis = 380, easing = FastOutSlowInEasing),
-                label = "lyric_alpha_$index"
+        // Intro instrumental slot (strictly visible ONLY while playback is in the intro break; 0dp otherwise)
+        item(key = "instrumental_intro") {
+            InstrumentalInterludeSlot(
+                visible = activeGap?.slotIndex == -1,
+                progress = if (activeGap?.slotIndex == -1) activeGap.progress else 0f
             )
-            val lineScale by animateFloatAsState(
-                targetValue = if (isCurrent && !isTapToSyncMode) 1.04f else 1f,
-                animationSpec = tween(durationMillis = 320, easing = FastOutSlowInEasing),
-                label = "lyric_scale_$index"
-            )
+        }
 
-            val lineModifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(18.dp))
-                .background(
-                    if (isTapToSyncMode) MaterialTheme.colorScheme.primary.copy(alpha = 0.08f)
-                    else Color.Transparent
-                )
-                .clickable { onLineClick(line) }
-                .graphicsLayer {
-                    this.alpha = alpha
-                    scaleX = lineScale
-                    scaleY = lineScale
-                }
-                .padding(horizontal = 14.dp, vertical = if (isLandscape) 7.dp else 11.dp)
-                .testTag("lyric_line_$index")
-            if (isCurrent && line.words.isNotEmpty() && !isTapToSyncMode) {
-                KaraokeLine(
-                    line = line,
-                    offsetMs = offsetMs,
-                    positionFlow = positionFlow,
-                    style = lineStyle,
-                    color = onSurface,
-                    modifier = lineModifier
+        itemsIndexed(
+            items = lyrics.lines,
+            key = { index, line -> "${line.timestampMs}_$index" }
+        ) { index, line ->
+            val isExplicitInstrumental = com.yasinjahantigh.logarhythm.domain.lyrics.LyricsInstrumentalDetector.isInstrumentalMarker(line.text)
+            if (isExplicitInstrumental) {
+                // Explicit blank/instrumental LRC line leaves ZERO trace before or after its exact moment.
+                InstrumentalInterludeSlot(
+                    visible = activeGap?.slotIndex == index,
+                    progress = if (activeGap?.slotIndex == index) activeGap.progress else 0f
                 )
             } else {
-                Text(
-                    text = line.text,
-                    style = lineStyle,
-                    color = if (isTapToSyncMode) MaterialTheme.colorScheme.primary else onSurface,
-                    textAlign = TextAlign.Start,
-                    modifier = lineModifier
+                val isCurrent = index == activeIndex
+                val isDuringBreakAfterThis = activeGap?.slotIndex == index
+                val targetAlpha = when {
+                    isTapToSyncMode -> 0.9f
+                    isCurrent && isDuringBreakAfterThis -> 0.42f
+                    isCurrent -> 1f
+                    activeIndex < 0 -> 0.5f
+                    index < activeIndex -> if (activeIndex - index == 1) 0.34f else 0.24f
+                    index - activeIndex == 1 -> 0.62f
+                    index - activeIndex == 2 -> 0.5f
+                    else -> 0.4f
+                }
+                val alpha by animateFloatAsState(
+                    targetValue = targetAlpha,
+                    animationSpec = tween(durationMillis = 380, easing = FastOutSlowInEasing),
+                    label = "lyric_alpha_$index"
                 )
+                val lineScale by animateFloatAsState(
+                    targetValue = if (isCurrent && !isDuringBreakAfterThis && !isTapToSyncMode) 1.04f else 1f,
+                    animationSpec = tween(durationMillis = 320, easing = FastOutSlowInEasing),
+                    label = "lyric_scale_$index"
+                )
+
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    val lineModifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(18.dp))
+                        .background(
+                            if (isTapToSyncMode) MaterialTheme.colorScheme.primary.copy(alpha = 0.08f)
+                            else Color.Transparent
+                        )
+                        .clickable { onLineClick(line) }
+                        .graphicsLayer {
+                            this.alpha = alpha
+                            scaleX = lineScale
+                            scaleY = lineScale
+                        }
+                        .padding(horizontal = 14.dp, vertical = verticalItemPadding)
+                        .testTag("lyric_line_$index")
+                    if (isCurrent && line.words.isNotEmpty() && !isTapToSyncMode) {
+                        KaraokeLine(
+                            line = line,
+                            offsetMs = offsetMs,
+                            positionFlow = positionFlow,
+                            style = lineStyle,
+                            color = onSurface,
+                            modifier = lineModifier
+                        )
+                    } else {
+                        Text(
+                            text = line.text,
+                            style = lineStyle,
+                            color = if (isTapToSyncMode) MaterialTheme.colorScheme.primary else onSurface,
+                            textAlign = TextAlign.Start,
+                            modifier = lineModifier
+                        )
+                    }
+                    // Natural instrumental interlude slot right between line[index] and line[index+1]:
+                    // expands ONLY during that exact moment and collapses to 0dp before/after!
+                    InstrumentalInterludeSlot(
+                        visible = isDuringBreakAfterThis,
+                        progress = if (isDuringBreakAfterThis) activeGap?.progress ?: 0f else 0f
+                    )
+                }
             }
         }
     }
+}
+
+@Composable
+private fun InstrumentalInterludeSlot(
+    visible: Boolean,
+    progress: Float
+) {
+    androidx.compose.animation.AnimatedVisibility(
+        visible = visible,
+        enter = androidx.compose.animation.expandVertically(
+            animationSpec = tween(durationMillis = 360, easing = FastOutSlowInEasing),
+            expandFrom = Alignment.CenterVertically
+        ) + androidx.compose.animation.fadeIn(animationSpec = tween(320)),
+        exit = androidx.compose.animation.shrinkVertically(
+            animationSpec = tween(durationMillis = 320, easing = FastOutSlowInEasing),
+            shrinkTowards = Alignment.CenterVertically
+        ) + androidx.compose.animation.fadeOut(animationSpec = tween(240))
+    ) {
+        InstrumentalInterludeIndicator(progress = progress)
+    }
+}
+
+@Composable
+private fun InstrumentalInterludeIndicator(progress: Float) {
+    val infinite = androidx.compose.animation.core.rememberInfiniteTransition(label = "instrumental_interlude")
+    val noteFloat by infinite.animateFloat(
+        initialValue = -3f,
+        targetValue = 3f,
+        animationSpec = androidx.compose.animation.core.infiniteRepeatable(
+            animation = tween(durationMillis = 1200, easing = FastOutSlowInEasing),
+            repeatMode = androidx.compose.animation.core.RepeatMode.Reverse
+        ),
+        label = "note_float"
+    )
+    val noteScale by infinite.animateFloat(
+        initialValue = 0.94f,
+        targetValue = 1.09f,
+        animationSpec = androidx.compose.animation.core.infiniteRepeatable(
+            animation = tween(durationMillis = 900, easing = FastOutSlowInEasing),
+            repeatMode = androidx.compose.animation.core.RepeatMode.Reverse
+        ),
+        label = "note_scale"
+    )
+    val dotPhase by infinite.animateFloat(
+        initialValue = 0f,
+        targetValue = (2.0 * kotlin.math.PI).toFloat(),
+        animationSpec = androidx.compose.animation.core.infiniteRepeatable(
+            animation = tween(durationMillis = 1500, easing = androidx.compose.animation.core.LinearEasing),
+            repeatMode = androidx.compose.animation.core.RepeatMode.Restart
+        ),
+        label = "dot_phase"
+    )
+
+    val primary = MaterialTheme.colorScheme.primary
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 12.dp, horizontal = 14.dp)
+            .testTag("lyrics_instrumental_indicator"),
+        contentAlignment = Alignment.CenterStart
+    ) {
+        Surface(
+            shape = CircleShape,
+            color = primary.copy(alpha = 0.14f)
+        ) {
+            Row(
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.MusicNote,
+                    contentDescription = stringResource(R.string.lyrics_instrumental_cd),
+                    tint = primary,
+                    modifier = Modifier
+                        .size(22.dp)
+                        .graphicsLayer {
+                            translationY = noteFloat
+                            scaleX = noteScale
+                            scaleY = noteScale
+                        }
+                )
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(7.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    repeat(3) { i ->
+                        val wave = (kotlin.math.sin((dotPhase - i * 0.9f).toDouble()).toFloat() + 1f) * 0.5f
+                        val dotProgressBoost = ((progress * 3f - i).coerceIn(0f, 1f)) * 0.35f
+                        val dotAlpha = (0.35f + wave * 0.45f + dotProgressBoost).coerceIn(0.25f, 1f)
+                        val dotScale = 0.78f + wave * 0.36f
+                        Box(
+                            modifier = Modifier
+                                .size(9.dp)
+                                .graphicsLayer {
+                                    alpha = dotAlpha
+                                    scaleX = dotScale
+                                    scaleY = dotScale
+                                    translationY = -wave * 4f
+                                }
+                                .clip(CircleShape)
+                                .background(primary)
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun LyricsLineSpacingDialog(
+    currentSpacingDp: Float,
+    onSpacingChange: (Float) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var localSpacing by remember(currentSpacingDp) { mutableFloatStateOf(currentSpacingDp) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        modifier = Modifier.testTag("lyrics_line_spacing_dialog"),
+        title = {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.FormatLineSpacing,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary
+                )
+                Text(
+                    text = stringResource(R.string.lyrics_line_spacing_title),
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        },
+        text = {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    val presets = listOf(
+                        6f to R.string.lyrics_line_spacing_compact,
+                        14f to R.string.lyrics_line_spacing_normal,
+                        24f to R.string.lyrics_line_spacing_spacious
+                    )
+                    presets.forEach { (presetDp, labelRes) ->
+                        val selected = kotlin.math.abs(localSpacing - presetDp) <= 2.5f
+                        androidx.compose.material3.FilterChip(
+                            selected = selected,
+                            onClick = {
+                                localSpacing = presetDp
+                                onSpacingChange(presetDp)
+                            },
+                            label = { Text(stringResource(labelRes)) },
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                }
+                androidx.compose.material3.Slider(
+                    value = localSpacing,
+                    onValueChange = {
+                        localSpacing = it
+                        onSpacingChange(it)
+                    },
+                    valueRange = 4f..32f,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("lyrics_line_spacing_slider")
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.btn_close))
+            }
+        }
+    )
 }
 
 /** Word-by-word highlight for enhanced LRC. Only this line collects the playback position. */
@@ -992,15 +1266,19 @@ private fun HiddenLyricsContent(onRestore: () -> Unit) {
 }
 
 @Composable
-private fun PlainLyricsContent(plainText: String) {
+private fun PlainLyricsContent(
+    plainText: String,
+    lineSpacingDp: Float = 12f
+) {
     val isLandscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
+    val computedLineHeight = (24f + lineSpacingDp * 0.85f).coerceIn(26f, 52f).sp
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .fadingEdges(top = 32.dp, bottom = 40.dp)
+            .fadingEdges(top = 20.dp, bottom = 40.dp)
             .verticalScroll(rememberScrollState())
             .padding(
-                top = if (isLandscape) 44.dp else 56.dp,
+                top = if (isLandscape) 12.dp else 16.dp,
                 bottom = if (isLandscape) 32.dp else 48.dp,
                 start = 22.dp,
                 end = 22.dp
@@ -1010,7 +1288,7 @@ private fun PlainLyricsContent(plainText: String) {
             text = plainText,
             style = MaterialTheme.typography.titleMedium.copy(
                 fontSize = 19.sp,
-                lineHeight = 33.sp,
+                lineHeight = computedLineHeight,
                 textDirection = TextDirection.Content
             ),
             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.92f),
@@ -1065,7 +1343,17 @@ private fun LyricsEmptyContent(
             textAlign = TextAlign.Center,
             modifier = Modifier.padding(horizontal = 16.dp)
         )
-        Spacer(modifier = Modifier.height(24.dp))
+        if (isOnlineEnabled) {
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(
+                text = stringResource(R.string.vpn_proactive_lyrics_hint),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.primary,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.padding(horizontal = 16.dp)
+            )
+        }
+        Spacer(modifier = Modifier.height(20.dp))
 
         // Spacious vertical layout preventing cramped rows and text overlaps
         Column(

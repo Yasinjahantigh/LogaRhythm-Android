@@ -1,9 +1,12 @@
 package com.yasinjahantigh.logarhythm.domain.model
 
+import androidx.compose.runtime.Immutable
+
 /**
  * Immutable domain model representing an audio track.
  * The id format must always be prefixed with source type, e.g. "local:123" or "web:abc".
  */
+@Immutable
 data class Track(
     val id: String,
     val title: String,

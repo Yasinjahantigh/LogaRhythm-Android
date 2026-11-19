@@ -386,6 +386,7 @@
     <string name="detail_album">Album</string>
     <string name="detail_duration">Duration</string>
     <string name="detail_file_path">File Path</string>
+    <string name="detail_path_copied">File path copied to clipboard</string>
     <string name="detail_file_size">File Size</string>
     <string name="detail_source">Source</string>
     <string name="action_share_song">Share Song</string>
@@ -780,7 +781,7 @@
     <string name="settings_ai_remove_key">Remove key</string>
     <string name="settings_ai_save">Save</string>
     <string name="tools_suggest_fixes">Fix names</string>
-    <string name="tools_regex_cleaner">Rules &amp; Regex</string>
+    <string name="tools_regex_cleaner">Auto Tag &amp; Cover Fixer</string>
     <string name="tools_ai_cleaner">AI Smart Clean</string>
     <string name="tools_apply_all">Apply all</string>
     <string name="tools_ai_not_configured_title">AI not configured</string>
@@ -872,7 +873,7 @@
     <string name="radar_section_title">Release Radar</string>
     <string name="radar_refresh_action">Refresh releases</string>
     <string name="radar_manage_followed">Followed Artists</string>
-    <string name="radar_tracking_summary">Tracking %1$d artist(s) — tap refresh to check for new drops</string>
+    <string name="radar_tracking_summary">Following %1$d artist(s)</string>
     <string name="radar_background_alerts">Background alerts</string>
     <string name="radar_unfollow">Unfollow</string>
     <string name="radar_found_new">Found %1$d new release(s)</string>
@@ -900,6 +901,9 @@
     <string name="stats_report_action">Listening Report</string>
     <string name="stats_report_title">Listening Report</string>
     <string name="stats_report_share_card">Share Story Card</string>
+    <string name="stats_sort_label">Rank by</string>
+    <string name="stats_sort_by_plays">Play count</string>
+    <string name="stats_sort_by_time">Listening time</string>
     <string name="report_peak_hour">Peak: %1$s</string>
     <string name="report_vibe_night_owl">Night Owl</string>
     <string name="report_vibe_early_bird">Early Bird</string>
@@ -959,46 +963,247 @@
     <string name="settings_whitelist_folders_desc">Only %1$d selected folder(s) will be scanned</string>
     <string name="settings_folder_included_badge">Included</string>
     <string name="theme_font_title">App Font</string>
+    <string name="theme_font_system">System Font</string>
+    <string name="theme_font_system_desc">Uses your device built-in Latin &amp; Persian fonts</string>
     <string name="theme_font_vazirmatn">Vazirmatn (Default)</string>
+    <string name="theme_font_vazirmatn_desc">Clean modern Persian &amp; Latin typography</string>
+    <string name="theme_font_jakarta_vazir">Plus Jakarta + Vazirmatn</string>
+    <string name="theme_font_jakarta_vazir_desc">Geometric modern Latin paired with Vazirmatn Persian</string>
+    <string name="theme_font_space_kufi">Space Grotesk + Kufi</string>
+    <string name="theme_font_space_kufi_desc">Bold studio display Latin paired with Noto Kufi Persian</string>
+    <string name="theme_font_playfair_naskh">Playfair + Naskh</string>
+    <string name="theme_font_playfair_naskh_desc">Editorial serif Latin paired with classic Noto Naskh Persian</string>
     <string name="theme_font_sans">Clean Sans</string>
     <string name="theme_font_serif">Editorial Serif</string>
-    <string name="theme_font_mono">Monospace</string>
+    <string name="theme_font_mono">JetBrains Mono + Vazirmatn</string>
+    <string name="theme_font_mono_desc">Crisp monospace digits &amp; Latin with Vazirmatn Persian</string>
+    <string name="theme_font_lalezar_jakarta">Lalezar + Jakarta</string>
+    <string name="theme_font_lalezar_jakarta_desc">Expressive Persian display paired with Plus Jakarta Sans</string>
+    <string name="theme_font_dual_note">Every preset pairs matching English &amp; Persian scripts simultaneously.</string>
+    <string name="theme_font_custom_title">Custom Font (.ttf / .otf)</string>
+    <string name="theme_font_custom_desc">Import any font file from your device storage</string>
+    <string name="theme_font_custom_import">Import Font</string>
+    <string name="theme_font_custom_use">Use Custom</string>
+    <string name="theme_font_custom_remove">Remove</string>
+    <string name="theme_font_import_success">Imported font: %1$s</string>
+    <string name="theme_font_import_failed">Could not load this font file. Choose a valid .ttf or .otf file.</string>
     <string name="feature_guide_banner_title">Discover LogaRhythm Power Features</string>
-    <string name="feature_guide_banner_desc">DSP, Release Radar, Story Cards, Ringtone Maker &amp; more</string>
+    <string name="feature_guide_banner_desc">Endless playback, Release Radar, Tag Fixer, Vinyl scrub &amp; more</string>
     <string name="feature_guide_banner_cta">Explore</string>
-    <string name="feature_guide_title">Power Features Guide</string>
+    <string name="feature_guide_title">Features Guide</string>
     <string name="feature_guide_subtitle">Everything built into LogaRhythm and where to find it</string>
-    <string name="feature_guide_settings_desc">Explore all hidden tools, audio DSP &amp; shortcuts</string>
+    <string name="feature_guide_settings_desc">Explore built-in tools, audio DSP &amp; shortcuts</string>
+    <string name="fg_endless_title">Endless Smart Playback</string>
+    <string name="fg_endless_desc">Playback never stops unexpectedly — similar songs are automatically queued as you near the end.</string>
+    <string name="fg_endless_where">Home → Play Now / Any Queue</string>
     <string name="fg_radar_title">Followed Artists &amp; Release Radar</string>
-    <string name="fg_radar_desc">Follow artists and get notified when new tracks drop, with instant search/download.</string>
-    <string name="fg_radar_where">Artist Page → Follow · Home → Radar</string>
-    <string name="fg_dsp_title">Pro Audio DSP &amp; Slowed + Reverb</string>
-    <string name="fg_dsp_desc">Stereo balance, Mono mode, device Auto-EQ, pitch shift, reverb &amp; A–B loop.</string>
-    <string name="fg_dsp_where">Player → Equalizer / DSP</string>
-    <string name="fg_carmode_title">Car Mode &amp; Double-Tap Seek</string>
-    <string name="fg_carmode_desc">High-contrast portrait &amp; landscape driving view, plus ±10s artwork double-tap.</string>
-    <string name="fg_carmode_where">Player Top Bar → Car Icon</string>
-    <string name="fg_trimmer_title">Audio Trimmer &amp; Ringtone Maker</string>
-    <string name="fg_trimmer_desc">Cut any MP3/M4A segment and save or set it directly as your ringtone.</string>
-    <string name="fg_trimmer_where">Track Menu (⋮) → Trim / Ringtone</string>
-    <string name="fg_reports_title">Custom Listening Reports &amp; Story Cards</string>
-    <string name="fg_reports_desc">Pick any date range, preview a 9:16 graphic card, and share your listening stats.</string>
-    <string name="fg_reports_where">Stats → Listening Report</string>
-    <string name="fg_lyrics_title">Lyric Cards &amp; LRC Line Editor</string>
-    <string name="fg_lyrics_desc">Share selected lyric lines as a graphic card or edit synced timestamps line by line.</string>
-    <string name="fg_lyrics_where">Player → Lyrics</string>
-    <string name="fg_fixer_title">Batch Tag &amp; Cover Fixer (Smart + AI)</string>
-    <string name="fg_fixer_desc">Clean filenames, match covers from MusicMan/Deezer, or refine tags with AI.</string>
-    <string name="fg_fixer_where">Settings / Library → Batch Tag Fixer</string>
-    <string name="fg_downloader_title">Downloader Power Suite</string>
-    <string name="fg_downloader_desc">Multi-source search, MusicMan crawling, playlist/album batching &amp; quality picker.</string>
-    <string name="fg_downloader_where">Download Tab</string>
-    <string name="fg_privacy_title">Saved Queues, Whitelist &amp; Private Session</string>
-    <string name="fg_privacy_desc">Save multiple queues, pause history tracking, filter folders &amp; switch app fonts.</string>
-    <string name="fg_privacy_where">Queue Sheet &amp; Settings</string>
+    <string name="fg_radar_desc">Follow artists to see their latest releases and get notified when new tracks drop, with 1-tap download.</string>
+    <string name="fg_radar_where">Artist Page → Follow · Home → Release Radar</string>
+    <string name="fg_dsp_title">Equalizer, DSP &amp; Slowed + Reverb</string>
+    <string name="fg_dsp_desc">Multi-band EQ, bass boost, stereo balance, pitch shift, slowed + reverb &amp; A–B loop.</string>
+    <string name="fg_dsp_where">Player Menu (⋮) → Equalizer / Speed &amp; Pitch</string>
+    <string name="fg_carmode_title">Interactive Vinyl Scrub, Car Mode &amp; Double-Tap</string>
+    <string name="fg_carmode_desc">Swipe the vinyl left/right to skip tracks, hold or drag the outer grooves to spin &amp; scrub, or switch to Car Mode.</string>
+    <string name="fg_carmode_where">Player Header → Vinyl Icon · Menu (⋮) → Car Mode</string>
+    <string name="fg_trimmer_title">Audio Trimmer</string>
+    <string name="fg_trimmer_desc">Trim audio segments cleanly.</string>
+    <string name="fg_trimmer_where">Library</string>
+    <string name="fg_reports_title">Customizable Share Cards &amp; Listening Reports</string>
+    <string name="fg_reports_desc">Live preview and customize theme, colors, aspect ratio &amp; font size for songs, lyrics, and stats cards.</string>
+    <string name="fg_reports_where">Player Menu → Share · Lyrics Top Bar · Stats → Report</string>
+    <string name="fg_lyrics_title">Synced Lyrics, Share Card &amp; LRC Editor</string>
+    <string name="fg_lyrics_desc">Share selected lyric lines from the top bar, tap-to-sync timing, or edit LRC lines directly.</string>
+    <string name="fg_lyrics_where">Player → Lyrics Button</string>
+    <string name="fg_fixer_title">Batch Tag &amp; Cover Fixer</string>
+    <string name="fg_fixer_desc">Clean messy download-site filenames, match metadata &amp; high-res covers online step-by-step, or use AI.</string>
+    <string name="fg_fixer_where">Library Top Bar (Wand) · Settings → Tag &amp; Cover Fixer</string>
+    <string name="fg_downloader_title">Multi-Source Downloader &amp; Artist Online Tab</string>
+    <string name="fg_downloader_desc">Browse any artist’s online tracks &amp; albums, preview streams, and download directly to your library.</string>
+    <string name="fg_downloader_where">Home → Download · Artist Page → Online Tab</string>
+    <string name="fg_privacy_title">Folders &amp; Private Session</string>
+    <string name="fg_privacy_desc">Pause listening history tracking, whitelist folders, and switch dual English/Persian fonts.</string>
+    <string name="fg_privacy_where">Settings → Library / Playback / Theme</string>
     <string name="settings_donate_daramet_title">Support LogaRhythm (Daramet)</string>
     <string name="settings_donate_daramet_desc">daramet.com/yasinjahantigh</string>
     <string name="settings_donate_ton_title">Donate GRAM (TON)</string>
     <string name="settings_donate_ton_desc">Tap to copy TON wallet address</string>
     <string name="settings_donate_ton_copied">TON address copied to clipboard</string>
+
+    <!-- Home Quick Actions -->
+    <string name="home_shuffle_compact">Shuffle</string>
+    <string name="home_quick_download">Download</string>
+    <string name="home_quick_new_playlist">New Playlist</string>
+    <string name="home_quick_ai_mix">AI Mix</string>
+    <string name="playlist_created_toast">Created playlist “%1$s”</string>
+
+    <!-- Share Card Studio -->
+    <string name="share_card_preview_cd">Share card live preview</string>
+    <string name="share_card_style_label">Card Theme</string>
+    <string name="share_style_dark_glass">Dark Glass</string>
+    <string name="share_style_vibrant">Vibrant</string>
+    <string name="share_style_minimal_light">Minimal Light</string>
+    <string name="share_style_warm_vinyl">Warm Vinyl</string>
+    <string name="share_card_size_label">Aspect Size</string>
+    <string name="share_size_story">Story 9:16</string>
+    <string name="share_size_post">Post 4:5</string>
+    <string name="share_size_square">Square 1:1</string>
+    <string name="share_card_color_label">Accent Color</string>
+    <string name="share_card_text_size_label">Text Size</string>
+    <string name="share_song_studio_title">Share Song Card</string>
+    <string name="share_audio_file_action">Audio File</string>
+    <string name="share_card_image_action">Share Image</string>
+    <string name="share_card_preview_customize">Preview &amp; Customize</string>
+    <string name="share_card_edit_lines">Edit Lines</string>
+
+    <!-- Release Radar Overhaul -->
+    <string name="radar_new_count_badge">%1$d new</string>
+    <string name="radar_mark_all_seen">Mark all as seen</string>
+    <string name="radar_filter_all">All</string>
+    <string name="radar_empty_card_title">No releases loaded yet</string>
+    <string name="radar_empty_vpn_hint">Tap Check Now to fetch latest drops. If you are on a restricted network, turning on a VPN improves results.</string>
+    <string name="radar_check_now">Check Now</string>
+    <string name="radar_vpn_tip_short">Tip: Turn on VPN if release checks fail</string>
+    <string name="radar_badge_new">NEW</string>
+    <string name="radar_badge_latest">Latest</string>
+
+    <!-- Batch Tag & Cover Fixer Overhaul -->
+    <string name="tools_fixer_hero_title">Smart Tag &amp; Cover Fixer</string>
+    <string name="tools_fixer_hero_desc">Cleans messy download-site filenames and fetches official title, artist, album, year &amp; cover art step-by-step from Deezer, iTunes, MusicBrainz &amp; more.</string>
+    <string name="vpn_proactive_fixer_hint">VPN recommended for faster &amp; more complete online metadata and cover art matching.</string>
+    <string name="tools_scan_progress_fmt">Scanning %1$d of %2$d tracks…</string>
+    <string name="tools_online_matches_fmt">%1$d matched online</string>
+    <string name="tools_scan_messy_btn">Fix Messy Tracks</string>
+    <string name="tools_scan_all_btn">Scan All</string>
+    <string name="tools_online_failed_vpn_hint">Online sources could not be reached. Please turn on a VPN and scan again for automatic metadata &amp; cover matching.</string>
+    <string name="tools_applying_progress_fmt">Updating tags %1$d / %2$d…</string>
+    <string name="tools_suggestions_count_fmt">%1$d track(s) ready to fix</string>
+    <string name="tools_updated_count_toast">Updated %1$d track(s)</string>
+    <string name="tools_badge_online_match">Online Match</string>
+    <string name="tools_edit_or_research">Edit / Re-search</string>
+    <string name="tools_edit_suggestion_title">Edit or Re-search Track</string>
+    <string name="tools_research_online_btn">Re-search Online</string>
+    <string name="tools_research_found">Updated from online catalog</string>
+    <string name="tools_research_not_found_vpn">No online match found — try refining the query or turning on a VPN.</string>
+
+    <!-- Artist Online Tab & VPN Guidance -->
+    <string name="artist_tab_library">In Library</string>
+    <string name="artist_tab_online">Online</string>
+    <string name="vpn_proactive_online_hint">Tip: Turn on VPN for full online artist catalogs &amp; faster downloads.</string>
+    <string name="vpn_proactive_download_hint">Recommended: Keep VPN enabled for unrestricted search and downloads.</string>
+    <string name="vpn_proactive_lyrics_hint">Tip: If online lyrics fail to load, try turning on a VPN and searching again.</string>
+    <string name="artist_online_loading">Searching online catalog…</string>
+    <string name="artist_online_empty_title">No online tracks found</string>
+    <string name="artist_online_vpn_error">Could not reach online sources. Turn on a VPN and tap Retry to browse and download this artist’s catalog.</string>
+    <string name="artist_online_empty_desc">No matching online releases were found for this artist right now.</string>
+    <string name="artist_online_albums_header">Online Albums</string>
+    <string name="artist_online_tracks_header">Online Tracks</string>
+    <string name="download_status_completed">Downloaded</string>
+
+    <!-- Multi-Page Settings Hub -->
+    <string name="settings_page_ai_data">AI &amp; Backup</string>
+    <string name="settings_hub_playback_sub">Fade, ReplayGain, silence skip, gestures</string>
+    <string name="settings_hub_library_sub">Tag fixer, folders, artist splitting, hidden</string>
+    <string name="settings_hub_ai_data_sub">AI keys, JSON backup, M3U playlists</string>
+    <string name="settings_hub_about_sub">Updates, GitHub, support</string>
+    <string name="settings_hub_eq_sub">Equalizer, bass boost, stereo balance &amp; Auto-EQ</string>
+
+    <!-- Release Radar Dismiss & Artist Photo / Online Local Badge -->
+    <string name="radar_dismiss_release">Dismiss release</string>
+    <string name="artist_online_on_device">On device</string>
+    <string name="artist_photo_edit_title">Edit artist photo</string>
+    <string name="artist_photo_from_gallery">From gallery</string>
+    <string name="artist_photo_reset">Reset</string>
+    <string name="artist_photo_search_hint">Search artist photo online</string>
+    <string name="artist_photo_searching">Finding artist photos…</string>
+    <string name="artist_photo_empty">No photos found — try editing the name or turning on a VPN.</string>
+
+    <!-- Batch Tag Fixer Rescan & Background Confirmation -->
+    <string name="tools_scanned_so_far_fmt">%1$d tracks already scanned (skipped on next scan)</string>
+    <string name="tools_rescan_dialog_title">Scan tracks again?</string>
+    <string name="tools_rescan_dialog_remaining_msg">%1$d tracks were already scanned (%2$d unscanned left). You can continue with only the remaining tracks or rescan everything from scratch.</string>
+    <string name="tools_rescan_dialog_all_done_msg">All %1$d tracks in this group have already been scanned. Do you want to rescan everything from scratch?</string>
+    <string name="tools_rescan_btn_remaining">Scan remaining (%1$d)</string>
+    <string name="tools_rescan_btn_all">Rescan all from scratch</string>
+
+    <!-- First-Time Non-Blocking Contextual Micro-Tips -->
+    <string name="tip_player_cover">Tip: Double-tap sides for ±10s, or tap the disc icon above for Vinyl mode.</string>
+    <string name="tip_player_vinyl">Vinyl: Swipe left/right to switch songs, or hold &amp; spin the disc to scrub.</string>
+    <string name="tip_lyrics_actions">Tip: Tap Share above to build a Lyric Card, or ⋮ to sync &amp; edit timing.</string>
+    <string name="tip_library_gestures">Tip: Swipe right to Play Next, long-press to select multiple, or tap the magic wand icon above to auto-fix tags.</string>
+    <string name="tip_artist_detail">Tip: Tap the artist photo to edit/search a portrait, or open Online to browse &amp; download.</string>
+    <string name="tip_stats_sort_share">Tip: Switch between Play Count &amp; Minutes below, or tap Share above for a custom card.</string>
+    <string name="tip_tag_fixer_bg">Tip: Scanning keeps running in the background if you leave, and skips already-scanned tracks.</string>
+    <string name="tip_home_radar">Tip: Tap × on any release card to hide tracks you don’t want to download.</string>
+    <string name="tip_equalizer_auto">Tip: LogaRhythm remembers separate EQ presets automatically for each headphone or Bluetooth device.</string>
+    <string name="tip_download_preview">Tip: Tap any cover to preview a song before downloading, or open the Albums filter for full albums.</string>
+
+    <!-- Full Artist Discography & Catalog Filter -->
+    <string name="artist_online_loading_more">Loading full catalog… (%1$d found)</string>
+    <string name="artist_online_filter_hint">Filter tracks or albums…</string>
+    <string name="artist_online_download_missing_btn">Download missing (%1$d)</string>
+    <string name="artist_online_batch_queued_toast">Queued %1$d tracks for download</string>
+
+    <!-- Online Track Details Sheet & VPN-Aware Source Routing -->
+    <string name="online_track_preview_btn">Preview</string>
+    <string name="online_track_play_local_btn">Play from Library</string>
+    <string name="online_track_info_header">Track Details</string>
+    <string name="online_track_number_label">Track #</string>
+    <string name="online_track_source_label">Source</string>
+    <string name="download_routing_vpn_probing">VPN detected · Checking fastest download source…</string>
+    <string name="download_routing_vpn_fastest">VPN active · Fastest source: %1$s</string>
+    <string name="download_routing_no_vpn_musicman">Direct mode (no VPN) · MusicMan prioritized</string>
+
+    <!-- Duplicates Cleanup & File Size Matching -->
+    <string name="tools_duplicates_summary_fmt">%1$d duplicate groups · %2$d extra files (%3$s)</string>
+    <string name="tools_duplicates_delete_all_btn">Delete all extras (%1$d)</string>
+    <string name="tools_duplicates_best_badge">Best copy</string>
+    <string name="tools_duplicates_reason_size">Same size</string>
+    <string name="tools_duplicates_reason_multisource">Multi-source</string>
+    <string name="tools_duplicates_reason_tags">Similar tags</string>
+    <string name="tools_duplicates_delete_one_cd">Delete duplicate file</string>
+    <string name="tools_duplicates_confirm_all_title">Delete all duplicate copies?</string>
+    <string name="tools_duplicates_confirm_all_body">This will permanently delete %1$d extra files (%2$s) and keep the highest-quality copy in every group.</string>
+    <string name="tools_duplicates_deleted_count_toast">Deleted %1$d duplicate files</string>
+
+    <!-- Lyrics Line Spacing & Instrumental Interlude -->
+    <string name="lyrics_line_spacing_action">Line spacing</string>
+    <string name="lyrics_line_spacing_title">Lyrics line spacing</string>
+    <string name="lyrics_line_spacing_compact">Compact</string>
+    <string name="lyrics_line_spacing_normal">Normal</string>
+    <string name="lyrics_line_spacing_spacious">Spacious</string>
+    <string name="lyrics_instrumental_cd">Instrumental break</string>
+
+    <!-- Audio Output Switcher -->
+    <string name="audio_output_title">Audio output</string>
+    <string name="audio_output_subtitle">Choose where playback is routed</string>
+    <string name="audio_output_speaker">Phone speaker</string>
+    <string name="audio_output_wired">Wired headphones</string>
+    <string name="audio_output_usb">USB audio</string>
+    <string name="audio_output_bluetooth">Bluetooth audio</string>
+    <string name="audio_output_active_badge">Active</string>
+    <string name="audio_output_system_switcher">Open system output switcher</string>
+    <string name="audio_output_volume_label">Media volume</string>
+    <string name="cd_audio_output_switcher">Switch audio output device</string>
+
+    <!-- Local Search -> Online Download Fallback -->
+    <string name="search_online_download_cta">Search online to download “%1$s”</string>
+    <string name="search_online_download_hint">Not in your library? Search and download it directly.</string>
+
+    <!-- Adaptive On-Device Taste Engine Smart Playlists -->
+    <string name="smart_mix_for_you">Picked For You</string>
+    <string name="smart_mix_for_you_desc">Adapts to your real plays, completions, skips and favorites on-device.</string>
+    <string name="smart_mix_time_vibe">For Right Now</string>
+    <string name="smart_mix_time_vibe_desc">Shaped around what you genuinely listen to at this time of day.</string>
+    <string name="smart_mix_hidden_gems">Hidden Gems For You</string>
+    <string name="smart_mix_hidden_gems_desc">Unplayed or overlooked tracks in your library matching your learned taste.</string>
+    <string name="smart_taste_card_title">Learned Taste Profile</string>
+    <string name="smart_taste_learning_warming">Learning your taste… (%1$d listens analyzed)</string>
+    <string name="smart_taste_learning_ready">Personalized from %1$d listens · %2$d%% confidence</string>
+    <string name="smart_taste_top_artists">Top artists: %1$s</string>
+    <string name="smart_taste_top_genres">Favorite genres: %1$s</string>
+    <string name="smart_taste_slot_morning">Morning vibe</string>
+    <string name="smart_taste_slot_afternoon">Afternoon vibe</string>
+    <string name="smart_taste_slot_evening">Evening vibe</string>
+    <string name="smart_taste_slot_night">Late-night vibe</string>
 </resources>
+
