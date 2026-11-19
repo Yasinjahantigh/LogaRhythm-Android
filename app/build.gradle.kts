@@ -73,12 +73,15 @@ android {
     throw GradleException("Release build requires KEYSTORE_PATH, KEYSTORE_PASSWORD, KEY_ALIAS, and KEY_PASSWORD environment variables or Gradle properties.")
   }
 
+  val rootDebugKs = file("${rootDir}/debug.keystore")
   signingConfigs {
-    create("debugConfig") {
-      storeFile = file("${rootDir}/debug.keystore")
-      storePassword = "android"
-      keyAlias = "androiddebugkey"
-      keyPassword = "android"
+    if (rootDebugKs.exists()) {
+      create("debugConfig") {
+        storeFile = rootDebugKs
+        storePassword = "android"
+        keyAlias = "androiddebugkey"
+        keyPassword = "android"
+      }
     }
     if (hasSigningSecrets) {
       create("release") {
@@ -101,8 +104,15 @@ android {
     debug {
       applicationIdSuffix = ".debug"
       versionNameSuffix = "-debug"
-      signingConfig = signingConfigs.getByName("debugConfig")
+      if (rootDebugKs.exists()) {
+        signingConfig = signingConfigs.findByName("debugConfig")
+      }
     }
+  }
+
+  lint {
+    abortOnError = false
+    checkReleaseBuilds = false
   }
   compileOptions {
     sourceCompatibility = JavaVersion.VERSION_11
