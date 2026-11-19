@@ -1,6 +1,8 @@
 package com.yasinjahantigh.logarhythm.data.datastore
 
 import android.content.Context
+import android.net.Uri
+import android.provider.OpenableColumns
 import android.util.Log
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
@@ -15,10 +17,12 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 import dagger.hilt.android.qualifiers.ApplicationContext
+import java.io.File
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -53,6 +57,20 @@ data class LyricsSourcePreferences(
     val anyEnabled: Boolean
         get() = lrclib || netease || kugou || lyricsOvh || genius || customUsable
 }
+
+/** Consolidated theme/appearance preferences to avoid separate collectors at the root composable. */
+data class ThemePreferences(
+    val themeMode: String = "system",
+    val themeStyle: String = "album_art",
+    val themePresetId: String = com.yasinjahantigh.logarhythm.ui.theme.ThemePresets.DEFAULT_ID,
+    val customAccentColor: Long = 0xFFF4B266,
+    val customBase: String = "dark",
+    val cornerRoundness: String = "standard",
+    val appFont: String = "vazirmatn",
+    val customFontPath: String? = null,
+    val customBackgroundUri: String? = null,
+    val customBackgroundAlpha: Float = 0.35f
+)
 
 @Singleton
 class PreferencesManager @Inject constructor(
@@ -98,7 +116,7 @@ class PreferencesManager @Inject constructor(
     /** App locale override: "system", "en", or "fa". */
     val appLanguage: Flow<String> = dataStore.data.map { preferences ->
         preferences[keyAppLanguage] ?: "system"
-    }
+    }.distinctUntilChanged()
 
     suspend fun setAppLanguage(language: String) {
         val normalized = language.takeIf { it in setOf("system", "en", "fa") } ?: "system"
@@ -138,7 +156,7 @@ class PreferencesManager @Inject constructor(
 
     val themeMode: Flow<String> = dataStore.data.map { preferences ->
         preferences[keyThemeMode] ?: "system"
-    }
+    }.distinctUntilChanged()
 
     suspend fun setThemeMode(mode: String) {
         dataStore.edit { preferences ->
@@ -153,11 +171,11 @@ class PreferencesManager @Inject constructor(
 
     val isDarkTheme: Flow<Boolean?> = dataStore.data.map { preferences ->
         preferences[keyDarkTheme]
-    }
+    }.distinctUntilChanged()
 
     val colorSource: Flow<String> = dataStore.data.map { preferences ->
         preferences[keyColorSource] ?: "album_art"
-    }
+    }.distinctUntilChanged()
 
     suspend fun setColorSource(source: String) {
         dataStore.edit { preferences ->
@@ -166,29 +184,29 @@ class PreferencesManager @Inject constructor(
     }
 
     /**
-     * default | oled | album_art | wallpaper | custom.
+     * album_art | default | oled | preset | wallpaper | custom.
      * Older builds stored only a color source; map it on first read so nobody loses their pick.
      */
     val themeStyle: Flow<String> = dataStore.data.map { preferences ->
         preferences[keyThemeStyle] ?: when (preferences[keyColorSource]) {
             "wallpaper" -> "wallpaper"
             "album_art" -> "album_art"
-            else -> "default"
+            else -> "album_art"
         }
-    }
+    }.distinctUntilChanged()
 
     val customAccentColor: Flow<Long> = dataStore.data.map { preferences ->
         preferences[keyCustomAccent] ?: 0xFFF4B266
-    }
+    }.distinctUntilChanged()
 
     /** dark | light | oled. */
     val customBase: Flow<String> = dataStore.data.map { preferences ->
         preferences[keyCustomBase] ?: "dark"
-    }
+    }.distinctUntilChanged()
 
     val themePresetId: Flow<String> = dataStore.data.map { preferences ->
         preferences[keyThemePresetId] ?: com.yasinjahantigh.logarhythm.ui.theme.ThemePresets.DEFAULT_ID
-    }
+    }.distinctUntilChanged()
 
     suspend fun setThemePresetId(presetId: String) {
         dataStore.edit { preferences -> preferences[keyThemePresetId] = presetId }
@@ -211,11 +229,11 @@ class PreferencesManager @Inject constructor(
 
     val customBackgroundUri: Flow<String?> = dataStore.data.map { preferences ->
         preferences[keyCustomBackgroundUri]?.takeIf { it.isNotBlank() }
-    }
+    }.distinctUntilChanged()
 
     val customBackgroundAlpha: Flow<Float> = dataStore.data.map { preferences ->
         preferences[keyCustomBackgroundAlpha] ?: 0.35f
-    }
+    }.distinctUntilChanged()
 
     suspend fun setCustomBackgroundUri(uri: String?) {
         dataStore.edit { preferences ->
@@ -235,7 +253,7 @@ class PreferencesManager @Inject constructor(
 
     val cornerRoundness: Flow<String> = dataStore.data.map { preferences ->
         preferences[keyCornerRoundness] ?: "standard"
-    }
+    }.distinctUntilChanged()
 
     suspend fun setCornerRoundness(roundness: String) {
         dataStore.edit { preferences ->
@@ -245,7 +263,7 @@ class PreferencesManager @Inject constructor(
 
     val isCompactMiniPlayer: Flow<Boolean> = dataStore.data.map { preferences ->
         preferences[keyCompactMiniPlayer] ?: false
-    }
+    }.distinctUntilChanged()
 
     suspend fun setCompactMiniPlayer(compact: Boolean) {
         dataStore.edit { preferences ->
@@ -255,7 +273,7 @@ class PreferencesManager @Inject constructor(
 
     val minTrackLengthSec: Flow<Int> = dataStore.data.map { preferences ->
         preferences[keyMinTrackLengthSec] ?: 15
-    }
+    }.distinctUntilChanged()
 
     suspend fun setMinTrackLengthSec(seconds: Int) {
         dataStore.edit { preferences ->
@@ -272,7 +290,7 @@ class PreferencesManager @Inject constructor(
         } else {
             raw.split("\n").filter { it.isNotBlank() }.toSet()
         }
-    }
+    }.distinctUntilChanged()
 
     suspend fun setExcludedFolders(folders: Set<String>) {
         dataStore.edit { preferences ->
@@ -329,7 +347,7 @@ class PreferencesManager @Inject constructor(
     /** System sounds and recordings stay out of the library unless the user opts in. */
     val showSystemAudio: Flow<Boolean> = dataStore.data.map { preferences ->
         preferences[keyShowSystemAudio] ?: false
-    }
+    }.distinctUntilChanged()
 
     suspend fun setShowSystemAudio(show: Boolean) {
         dataStore.edit { preferences ->
@@ -345,7 +363,7 @@ class PreferencesManager @Inject constructor(
     val customExcludedFolders: Flow<Set<String>> = dataStore.data.map { preferences ->
         val raw = preferences[keyExcludedFolders]
         if (raw.isNullOrBlank()) emptySet() else raw.split("\n").filter { it.isNotBlank() }.toSet()
-    }
+    }.distinctUntilChanged()
 
     // ---- Hidden Tracks ----------------------------------------------------------------------
 
@@ -353,7 +371,7 @@ class PreferencesManager @Inject constructor(
         val raw = preferences[keyHiddenTracks].orEmpty()
         if (raw.isBlank()) emptySet()
         else raw.split("\n").filter { it.isNotBlank() }.toSet()
-    }
+    }.distinctUntilChanged()
 
     suspend fun hideTrack(trackId: String) {
         dataStore.edit { preferences ->
@@ -381,7 +399,7 @@ class PreferencesManager @Inject constructor(
 
     val isLrclibEnabled: Flow<Boolean> = dataStore.data.map { preferences ->
         preferences[keyLrclibEnabled] ?: true
-    }
+    }.distinctUntilChanged()
 
     suspend fun setLrclibEnabled(enabled: Boolean) {
         dataStore.edit { preferences ->
@@ -391,7 +409,7 @@ class PreferencesManager @Inject constructor(
 
     val isGeniusEnabled: Flow<Boolean> = dataStore.data.map { preferences ->
         preferences[keyGeniusEnabled] ?: true
-    }
+    }.distinctUntilChanged()
 
     suspend fun setGeniusEnabled(enabled: Boolean) {
         dataStore.edit { preferences ->
@@ -409,9 +427,9 @@ class PreferencesManager @Inject constructor(
             custom = preferences[keyCustomLyricsEnabled] ?: false,
             customUrl = preferences[keyCustomLyricsUrl]?.takeIf { it.isNotBlank() }
         )
-    }
+    }.distinctUntilChanged()
 
-    val anyLyricsSourceEnabled: Flow<Boolean> = lyricsSourcePreferences.map { it.anyEnabled }
+    val anyLyricsSourceEnabled: Flow<Boolean> = lyricsSourcePreferences.map { it.anyEnabled }.distinctUntilChanged()
 
     suspend fun lyricsSourcePreferencesNow(): LyricsSourcePreferences = lyricsSourcePreferences.first()
 
@@ -443,7 +461,7 @@ class PreferencesManager @Inject constructor(
         val raw = preferences[keyRecentSearches].orEmpty()
         if (raw.isBlank()) emptyList()
         else raw.split("\n").filter { it.isNotBlank() }
-    }
+    }.distinctUntilChanged()
 
     suspend fun addRecentSearch(query: String) {
         val trimmed = query.trim()
@@ -480,7 +498,7 @@ class PreferencesManager @Inject constructor(
         val pos = preferences[keyQueuePositionMs] ?: 0L
         val originalIds = preferences[keyQueueOriginalIds]?.split("\n")?.filter { it.isNotBlank() } ?: ids
         SavedQueueState(ids, index, pos, preferences[keyQueueShuffle] ?: false, originalIds)
-    }
+    }.distinctUntilChanged()
 
     suspend fun saveQueue(
         trackIds: List<String>, currentIndex: Int, positionMs: Long,
@@ -491,17 +509,21 @@ class PreferencesManager @Inject constructor(
             preferences[keyQueueCurrentIndex] = currentIndex
             preferences[keyQueuePositionMs] = positionMs
             preferences[keyQueueShuffle] = shuffle
-            preferences[keyQueueOriginalIds] = originalTrackIds.joinToString("\n")
+            if (!shuffle && originalTrackIds == trackIds) {
+                preferences.remove(keyQueueOriginalIds)
+            } else {
+                preferences[keyQueueOriginalIds] = originalTrackIds.joinToString("\n")
+            }
         }
     }
 
     val isEqualizerEnabled: Flow<Boolean> = dataStore.data.map { preferences ->
         preferences[keyEqualizerEnabled] ?: false
-    }
+    }.distinctUntilChanged()
 
     val equalizerPreset: Flow<Int> = dataStore.data.map { preferences ->
         preferences[keyEqualizerPreset] ?: -1
-    }
+    }.distinctUntilChanged()
 
     val equalizerBandLevels: Flow<Map<Int, Int>> = dataStore.data.map { preferences ->
         val raw = preferences[keyEqualizerBandLevels].orEmpty()
@@ -516,15 +538,15 @@ class PreferencesManager @Inject constructor(
                 } else null
             }.toMap()
         }
-    }
+    }.distinctUntilChanged()
 
     val bassBoostStrength: Flow<Int> = dataStore.data.map { preferences ->
         preferences[keyBassBoostStrength] ?: 0
-    }
+    }.distinctUntilChanged()
 
     val virtualizerStrength: Flow<Int> = dataStore.data.map { preferences ->
         preferences[keyVirtualizerStrength] ?: 0
-    }
+    }.distinctUntilChanged()
 
     suspend fun saveEqualizerSettings(
         enabled: Boolean,
@@ -546,7 +568,7 @@ class PreferencesManager @Inject constructor(
 
     val isOnboardingCompleted: Flow<Boolean> = dataStore.data.map { preferences ->
         preferences[keyOnboardingCompleted] ?: readOnboardingBootstrap()
-    }
+    }.distinctUntilChanged()
 
     suspend fun setOnboardingCompleted(completed: Boolean = true) {
         dataStore.edit { preferences ->
@@ -590,13 +612,13 @@ class PreferencesManager @Inject constructor(
     private val keyResumeOnHeadset = booleanPreferencesKey("key_resume_on_headset")
 
     /** 0 = off. The player fades out/in around each song change (single player, no overlap). */
-    val fadeBetweenSongsSec: Flow<Int> = dataStore.data.map { it[keyFadeSec] ?: 0 }
-    val skipSilence: Flow<Boolean> = dataStore.data.map { it[keySkipSilence] ?: false }
+    val fadeBetweenSongsSec: Flow<Int> = dataStore.data.map { it[keyFadeSec] ?: 0 }.distinctUntilChanged()
+    val skipSilence: Flow<Boolean> = dataStore.data.map { it[keySkipSilence] ?: false }.distinctUntilChanged()
     /** "off" | "track" | "album". */
-    val replayGainMode: Flow<String> = dataStore.data.map { it[keyReplayGain] ?: "off" }
+    val replayGainMode: Flow<String> = dataStore.data.map { it[keyReplayGain] ?: "off" }.distinctUntilChanged()
     /** Manual pre-amplifier added on top of the picked ReplayGain tag, in dB [-6, +6]. */
-    val replayGainPreampDb: Flow<Float> = dataStore.data.map { it[keyReplayGainPreamp] ?: 0f }
-    val resumeOnHeadset: Flow<Boolean> = dataStore.data.map { it[keyResumeOnHeadset] ?: true }
+    val replayGainPreampDb: Flow<Float> = dataStore.data.map { it[keyReplayGainPreamp] ?: 0f }.distinctUntilChanged()
+    val resumeOnHeadset: Flow<Boolean> = dataStore.data.map { it[keyResumeOnHeadset] ?: true }.distinctUntilChanged()
 
     suspend fun setFadeBetweenSongsSec(seconds: Int) { dataStore.edit { it[keyFadeSec] = seconds.coerceIn(0, 12) } }
     suspend fun setSkipSilence(enabled: Boolean) { dataStore.edit { it[keySkipSilence] = enabled } }
@@ -613,32 +635,78 @@ class PreferencesManager @Inject constructor(
     private val keyAppFont = stringPreferencesKey("key_app_font")
     private val keyDownloadQuality = stringPreferencesKey("key_download_quality")
     private val keyReleaseRadarEnabled = booleanPreferencesKey("key_release_radar_enabled")
+    private val keyDismissedRadarIds = stringPreferencesKey("key_dismissed_radar_ids")
     private val keyPlaybackPitch = floatPreferencesKey("key_playback_pitch")
     private val keySlowedReverb = booleanPreferencesKey("key_slowed_reverb")
     private val keyStereoBalance = floatPreferencesKey("key_stereo_balance")
     private val keyMonoAudio = booleanPreferencesKey("key_mono_audio")
     private val keyDeviceAutoEq = booleanPreferencesKey("key_device_auto_eq")
+    private val keyLyricsLineSpacing = floatPreferencesKey("key_lyrics_line_spacing")
 
-    val privateSession: Flow<Boolean> = dataStore.data.map { it[keyPrivateSession] ?: false }
-    val doubleTapSeek: Flow<Boolean> = dataStore.data.map { it[keyDoubleTapSeek] ?: true }
-    val folderWhitelistMode: Flow<Boolean> = dataStore.data.map { it[keyFolderWhitelistMode] ?: false }
+    val privateSession: Flow<Boolean> = dataStore.data.map { it[keyPrivateSession] ?: false }.distinctUntilChanged()
+    val doubleTapSeek: Flow<Boolean> = dataStore.data.map { it[keyDoubleTapSeek] ?: true }.distinctUntilChanged()
+    val folderWhitelistMode: Flow<Boolean> = dataStore.data.map { it[keyFolderWhitelistMode] ?: false }.distinctUntilChanged()
     val whitelistedFolders: Flow<Set<String>> = dataStore.data.map { prefs ->
         prefs[keyWhitelistedFolders].orEmpty()
             .split("\n")
             .map { it.trim() }
             .filter { it.isNotBlank() }
             .toSet()
-    }
-    /** "default" | "sans" | "serif" | "mono". */
-    val appFont: Flow<String> = dataStore.data.map { it[keyAppFont] ?: "default" }
+    }.distinctUntilChanged()
+    private val keyCustomFontPath = stringPreferencesKey("key_custom_font_path")
+    private val keyCustomFontName = stringPreferencesKey("key_custom_font_name")
+
+    /** "vazirmatn" | "system" | "jakarta_vazir" | "space_kufi" | "playfair_naskh" | "mono" | "lalezar_jakarta" | "custom". */
+    val appFont: Flow<String> = dataStore.data.map { it[keyAppFont] ?: "vazirmatn" }.distinctUntilChanged()
+    val customFontPath: Flow<String?> = dataStore.data
+        .map { prefs -> prefs[keyCustomFontPath]?.takeIf { it.isNotBlank() } }
+        .distinctUntilChanged()
+        .map { path -> path?.takeIf { File(it).isFile } }
+        .distinctUntilChanged()
+    val customFontName: Flow<String?> = dataStore.data.map { it[keyCustomFontName]?.takeIf { name -> name.isNotBlank() } }.distinctUntilChanged()
+    /** Consolidated appearance flow to avoid 10 separate root-level DataStore collectors. */
+    val themePreferences: Flow<ThemePreferences> = dataStore.data
+        .map { prefs ->
+            ThemePreferences(
+                themeMode = prefs[keyThemeMode] ?: "system",
+                themeStyle = prefs[keyThemeStyle] ?: when (prefs[keyColorSource]) {
+                    "wallpaper" -> "wallpaper"
+                    "album_art" -> "album_art"
+                    else -> "album_art"
+                },
+                themePresetId = prefs[keyThemePresetId] ?: com.yasinjahantigh.logarhythm.ui.theme.ThemePresets.DEFAULT_ID,
+                customAccentColor = prefs[keyCustomAccent] ?: 0xFFF4B266,
+                customBase = prefs[keyCustomBase] ?: "dark",
+                cornerRoundness = prefs[keyCornerRoundness] ?: "standard",
+                appFont = prefs[keyAppFont] ?: "vazirmatn",
+                customFontPath = prefs[keyCustomFontPath]?.takeIf { it.isNotBlank() },
+                customBackgroundUri = prefs[keyCustomBackgroundUri]?.takeIf { it.isNotBlank() },
+                customBackgroundAlpha = prefs[keyCustomBackgroundAlpha] ?: 0.35f
+            )
+        }
+        .distinctUntilChanged()
+        .map { tp ->
+            val validatedFont = tp.customFontPath?.takeIf { File(it).isFile }
+            if (validatedFont == tp.customFontPath) tp else tp.copy(customFontPath = validatedFont)
+        }
+        .distinctUntilChanged()
     /** "best" | "320" | "192" | "128". */
-    val downloadQualityPref: Flow<String> = dataStore.data.map { it[keyDownloadQuality] ?: "best" }
-    val releaseRadarEnabled: Flow<Boolean> = dataStore.data.map { it[keyReleaseRadarEnabled] ?: true }
-    val playbackPitch: Flow<Float> = dataStore.data.map { it[keyPlaybackPitch] ?: 1f }
-    val slowedReverbEnabled: Flow<Boolean> = dataStore.data.map { it[keySlowedReverb] ?: false }
-    val stereoBalance: Flow<Float> = dataStore.data.map { it[keyStereoBalance] ?: 0f }
-    val monoAudio: Flow<Boolean> = dataStore.data.map { it[keyMonoAudio] ?: false }
-    val deviceAutoEqEnabled: Flow<Boolean> = dataStore.data.map { it[keyDeviceAutoEq] ?: true }
+    val downloadQualityPref: Flow<String> = dataStore.data.map { it[keyDownloadQuality] ?: "best" }.distinctUntilChanged()
+    val releaseRadarEnabled: Flow<Boolean> = dataStore.data.map { it[keyReleaseRadarEnabled] ?: true }.distinctUntilChanged()
+    val dismissedRadarIds: Flow<Set<String>> = dataStore.data.map { prefs ->
+        prefs[keyDismissedRadarIds].orEmpty()
+            .split("\n")
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+            .toSet()
+    }.distinctUntilChanged()
+    val playbackPitch: Flow<Float> = dataStore.data.map { it[keyPlaybackPitch] ?: 1f }.distinctUntilChanged()
+    val slowedReverbEnabled: Flow<Boolean> = dataStore.data.map { it[keySlowedReverb] ?: false }.distinctUntilChanged()
+    val stereoBalance: Flow<Float> = dataStore.data.map { it[keyStereoBalance] ?: 0f }.distinctUntilChanged()
+    val monoAudio: Flow<Boolean> = dataStore.data.map { it[keyMonoAudio] ?: false }.distinctUntilChanged()
+    val deviceAutoEqEnabled: Flow<Boolean> = dataStore.data.map { it[keyDeviceAutoEq] ?: true }.distinctUntilChanged()
+    /** Extra vertical spacing between lyrics lines, in dp (4..32, default 12). */
+    val lyricsLineSpacing: Flow<Float> = dataStore.data.map { (it[keyLyricsLineSpacing] ?: 12f).coerceIn(4f, 32f) }.distinctUntilChanged()
 
     suspend fun setPrivateSession(enabled: Boolean) { dataStore.edit { it[keyPrivateSession] = enabled } }
     suspend fun setDoubleTapSeek(enabled: Boolean) { dataStore.edit { it[keyDoubleTapSeek] = enabled } }
@@ -647,19 +715,93 @@ class PreferencesManager @Inject constructor(
         dataStore.edit { it[keyWhitelistedFolders] = folders.joinToString("\n") }
     }
     suspend fun setAppFont(font: String) {
-        val safe = font.takeIf { it in setOf("default", "sans", "serif", "mono") } ?: "default"
+        val allowed = setOf(
+            "system", "vazirmatn", "jakarta_vazir", "space_kufi",
+            "playfair_naskh", "mono_lalezar", "lalezar_jakarta", "custom",
+            "default", "sans", "serif", "mono"
+        )
+        val safe = font.takeIf { it in allowed } ?: "vazirmatn"
         dataStore.edit { it[keyAppFont] = safe }
+    }
+
+    suspend fun importCustomFont(uri: Uri): Result<String> = withContext(Dispatchers.IO) {
+        runCatching {
+            val resolver = context.contentResolver
+            var displayName = "Custom Font"
+            resolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { c ->
+                if (c.moveToFirst()) {
+                    val idx = c.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                    if (idx >= 0) {
+                        c.getString(idx)?.takeIf { it.isNotBlank() }?.let { displayName = it }
+                    }
+                }
+            }
+            val lower = displayName.lowercase()
+            require(lower.endsWith(".ttf") || lower.endsWith(".otf") || lower.endsWith(".ttc")) {
+                "Unsupported font file. Please select a .ttf or .otf file."
+            }
+            val dir = File(context.filesDir, "custom_fonts").apply { mkdirs() }
+            dir.listFiles()?.forEach { old -> if (old.isFile) old.delete() }
+            val ext = lower.substringAfterLast('.', "ttf")
+            val target = File(dir, "imported_font_${System.currentTimeMillis()}.$ext")
+            resolver.openInputStream(uri)?.use { input ->
+                target.outputStream().use { output -> input.copyTo(output) }
+            } ?: error("Cannot read selected font file")
+            require(target.length() in 1_024L..(25L * 1024L * 1024L)) {
+                target.delete()
+                "Font file is empty or too large"
+            }
+            // Verify Android Typeface can actually parse it before activating.
+            android.graphics.Typeface.createFromFile(target)
+            val cleanName = displayName.substringBeforeLast('.').ifBlank { displayName }
+            dataStore.edit { prefs ->
+                prefs[keyCustomFontPath] = target.absolutePath
+                prefs[keyCustomFontName] = cleanName
+                prefs[keyAppFont] = "custom"
+            }
+            cleanName
+        }
+    }
+
+    suspend fun clearCustomFont() {
+        withContext(Dispatchers.IO) {
+            val dir = File(context.filesDir, "custom_fonts")
+            dir.listFiles()?.forEach { it.delete() }
+        }
+        dataStore.edit { prefs ->
+            prefs.remove(keyCustomFontPath)
+            prefs.remove(keyCustomFontName)
+            if (prefs[keyAppFont] == "custom") {
+                prefs[keyAppFont] = "vazirmatn"
+            }
+        }
     }
     suspend fun setDownloadQualityPref(quality: String) {
         val safe = quality.takeIf { it in setOf("best", "320", "192", "128") } ?: "best"
         dataStore.edit { it[keyDownloadQuality] = safe }
     }
     suspend fun setReleaseRadarEnabled(enabled: Boolean) { dataStore.edit { it[keyReleaseRadarEnabled] = enabled } }
-    suspend fun setPlaybackPitch(pitch: Float) { dataStore.edit { it[keyPlaybackPitch] = pitch.coerceIn(0.5f, 1.5f) } }
+    suspend fun dismissRadarRelease(keys: Collection<String>) {
+        val clean = keys.map { it.trim() }.filter { it.isNotBlank() }
+        if (clean.isEmpty()) return
+        dataStore.edit { prefs ->
+            val current = prefs[keyDismissedRadarIds].orEmpty()
+                .split("\n")
+                .map { it.trim() }
+                .filter { it.isNotBlank() }
+                .toMutableList()
+            clean.forEach { k ->
+                if (k !in current) current += k
+            }
+            prefs[keyDismissedRadarIds] = current.takeLast(400).joinToString("\n")
+        }
+    }
+    suspend fun setPlaybackPitch(pitch: Float) { dataStore.edit { it[keyPlaybackPitch] = pitch.coerceIn(0.5f, 2.0f) } }
     suspend fun setSlowedReverbEnabled(enabled: Boolean) { dataStore.edit { it[keySlowedReverb] = enabled } }
     suspend fun setStereoBalance(balance: Float) { dataStore.edit { it[keyStereoBalance] = balance.coerceIn(-1f, 1f) } }
     suspend fun setMonoAudio(enabled: Boolean) { dataStore.edit { it[keyMonoAudio] = enabled } }
     suspend fun setDeviceAutoEqEnabled(enabled: Boolean) { dataStore.edit { it[keyDeviceAutoEq] = enabled } }
+    suspend fun setLyricsLineSpacing(spacingDp: Float) { dataStore.edit { it[keyLyricsLineSpacing] = spacingDp.coerceIn(4f, 32f) } }
 
     // ---- Library intelligence ---------------------------------------------------------------
 
@@ -668,9 +810,9 @@ class PreferencesManager @Inject constructor(
     private val keyArtistNeverSplit = stringPreferencesKey("key_artist_never_split")
     private val keyLibraryGeneration = stringPreferencesKey("key_library_generation")
 
-    val splitArtists: Flow<Boolean> = dataStore.data.map { it[keySplitArtists] ?: true }
+    val splitArtists: Flow<Boolean> = dataStore.data.map { it[keySplitArtists] ?: true }.distinctUntilChanged()
     /** One separator per line; null means "use the built-in defaults". */
-    val artistSeparators: Flow<String?> = dataStore.data.map { it[keyArtistSeparators] }
+    val artistSeparators: Flow<String?> = dataStore.data.map { it[keyArtistSeparators] }.distinctUntilChanged()
     /** Artist names the user never wants split, one per line. */
     val artistNeverSplit: Flow<Set<String>> = dataStore.data.map { preferences ->
         preferences[keyArtistNeverSplit].orEmpty()
@@ -678,9 +820,9 @@ class PreferencesManager @Inject constructor(
             .map { it.trim() }
             .filter { it.isNotBlank() }
             .toSet()
-    }
+    }.distinctUntilChanged()
     /** MediaStore version+generation seen by the last successful scan; lets a scan be skipped. */
-    val libraryGeneration: Flow<String?> = dataStore.data.map { it[keyLibraryGeneration] }
+    val libraryGeneration: Flow<String?> = dataStore.data.map { it[keyLibraryGeneration] }.distinctUntilChanged()
 
     suspend fun setSplitArtists(enabled: Boolean) { dataStore.edit { it[keySplitArtists] = enabled } }
     suspend fun setArtistSeparators(raw: String?) {
@@ -718,7 +860,7 @@ class PreferencesManager @Inject constructor(
     /** Persisted field/direction pair for one library tab, e.g. ("YEAR", "DESCENDING"). */
     fun librarySortOrder(tab: String): Flow<Pair<String, String>> = dataStore.data.map { preferences ->
         (librarySortRawCached(tab) ?: preferences[librarySortKey(tab)]).toSortPair()
-    }
+    }.distinctUntilChanged()
 
     @android.annotation.SuppressLint("ApplySharedPref")
     suspend fun setLibrarySortOrder(tab: String, field: String, direction: String) {
@@ -747,7 +889,7 @@ class PreferencesManager @Inject constructor(
     val downloadRecentSearches: Flow<List<String>> = dataStore.data.map { preferences ->
         val raw = preferences[keyDownloadRecentSearches].orEmpty()
         if (raw.isBlank()) emptyList() else raw.split("\n").filter { it.isNotBlank() }
-    }
+    }.distinctUntilChanged()
 
     suspend fun addDownloadRecentSearch(query: String) {
         val trimmed = query.trim()
@@ -775,7 +917,7 @@ class PreferencesManager @Inject constructor(
         dataStore.edit { it.remove(keyDownloadRecentSearches) }
     }
 
-    val ytdlpFirstUpdateDone: Flow<Boolean> = dataStore.data.map { it[keyYtdlpFirstUpdateDone] ?: false }
+    val ytdlpFirstUpdateDone: Flow<Boolean> = dataStore.data.map { it[keyYtdlpFirstUpdateDone] ?: false }.distinctUntilChanged()
 
     suspend fun setYtdlpFirstUpdateDone(done: Boolean) {
         dataStore.edit { it[keyYtdlpFirstUpdateDone] = done }
@@ -786,7 +928,7 @@ class PreferencesManager @Inject constructor(
         preferences[keyDownloadSource]?.let { raw ->
             DownloadSource.entries.firstOrNull { it.raw == raw }
         }
-    }
+    }.distinctUntilChanged()
 
     suspend fun setDownloadSourceFilter(source: DownloadSource?) {
         dataStore.edit { preferences ->
@@ -807,7 +949,7 @@ class PreferencesManager @Inject constructor(
             baseUrl = preferences[keyAiBaseUrl],
             model = preferences[keyAiModel]
         )
-    }
+    }.distinctUntilChanged()
 
     suspend fun setAiPreferences(provider: String, baseUrl: String, model: String) {
         dataStore.edit { preferences ->
@@ -821,9 +963,11 @@ class PreferencesManager @Inject constructor(
 
     private val keyMixExposureHistory = stringPreferencesKey("mix_exposure_history")
 
-    val mixExposureHistory: Flow<Map<String, Long>> = dataStore.data.map { preferences ->
-        parseMixExposure(preferences[keyMixExposureHistory])
-    }
+    val mixExposureHistory: Flow<Map<String, Long>> = dataStore.data
+        .map { preferences -> preferences[keyMixExposureHistory] }
+        .distinctUntilChanged()
+        .map { raw -> parseMixExposure(raw) }
+        .distinctUntilChanged()
 
     suspend fun recordMixExposure(trackIds: Collection<String>, seedDate: Long) {
         val cleanIds = trackIds.filter { it.isNotBlank() }
@@ -874,4 +1018,101 @@ class PreferencesManager @Inject constructor(
             emptyMap()
         }
     }
+
+    // ---- Player Vinyl Mode (persisted across restarts) --------------------------------------
+
+    private val keyVinylMode = booleanPreferencesKey("key_vinyl_mode")
+
+    fun isVinylModeCached(): Boolean = runCatching {
+        context.getSharedPreferences(BOOTSTRAP_PREFS, Context.MODE_PRIVATE)
+            .getBoolean("vinyl_mode_bootstrap", false)
+    }.getOrDefault(false)
+
+    val vinylMode: Flow<Boolean> = dataStore.data.map { prefs ->
+        prefs[keyVinylMode] ?: isVinylModeCached()
+    }.distinctUntilChanged()
+
+    @android.annotation.SuppressLint("ApplySharedPref")
+    suspend fun setVinylMode(enabled: Boolean) {
+        withContext(NonCancellable + Dispatchers.IO) {
+            runCatching {
+                context.getSharedPreferences(BOOTSTRAP_PREFS, Context.MODE_PRIVATE)
+                    .edit()
+                    .putBoolean("vinyl_mode_bootstrap", enabled)
+                    .commit()
+            }
+            dataStore.edit { it[keyVinylMode] = enabled }
+        }
+    }
+
+    // ---- Batch Tag Fixer scanned track history ----------------------------------------------
+
+    private val keyTagFixerScannedIds = stringPreferencesKey("key_tag_fixer_scanned_ids")
+
+    val tagFixerScannedIds: Flow<Set<String>> = dataStore.data.map { prefs ->
+        prefs[keyTagFixerScannedIds].orEmpty()
+            .split("\n")
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+            .toSet()
+    }.distinctUntilChanged()
+
+    suspend fun addTagFixerScannedIds(ids: Collection<String>) {
+        val clean = ids.map { it.trim() }.filter { it.isNotBlank() }
+        if (clean.isEmpty()) return
+        dataStore.edit { prefs ->
+            val current = prefs[keyTagFixerScannedIds].orEmpty()
+                .split("\n")
+                .map { it.trim() }
+                .filter { it.isNotBlank() }
+                .toMutableSet()
+            if (current.addAll(clean)) {
+                prefs[keyTagFixerScannedIds] = current.joinToString("\n")
+            }
+        }
+    }
+
+    suspend fun clearTagFixerScannedIds() {
+        dataStore.edit { it.remove(keyTagFixerScannedIds) }
+    }
+
+    // ---- First-time contextual feature micro-tips -------------------------------------------
+
+    private val keySeenFeatureHints = stringPreferencesKey("key_seen_feature_hints")
+
+    fun seenFeatureHintsCached(): Set<String> = runCatching {
+        val raw = context.getSharedPreferences(BOOTSTRAP_PREFS, Context.MODE_PRIVATE)
+            .getString("seen_feature_hints_bootstrap", null).orEmpty()
+        if (raw.isBlank()) emptySet() else raw.split("\n").filter { it.isNotBlank() }.toSet()
+    }.getOrDefault(emptySet())
+
+    val seenFeatureHints: Flow<Set<String>> = dataStore.data.map { prefs ->
+        val raw = prefs[keySeenFeatureHints]
+        val fromStore = if (raw.isNullOrBlank()) emptySet() else raw.split("\n").filter { it.isNotBlank() }.toSet()
+        fromStore + seenFeatureHintsCached()
+    }.distinctUntilChanged()
+
+    @android.annotation.SuppressLint("ApplySharedPref")
+    suspend fun markFeatureHintSeen(hintId: String) {
+        val clean = hintId.trim()
+        if (clean.isBlank()) return
+        withContext(NonCancellable + Dispatchers.IO) {
+            runCatching {
+                val sp = context.getSharedPreferences(BOOTSTRAP_PREFS, Context.MODE_PRIVATE)
+                val current = sp.getString("seen_feature_hints_bootstrap", null).orEmpty()
+                    .split("\n").filter { it.isNotBlank() }.toMutableSet()
+                if (current.add(clean)) {
+                    sp.edit().putString("seen_feature_hints_bootstrap", current.joinToString("\n")).commit()
+                }
+            }
+            dataStore.edit { prefs ->
+                val current = prefs[keySeenFeatureHints].orEmpty()
+                    .split("\n").filter { it.isNotBlank() }.toMutableSet()
+                if (current.add(clean)) {
+                    prefs[keySeenFeatureHints] = current.joinToString("\n")
+                }
+            }
+        }
+    }
 }
+

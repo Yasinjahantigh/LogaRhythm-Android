@@ -6,6 +6,7 @@ import com.yasinjahantigh.logarhythm.domain.model.AlbumStat
 import com.yasinjahantigh.logarhythm.domain.model.ArtistStat
 import com.yasinjahantigh.logarhythm.domain.model.CustomDateRange
 import com.yasinjahantigh.logarhythm.domain.model.Playlist
+import com.yasinjahantigh.logarhythm.domain.model.StatsSortBy
 import com.yasinjahantigh.logarhythm.domain.model.TimeRange
 import com.yasinjahantigh.logarhythm.domain.model.Track
 import com.yasinjahantigh.logarhythm.domain.model.TrackStat
@@ -54,6 +55,13 @@ class StatsViewModel @Inject constructor(
     private val _selectedTab = MutableStateFlow(StatsTab.HISTORY)
     val selectedTab: StateFlow<StatsTab> = _selectedTab.asStateFlow()
 
+    private val _sortBy = MutableStateFlow(StatsSortBy.PLAY_COUNT)
+    val sortBy: StateFlow<StatsSortBy> = _sortBy.asStateFlow()
+
+    private val queryCriteria = combine(rangeBounds, _sortBy) { bounds, sort ->
+        Triple(bounds.first, bounds.second, sort)
+    }
+
     val currentTrack: StateFlow<Track?> = playerController.currentTrack
     val isPlaying: StateFlow<Boolean> = playerController.isPlaying
 
@@ -101,9 +109,9 @@ class StatsViewModel @Inject constructor(
             initialValue = null
         )
 
-    val topTracks: StateFlow<List<TrackStat>> = rangeBounds
-        .flatMapLatest { (since, until) ->
-            statsRepository.getTopTracks(since, limit = 50, untilTimestamp = until)
+    val topTracks: StateFlow<List<TrackStat>> = queryCriteria
+        .flatMapLatest { (since, until, sort) ->
+            statsRepository.getTopTracks(since, limit = 50, untilTimestamp = until, sortBy = sort)
         }
         .stateIn(
             scope = viewModelScope,
@@ -111,9 +119,9 @@ class StatsViewModel @Inject constructor(
             initialValue = emptyList()
         )
 
-    val topArtists: StateFlow<List<ArtistStat>> = rangeBounds
-        .flatMapLatest { (since, until) ->
-            statsRepository.getTopArtists(since, limit = 50, untilTimestamp = until)
+    val topArtists: StateFlow<List<ArtistStat>> = queryCriteria
+        .flatMapLatest { (since, until, sort) ->
+            statsRepository.getTopArtists(since, limit = 50, untilTimestamp = until, sortBy = sort)
         }
         .stateIn(
             scope = viewModelScope,
@@ -121,9 +129,9 @@ class StatsViewModel @Inject constructor(
             initialValue = emptyList()
         )
 
-    val topAlbums: StateFlow<List<AlbumStat>> = rangeBounds
-        .flatMapLatest { (since, until) ->
-            statsRepository.getTopAlbums(since, limit = 50, untilTimestamp = until)
+    val topAlbums: StateFlow<List<AlbumStat>> = queryCriteria
+        .flatMapLatest { (since, until, sort) ->
+            statsRepository.getTopAlbums(since, limit = 50, untilTimestamp = until, sortBy = sort)
         }
         .stateIn(
             scope = viewModelScope,
@@ -145,6 +153,10 @@ class StatsViewModel @Inject constructor(
 
     fun setSelectedTab(tab: StatsTab) {
         _selectedTab.value = tab
+    }
+
+    fun setSortBy(sortBy: StatsSortBy) {
+        _sortBy.value = sortBy
     }
 
     fun playTrackFromTop(tracks: List<Track>, index: Int) {

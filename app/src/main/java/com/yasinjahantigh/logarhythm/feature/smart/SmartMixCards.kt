@@ -75,7 +75,7 @@ private fun SmartMixCard(
         shape = RoundedCornerShape(20.dp),
         color = MaterialTheme.colorScheme.surfaceContainerLow,
         modifier = Modifier
-            .width(156.dp)
+            .width(152.dp)
             .testTag("smart_mix_${mix.type.raw}")
     ) {
         Column {
@@ -101,7 +101,8 @@ private fun SmartMixCard(
                     text = stringResource(R.string.playlist_track_count, mix.trackCount),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
             }
         }
@@ -115,15 +116,15 @@ private fun MagicPlaylistCard(onClick: () -> Unit) {
         shape = RoundedCornerShape(20.dp),
         color = MaterialTheme.colorScheme.primaryContainer,
         modifier = Modifier
-            .width(156.dp)
+            .width(152.dp)
             .testTag("magic_playlist_card")
     ) {
-        Column(modifier = Modifier.padding(14.dp)) {
+        Column {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .aspectRatio(1f)
-                    .clip(RoundedCornerShape(16.dp))
+                    .clip(RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp))
                     .background(
                         Brush.linearGradient(
                             listOf(
@@ -141,19 +142,23 @@ private fun MagicPlaylistCard(onClick: () -> Unit) {
                     modifier = Modifier.size(44.dp)
                 )
             }
-            Text(
-                text = stringResource(R.string.magic_playlist_title),
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.padding(top = 10.dp)
-            )
-            Text(
-                text = stringResource(R.string.magic_playlist_subtitle),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.75f),
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis
-            )
+            Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
+                Text(
+                    text = stringResource(R.string.magic_playlist_title),
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    text = stringResource(R.string.magic_playlist_subtitle),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.78f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
         }
     }
 }

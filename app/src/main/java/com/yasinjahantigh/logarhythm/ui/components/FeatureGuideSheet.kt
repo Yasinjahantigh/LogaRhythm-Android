@@ -56,40 +56,16 @@ private data class FeatureGuideItem(
 
 private val GUIDE_ITEMS = listOf(
     FeatureGuideItem(
+        icon = Icons.Filled.QueueMusic,
+        titleRes = R.string.fg_endless_title,
+        descRes = R.string.fg_endless_desc,
+        whereRes = R.string.fg_endless_where
+    ),
+    FeatureGuideItem(
         icon = Icons.Filled.NotificationsActive,
         titleRes = R.string.fg_radar_title,
         descRes = R.string.fg_radar_desc,
         whereRes = R.string.fg_radar_where
-    ),
-    FeatureGuideItem(
-        icon = Icons.Filled.Equalizer,
-        titleRes = R.string.fg_dsp_title,
-        descRes = R.string.fg_dsp_desc,
-        whereRes = R.string.fg_dsp_where
-    ),
-    FeatureGuideItem(
-        icon = Icons.Filled.DirectionsCar,
-        titleRes = R.string.fg_carmode_title,
-        descRes = R.string.fg_carmode_desc,
-        whereRes = R.string.fg_carmode_where
-    ),
-    FeatureGuideItem(
-        icon = Icons.Filled.ContentCut,
-        titleRes = R.string.fg_trimmer_title,
-        descRes = R.string.fg_trimmer_desc,
-        whereRes = R.string.fg_trimmer_where
-    ),
-    FeatureGuideItem(
-        icon = Icons.Filled.BarChart,
-        titleRes = R.string.fg_reports_title,
-        descRes = R.string.fg_reports_desc,
-        whereRes = R.string.fg_reports_where
-    ),
-    FeatureGuideItem(
-        icon = Icons.Filled.Lyrics,
-        titleRes = R.string.fg_lyrics_title,
-        descRes = R.string.fg_lyrics_desc,
-        whereRes = R.string.fg_lyrics_where
     ),
     FeatureGuideItem(
         icon = Icons.Filled.AutoFixHigh,
@@ -104,10 +80,28 @@ private val GUIDE_ITEMS = listOf(
         whereRes = R.string.fg_downloader_where
     ),
     FeatureGuideItem(
-        icon = Icons.Filled.QueueMusic,
-        titleRes = R.string.fg_privacy_title,
-        descRes = R.string.fg_privacy_desc,
-        whereRes = R.string.fg_privacy_where
+        icon = Icons.Filled.Lyrics,
+        titleRes = R.string.fg_lyrics_title,
+        descRes = R.string.fg_lyrics_desc,
+        whereRes = R.string.fg_lyrics_where
+    ),
+    FeatureGuideItem(
+        icon = Icons.Filled.BarChart,
+        titleRes = R.string.fg_reports_title,
+        descRes = R.string.fg_reports_desc,
+        whereRes = R.string.fg_reports_where
+    ),
+    FeatureGuideItem(
+        icon = Icons.Filled.Equalizer,
+        titleRes = R.string.fg_dsp_title,
+        descRes = R.string.fg_dsp_desc,
+        whereRes = R.string.fg_dsp_where
+    ),
+    FeatureGuideItem(
+        icon = Icons.Filled.DirectionsCar,
+        titleRes = R.string.fg_carmode_title,
+        descRes = R.string.fg_carmode_desc,
+        whereRes = R.string.fg_carmode_where
     )
 )
 
@@ -119,28 +113,34 @@ fun FeatureSpotlightBanner(
 ) {
     Surface(
         onClick = onOpenGuide,
-        shape = RoundedCornerShape(20.dp),
-        color = MaterialTheme.colorScheme.secondaryContainer,
-        modifier = modifier.fillMaxWidth()
+        shape = RoundedCornerShape(22.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        border = androidx.compose.foundation.BorderStroke(
+            1.dp,
+            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+        ),
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 6.dp)
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 14.dp),
+                .padding(start = 14.dp, end = 6.dp, top = 12.dp, bottom = 12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Box(
                 modifier = Modifier
-                    .size(42.dp)
+                    .size(40.dp)
                     .clip(RoundedCornerShape(12.dp))
-                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.16f)),
+                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
                     imageVector = Icons.Filled.AutoAwesome,
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(22.dp)
+                    modifier = Modifier.size(20.dp)
                 )
             }
             Spacer(modifier = Modifier.width(12.dp))
@@ -149,7 +149,7 @@ fun FeatureSpotlightBanner(
                     text = stringResource(R.string.feature_guide_banner_title),
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                    color = MaterialTheme.colorScheme.onSurface,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -157,20 +157,19 @@ fun FeatureSpotlightBanner(
                 Text(
                     text = stringResource(R.string.feature_guide_banner_desc),
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.8f),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
             }
-            Spacer(modifier = Modifier.width(8.dp))
             TextButton(onClick = onOpenGuide) {
                 Text(text = stringResource(R.string.feature_guide_banner_cta))
             }
-            IconButton(onClick = onDismiss, modifier = Modifier.size(32.dp)) {
+            IconButton(onClick = onDismiss, modifier = Modifier.size(48.dp)) {
                 Icon(
                     imageVector = Icons.Filled.Close,
                     contentDescription = stringResource(R.string.close),
-                    tint = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.7f),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.size(18.dp)
                 )
             }

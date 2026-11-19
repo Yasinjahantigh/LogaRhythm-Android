@@ -1,5 +1,6 @@
 package com.yasinjahantigh.logarhythm.feature.settings
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -44,33 +45,34 @@ fun SettingsGroup(
             style = MaterialTheme.typography.labelLarge,
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.padding(start = 12.dp, top = 22.dp, bottom = 8.dp)
+            modifier = Modifier.padding(start = 12.dp, top = 20.dp, bottom = 8.dp)
         )
         Surface(
-            shape = RoundedCornerShape(28.dp),
+            shape = RoundedCornerShape(24.dp),
             color = MaterialTheme.colorScheme.surfaceContainerLow,
+            border = BorderStroke(0.8.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
             modifier = Modifier.fillMaxWidth()
         ) {
-            Column(modifier = Modifier.padding(vertical = 6.dp), content = content)
+            Column(modifier = Modifier.padding(vertical = 4.dp), content = content)
         }
     }
 }
 
-/** Rounded tinted square that carries a setting's icon. */
+/** Subtle tinted icon tile so 20+ settings rows stay calm and scannable. */
 @Composable
-private fun SettingsIconTile(icon: ImageVector) {
+fun SettingsIconTile(icon: ImageVector) {
     Box(
         modifier = Modifier
-            .size(42.dp)
-            .clip(RoundedCornerShape(14.dp))
-            .background(MaterialTheme.colorScheme.primaryContainer),
+            .size(38.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)),
         contentAlignment = Alignment.Center
     ) {
         Icon(
             imageVector = icon,
             contentDescription = null,
-            tint = MaterialTheme.colorScheme.onPrimaryContainer,
-            modifier = Modifier.size(22.dp)
+            tint = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.size(20.dp)
         )
     }
 }
@@ -89,8 +91,8 @@ fun SettingsActionItem(
         modifier = modifier
             .fillMaxWidth()
             .clickable(onClick = onClick)
-            .defaultMinSize(minHeight = 68.dp)
-            .padding(horizontal = 14.dp, vertical = 10.dp)
+            .defaultMinSize(minHeight = 60.dp)
+            .padding(horizontal = 14.dp, vertical = 9.dp)
             .testTag(testTag),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -99,14 +101,14 @@ fun SettingsActionItem(
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = title,
-                style = MaterialTheme.typography.titleMedium,
+                style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.SemiBold,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
             Text(
                 text = subtitle,
-                style = MaterialTheme.typography.bodyMedium,
+                style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis
@@ -132,8 +134,8 @@ fun SettingsInfoItem(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .defaultMinSize(minHeight = 68.dp)
-            .padding(horizontal = 14.dp, vertical = 10.dp)
+            .defaultMinSize(minHeight = 60.dp)
+            .padding(horizontal = 14.dp, vertical = 9.dp)
             .testTag(testTag),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -142,14 +144,14 @@ fun SettingsInfoItem(
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = title,
-                style = MaterialTheme.typography.titleMedium,
+                style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.SemiBold,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
             Text(
                 text = subtitle,
-                style = MaterialTheme.typography.bodyMedium,
+                style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis
@@ -174,8 +176,8 @@ fun SettingsSwitchItem(
         modifier = modifier
             .fillMaxWidth()
             .clickable { onCheckedChange(!checked) }
-            .defaultMinSize(minHeight = 68.dp)
-            .padding(horizontal = 14.dp, vertical = 10.dp)
+            .defaultMinSize(minHeight = 60.dp)
+            .padding(horizontal = 14.dp, vertical = 9.dp)
             .testTag(rowTag),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -184,14 +186,14 @@ fun SettingsSwitchItem(
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = title,
-                style = MaterialTheme.typography.titleMedium,
+                style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.SemiBold,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis
             )
             Text(
                 text = subtitle,
-                style = MaterialTheme.typography.bodyMedium,
+                style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 3,
                 overflow = TextOverflow.Ellipsis
@@ -206,7 +208,7 @@ fun SettingsSwitchItem(
     }
 }
 
-/** Big shortcut tile for the two destinations people open most from Settings. */
+/** Spacious shortcut tile designed for a balanced 2x2 quick-access grid. */
 @Composable
 fun SettingsShortcutTile(
     title: String,
@@ -217,19 +219,33 @@ fun SettingsShortcutTile(
 ) {
     Surface(
         onClick = onClick,
-        shape = RoundedCornerShape(28.dp),
+        shape = RoundedCornerShape(22.dp),
         color = MaterialTheme.colorScheme.secondaryContainer,
         contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
-        modifier = modifier.testTag(testTag)
+        modifier = modifier
+            .defaultMinSize(minHeight = 76.dp)
+            .testTag(testTag)
     ) {
-        Column(modifier = Modifier.padding(18.dp)) {
-            Icon(imageVector = icon, contentDescription = null, modifier = Modifier.size(30.dp))
-            Spacer(modifier = Modifier.height(18.dp))
+        Row(
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(38.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.1f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(imageVector = icon, contentDescription = null, modifier = Modifier.size(22.dp))
+            }
+            Spacer(modifier = Modifier.width(12.dp))
             Text(
                 text = title,
-                style = MaterialTheme.typography.titleMedium,
+                style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.Bold,
-                maxLines = 2
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
             )
         }
     }

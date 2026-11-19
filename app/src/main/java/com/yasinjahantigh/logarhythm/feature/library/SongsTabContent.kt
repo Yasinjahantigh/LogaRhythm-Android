@@ -24,6 +24,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
@@ -78,7 +79,7 @@ fun SongsTabContent(
         ) {
             if (!selectionMode) item(key = "filter_chips") {
                 LazyRow(
-                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
+                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 2.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     items(items = TrackFilter.entries, key = { it.name }) { item ->
@@ -95,7 +96,7 @@ fun SongsTabContent(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                        .padding(horizontal = 16.dp, vertical = 4.dp),
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -153,18 +154,31 @@ fun SongsTabContent(
                 contentType = { "track" }
             ) { track ->
                 val isCurrent = track.id == currentTrackId
+                val onRowClick = remember(track, selectionMode, onToggleSelect, onTrackClick) {
+                    {
+                        if (selectionMode) onToggleSelect?.invoke(track) else onTrackClick(track)
+                        Unit
+                    }
+                }
+                val onRowMenu = remember(track, onTrackMenuClick) {
+                    onTrackMenuClick?.let { cb -> { cb(track) } }
+                }
+                val onRowLongClick = remember(track, onTrackLongClick) {
+                    onTrackLongClick?.let { cb -> { cb(track) } }
+                }
+                val onRowPlayNext = remember(track, onPlayNext) {
+                    onPlayNext?.let { cb -> { cb(track) } }
+                }
                 TrackListItem(
                     track = track,
-                    onClick = {
-                        if (selectionMode) onToggleSelect?.invoke(track) else onTrackClick(track)
-                    },
+                    onClick = onRowClick,
                     isCurrentTrack = isCurrent,
                     isPlaying = isCurrent && isPlaying,
-                    onMenuClick = onTrackMenuClick?.let { { it(track) } },
+                    onMenuClick = onRowMenu,
                     selectionMode = selectionMode,
-                    isSelected = track.id in selectedTrackIds,
-                    onLongClick = onTrackLongClick?.let { { it(track) } },
-                    onPlayNext = onPlayNext?.let { { it(track) } }
+                    isSelected = selectionMode && track.id in selectedTrackIds,
+                    onLongClick = onRowLongClick,
+                    onPlayNext = onRowPlayNext
                 )
             }
         }

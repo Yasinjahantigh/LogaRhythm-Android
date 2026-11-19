@@ -23,6 +23,7 @@ import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
 import androidx.compose.material.icons.automirrored.filled.PlaylistAddCheck
 import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.automirrored.filled.Sort
+import androidx.compose.material.icons.filled.AutoFixHigh
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.PlayArrow
@@ -96,6 +97,14 @@ fun LibraryScreen(
     val allPlaylists by viewModel.allPlaylists.collectAsStateWithLifecycle()
     val currentTrack by viewModel.currentTrack.collectAsStateWithLifecycle()
     val isPlaying by viewModel.isPlaying.collectAsStateWithLifecycle()
+    val artistPhotos by viewModel.artistPhotos.collectAsStateWithLifecycle()
+    val isTagFixerBusy by viewModel.isTagFixerBusy.collectAsStateWithLifecycle()
+
+    LaunchedEffect(uiState.selectedTab, uiState.artists) {
+        if (uiState.selectedTab == LibraryTab.ARTISTS && uiState.artists.isNotEmpty()) {
+            viewModel.prefetchArtistPhotos(uiState.artists)
+        }
+    }
 
     val categoryCounts = remember(uiState.tracks, uiState.albums, uiState.artists, uiState.genres, uiState.folders, allPlaylists) {
         mapOf(
@@ -324,6 +333,26 @@ fun LibraryScreen(
                             tag = "library_search_pill"
                         )
                         if (uiState.hasPermission) {
+                            IconButton(
+                                onClick = onNavigateToLibraryTools,
+                                modifier = Modifier.testTag("library_tag_fixer_button")
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    if (isTagFixerBusy) {
+                                        CircularProgressIndicator(
+                                            modifier = Modifier.size(30.dp),
+                                            strokeWidth = 2.dp,
+                                            color = MaterialTheme.colorScheme.primary
+                                        )
+                                    }
+                                    Icon(
+                                        Icons.Filled.AutoFixHigh,
+                                        contentDescription = stringResource(R.string.settings_library_tools_title),
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(if (isTagFixerBusy) 18.dp else 24.dp)
+                                    )
+                                }
+                            }
                             IconButton(onClick = { showSortSheet = true }, modifier = Modifier.testTag("sort_action_button")) {
                                 Icon(Icons.AutoMirrored.Filled.Sort, contentDescription = stringResource(R.string.sort_by_title))
                             }
@@ -343,6 +372,16 @@ fun LibraryScreen(
                                 }
                             }
                         }
+                    }
+                    if (uiState.hasPermission) {
+                        com.yasinjahantigh.logarhythm.ui.components.FeatureMicroTip(
+                            hintId = com.yasinjahantigh.logarhythm.ui.components.FeatureHintIds.LIBRARY_GESTURES,
+                            text = stringResource(R.string.tip_library_gestures),
+                            icon = Icons.Filled.AutoFixHigh,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 3.dp)
+                        )
                     }
                 }
 
@@ -400,6 +439,7 @@ fun LibraryScreen(
                                     LibraryTab.ALBUMS -> AlbumsTabContent(albums = uiState.albums, onAlbumClick = onNavigateToAlbum)
                                     LibraryTab.ARTISTS -> ArtistsTabContent(
                                         artists = uiState.artists,
+                                        artistPhotos = artistPhotos,
                                         onArtistClick = onNavigateToArtist,
                                         onOpenSmartOrganizer = onNavigateToLibraryTools
                                     )

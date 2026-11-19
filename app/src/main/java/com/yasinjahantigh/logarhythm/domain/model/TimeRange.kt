@@ -28,3 +28,8 @@ data class CustomDateRange(
     val startMs: Long,
     val endMs: Long
 )
+
+enum class StatsSortBy {
+    PLAY_COUNT,
+    LISTEN_TIME
+}

@@ -91,6 +91,9 @@ fun MusicNavGraph(
                 },
                 onNavigateToTagEditor = { trackId ->
                     navController.navigate(NavDestination.createTagEditorRoute(trackId))
+                },
+                onNavigateToDownloadSearch = { query ->
+                    navController.navigate(NavDestination.createDownloadRoute(query))
                 }
             )
         }
@@ -152,7 +155,16 @@ fun MusicNavGraph(
         composable(NavDestination.ROUTE_THEME) {
             ThemeScreen(onNavigateBack = { navController.popBackStack() })
         }
-        composable(NavDestination.ROUTE_DOWNLOAD) {
+        composable(
+            route = NavDestination.ROUTE_DOWNLOAD_WITH_ARGS,
+            arguments = listOf(
+                navArgument("query") {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = null
+                }
+            )
+        ) {
             DownloadScreen(
                 onNavigateBack = { navController.popBackStack() },
                 onNavigateToTagEditor = { trackId ->

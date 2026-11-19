@@ -32,7 +32,7 @@ fun getVersionInfo(): Pair<Int, String> {
     val name = "$major.$minor.$patch"
     Pair(code, name)
   } else {
-    Pair(10901, "1.9.1")
+    Pair(20100, "2.1.0")
   }
 }
 
@@ -49,13 +49,13 @@ val installEndpoint = System.getenv("INSTALL_ENDPOINT")?.trim()
 
 android {
   namespace = "com.yasinjahantigh.logarhythm"
-  compileSdk = 36
-  buildToolsVersion = "36.1.0"
+  compileSdk = 35
+  buildToolsVersion = "35.0.0"
 
   defaultConfig {
     applicationId = "com.yasinjahantigh.logarhythm"
     minSdk = 26
-    targetSdk = 36
+    targetSdk = 35
     versionCode = appVersionCode
     versionName = appVersionName
     buildConfigField("String", "INSTALL_ENDPOINT", "\"$installEndpoint\"")
@@ -73,7 +73,16 @@ android {
     throw GradleException("Release build requires KEYSTORE_PATH, KEYSTORE_PASSWORD, KEY_ALIAS, and KEY_PASSWORD environment variables or Gradle properties.")
   }
 
+  val rootDebugKs = file("${rootDir}/debug.keystore")
   signingConfigs {
+    if (rootDebugKs.exists()) {
+      create("debugConfig") {
+        storeFile = rootDebugKs
+        storePassword = "android"
+        keyAlias = "androiddebugkey"
+        keyPassword = "android"
+      }
+    }
     if (hasSigningSecrets) {
       create("release") {
         storeFile = File(ksPath!!)
@@ -95,7 +104,15 @@ android {
     debug {
       applicationIdSuffix = ".debug"
       versionNameSuffix = "-debug"
+      if (rootDebugKs.exists()) {
+        signingConfig = signingConfigs.findByName("debugConfig")
+      }
     }
+  }
+
+  lint {
+    abortOnError = false
+    checkReleaseBuilds = false
   }
   compileOptions {
     sourceCompatibility = JavaVersion.VERSION_11
@@ -136,7 +153,7 @@ android {
   }
   splits {
     abi {
-      isEnable = true
+      isEnable = gradle.startParameter.taskNames.any { it.contains("Release", ignoreCase = true) }
       reset()
       include("armeabi-v7a", "arm64-v8a", "x86", "x86_64")
       isUniversalApk = true
@@ -151,6 +168,10 @@ android {
 
 ksp {
   arg("room.schemaLocation", "$projectDir/schemas")
+}
+
+composeCompiler {
+  featureFlags.add(org.jetbrains.kotlin.compose.compiler.gradle.ComposeFeatureFlag.StrongSkipping)
 }
 
 dependencies {

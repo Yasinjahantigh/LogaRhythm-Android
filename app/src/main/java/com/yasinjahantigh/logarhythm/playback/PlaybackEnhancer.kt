@@ -244,25 +244,41 @@ class PlaybackEnhancer(
         applyBoost()
     }
 
-    /** (Re)binds the DSP boost to the player's audio session. Silent no-op where unsupported. */
+    /** Tracks the active audio session; LoudnessEnhancer is created lazily only when positive boost is needed. */
     private fun bindLoudness(audioSessionId: Int) {
         if (audioSessionId == 0 || audioSessionId == C.AUDIO_SESSION_ID_UNSET) return
-        if (loudness != null && loudnessSessionId == audioSessionId) return
+        if (loudnessSessionId == audioSessionId) {
+            applyBoost()
+            return
+        }
         runCatching { loudness?.release() }
         loudness = null
         loudnessSessionId = audioSessionId
-        loudness = runCatching {
-            LoudnessEnhancer(audioSessionId).apply { enabled = true }
-        }.getOrElse {
-            Log.w("PlaybackEnhancer", "LoudnessEnhancer not supported: ${it.message}")
-            null
-        }
         applyBoost()
     }
 
     private fun applyBoost() {
-        val enhancer = loudness ?: return
-        runCatching { enhancer.setTargetGain(pendingBoostMb) }
+        if (pendingBoostMb <= 0) {
+            loudness?.let { enhancer ->
+                runCatching {
+                    enhancer.setTargetGain(0)
+                    enhancer.enabled = false
+                }
+            }
+            return
+        }
+        val sessionId = loudnessSessionId
+        if (sessionId == 0 || sessionId == C.AUDIO_SESSION_ID_UNSET) return
+        val enhancer = loudness ?: runCatching {
+            LoudnessEnhancer(sessionId)
+        }.getOrElse {
+            Log.w("PlaybackEnhancer", "LoudnessEnhancer not supported: ${it.message}")
+            null
+        }.also { loudness = it } ?: return
+        runCatching {
+            enhancer.setTargetGain(pendingBoostMb)
+            if (!enhancer.enabled) enhancer.enabled = true
+        }
     }
 
     /**

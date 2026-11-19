@@ -387,6 +387,7 @@
     <string name="detail_album">آلبوم</string>
     <string name="detail_duration">مدت زمان</string>
     <string name="detail_file_path">مسیر فایل</string>
+    <string name="detail_path_copied">مسیر فایل در کلیپ‌بورد کپی شد</string>
     <string name="detail_file_size">حجم فایل</string>
     <string name="detail_source">منبع</string>
     <string name="action_share_song">اشتراک‌گذاری آهنگ</string>
@@ -781,7 +782,7 @@
     <string name="settings_ai_remove_key">حذف کلید</string>
     <string name="settings_ai_save">ذخیره</string>
     <string name="tools_suggest_fixes">اصلاح نام‌ها</string>
-    <string name="tools_regex_cleaner">قوانین و ریجکس</string>
+    <string name="tools_regex_cleaner">اصلاح خودکار تگ و کاور</string>
     <string name="tools_ai_cleaner">هوش مصنوعی</string>
     <string name="tools_apply_all">اعمال همه</string>
     <string name="tools_ai_not_configured_title">هوش مصنوعی تنظیم نشده است</string>
@@ -873,7 +874,7 @@
     <string name="radar_section_title">رادار انتشار جدید</string>
     <string name="radar_refresh_action">بررسی انتشارهای جدید</string>
     <string name="radar_manage_followed">خواننده‌های دنبال‌شده</string>
-    <string name="radar_tracking_summary">در حال دنبال کردن %1$d خواننده — برای بررسی روی بروزرسانی بزنید</string>
+    <string name="radar_tracking_summary">دنبال کردن %1$d خواننده</string>
     <string name="radar_background_alerts">اعلان پس‌زمینه</string>
     <string name="radar_unfollow">لغو دنبال کردن</string>
     <string name="radar_found_new">%1$d انتشار جدید پیدا شد</string>
@@ -901,6 +902,9 @@
     <string name="stats_report_action">گزارش شنیداری</string>
     <string name="stats_report_title">گزارش شنیداری</string>
     <string name="stats_report_share_card">ساخت و اشتراک کارت گرافیکی</string>
+    <string name="stats_sort_label">مرتب‌سازی</string>
+    <string name="stats_sort_by_plays">تعداد پخش</string>
+    <string name="stats_sort_by_time">مدت زمان (دقیقه)</string>
     <string name="report_peak_hour">ساعت اوج: %1$s</string>
     <string name="report_vibe_night_owl">جغد شب</string>
     <string name="report_vibe_early_bird">سحرخیز</string>
@@ -960,46 +964,247 @@
     <string name="settings_whitelist_folders_desc">فقط %1$d پوشه انتخاب‌شده اسکن می‌شوند</string>
     <string name="settings_folder_included_badge">مجاز</string>
     <string name="theme_font_title">فونت برنامه</string>
+    <string name="theme_font_system">فونت سیستم</string>
+    <string name="theme_font_system_desc">استفاده از فونت پیش‌فرض گوشی برای فارسی و انگلیسی</string>
     <string name="theme_font_vazirmatn">وزیرمتن (پیش‌فرض)</string>
+    <string name="theme_font_vazirmatn_desc">تایپوگرافی مدرن، خوانا و یکدست فارسی و انگلیسی</string>
+    <string name="theme_font_jakarta_vazir">جاکارتا + وزیرمتن</string>
+    <string name="theme_font_jakarta_vazir_desc">فونت مدرن انگلیسی همراه با معادل فارسی وزیرمتن</string>
+    <string name="theme_font_space_kufi">اسپیس گروتسک + کوفی</string>
+    <string name="theme_font_space_kufi_desc">فونت نمایشی انگلیسی همراه با فونت فارسی نوتو کوفی</string>
+    <string name="theme_font_playfair_naskh">پلی‌فر + نسخ</string>
+    <string name="theme_font_playfair_naskh_desc">فونت کلاسیک انگلیسی همراه با معادل فارسی نوتو نسخ</string>
     <string name="theme_font_sans">ساده (Sans)</string>
     <string name="theme_font_serif">رسمی (Serif)</string>
-    <string name="theme_font_mono">تک‌عرض (Mono)</string>
-    <string name="feature_guide_banner_title">کشف قابلیت‌های ویژه LogaRhythm</string>
-    <string name="feature_guide_banner_desc">تنظیمات صدای حرفه‌ای، رادار خواننده‌ها، کارت استوری، زنگ‌خور و...</string>
+    <string name="theme_font_mono">تک‌عرض + وزیرمتن</string>
+    <string name="theme_font_mono_desc">اعداد و حروف تک‌عرض انگلیسی همراه با فارسی وزیرمتن</string>
+    <string name="theme_font_lalezar_jakarta">لاله‌زار + جاکارتا</string>
+    <string name="theme_font_lalezar_jakarta_desc">فونت شاخص فارسی لاله‌زار همراه با انگلیسی مدرن</string>
+    <string name="theme_font_dual_note">هر فونت همزمان دارای جفت هماهنگ فارسی و انگلیسی است.</string>
+    <string name="theme_font_custom_title">فونت دلخواه (.ttf / .otf)</string>
+    <string name="theme_font_custom_desc">ایمپورت فایل فونت دلخواه از حافظه گوشی</string>
+    <string name="theme_font_custom_import">افزودن فونت</string>
+    <string name="theme_font_custom_use">استفاده از فونت من</string>
+    <string name="theme_font_custom_remove">حذف</string>
+    <string name="theme_font_import_success">فونت اضافه شد: %1$s</string>
+    <string name="theme_font_import_failed">خواندن فایل فونت ناموفق بود. یک فایل معتبر ttf یا otf انتخاب کنید.</string>
+    <string name="feature_guide_banner_title">کشف قابلیت‌های LogaRhythm</string>
+    <string name="feature_guide_banner_desc">پخش بی‌وقفه، رادار انتشار، اصلاح تگ و کاور، گرامافون لمسی و...</string>
     <string name="feature_guide_banner_cta">مشاهده</string>
-    <string name="feature_guide_title">راهنمای قابلیت‌های ویژه</string>
-    <string name="feature_guide_subtitle">همه امکانات حرفه‌ای برنامه و مسیر دسترسی به هرکدام</string>
-    <string name="feature_guide_settings_desc">مرور ابزارهای مخفی، تنظیمات صدا و میانبرها</string>
+    <string name="feature_guide_title">راهنمای امکانات</string>
+    <string name="feature_guide_subtitle">همه امکانات واقعی برنامه و مسیر دقیق دسترسی به هرکدام</string>
+    <string name="feature_guide_settings_desc">مرور ابزارها، تنظیمات صدا و میانبرها</string>
+    <string name="fg_endless_title">پخش بی‌وقفه و هوشمند</string>
+    <string name="fg_endless_desc">پخش هیچ‌وقت وسط کار متوقف نمی‌شود؛ با نزدیک شدن به آخر صف، آهنگ‌های مشابه به‌صورت خودکار اضافه می‌شوند.</string>
+    <string name="fg_endless_where">خانه ← پخش الان / هر صف پخش</string>
     <string name="fg_radar_title">دنبال کردن خواننده و رادار انتشار</string>
-    <string name="fg_radar_desc">خواننده‌ها را فالو کنید تا با انتشار آهنگ جدید باخبر شوید و سریع دانلود کنید.</string>
-    <string name="fg_radar_where">صفحه خواننده ← دنبال کردن · خانه ← رادار</string>
-    <string name="fg_dsp_title">تنظیمات صدای حرفه‌ای و Slowed + Reverb</string>
-    <string name="fg_dsp_desc">بالانس چپ/راست، مونو، اکولایزر خودکار هدفون، تغییر گام، ریورب و لوپ A–B.</string>
-    <string name="fg_dsp_where">پخش‌کننده ← اکولایزر / DSP</string>
-    <string name="fg_carmode_title">حالت خودرو و پرش با دو بار لمس</string>
-    <string name="fg_carmode_desc">نمای رانندگی خوانا در حالت عمودی و افقی، به همراه پرش ±۱۰ ثانیه روی کاور.</string>
-    <string name="fg_carmode_where">نوار بالای پخش‌کننده ← آیکون خودرو</string>
-    <string name="fg_trimmer_title">برش صدا و ساخت زنگ‌خور</string>
-    <string name="fg_trimmer_desc">بخش دلخواه هر آهنگ را ببرید و مستقیماً به‌عنوان زنگ گوشی ذخیره یا تنظیم کنید.</string>
-    <string name="fg_trimmer_where">منوی آهنگ (⋮) ← برش / زنگ‌خور</string>
-    <string name="fg_reports_title">گزارش بازه دلخواه و کارت استوری</string>
-    <string name="fg_reports_desc">هر بازه زمانی را انتخاب کنید، کارت ۹:۱۶ را پیش‌نمایش ببینید و به اشتراک بگذارید.</string>
-    <string name="fg_reports_where">آمار ← گزارش گوش دادن</string>
-    <string name="fg_lyrics_title">کارت متن آهنگ و ویرایشگر خطی LRC</string>
-    <string name="fg_lyrics_desc">بخش‌های دلخواه متن را به‌صورت کارت گرافیکی شیر کنید یا زمان‌بندی را ویرایش کنید.</string>
-    <string name="fg_lyrics_where">پخش‌کننده ← متن آهنگ</string>
-    <string name="fg_fixer_title">اصلاح گروهی تگ و کاور (الگوریتمی + هوش مصنوعی)</string>
-    <string name="fg_fixer_desc">پاکسازی خودکار نام فایل‌ها، دریافت کاور و متادیتا از منابع آنلاین یا هوش مصنوعی.</string>
-    <string name="fg_fixer_where">تنظیمات / کتابخانه ← اصلاح گروهی</string>
-    <string name="fg_downloader_title">دانلودر پیشرفته و کرال موزیک‌من</string>
-    <string name="fg_downloader_desc">جستجوی چندمنبعی، کرال خودکار در موزیک‌من، دانلود پلی‌لیست/آلبوم و انتخاب کیفیت.</string>
-    <string name="fg_downloader_where">تب دانلود</string>
-    <string name="fg_privacy_title">صف‌های ذخیره، لیست سفید پوشه و حالت خصوصی</string>
-    <string name="fg_privacy_desc">ذخیره چند صف پخش، توقف موقت آمارگیری، فیلتر پوشه‌ها و تغییر فونت برنامه.</string>
-    <string name="fg_privacy_where">صف پخش و تنظیمات</string>
+    <string name="fg_radar_desc">خواننده‌ها را دنبال کنید تا آخرین آثارشان را ببینید، با انتشار آهنگ جدید باخبر شوید و با یک لمس دانلود کنید.</string>
+    <string name="fg_radar_where">صفحه خواننده ← دنبال کردن · خانه ← رادار انتشار</string>
+    <string name="fg_dsp_title">اکولایزر، DSP و Slowed + Reverb</string>
+    <string name="fg_dsp_desc">اکولایزر چندباندی، تقویت بیس، بالانس صدا، تغییر سرعت و گام، افکت Slowed + Reverb و لوپ A–B.</string>
+    <string name="fg_dsp_where">منوی پخش‌کننده (⋮) ← اکولایزر / سرعت و گام</string>
+    <string name="fg_carmode_title">چرخاندن صفحه گرامافون، حالت خودرو و دوبار لمس</string>
+    <string name="fg_carmode_desc">در حالت گرامافون برای آهنگ بعد/قبل به چپ و راست بکشید، برای جلو و عقب بردن انگشت را کمی نگه دارید یا از لبه بچرخانید؛ حالت خودرو هم در دسترس است.</string>
+    <string name="fg_carmode_where">بالای پخش‌کننده ← آیکون گرامافون · منوی (⋮) ← حالت خودرو</string>
+    <string name="fg_trimmer_title">برش صدا</string>
+    <string name="fg_trimmer_desc">برش بخش دلخواه فایل صوتی.</string>
+    <string name="fg_trimmer_where">کتابخانه</string>
+    <string name="fg_reports_title">استودیو اشتراک‌گذاری کارت و گزارش گوش دادن</string>
+    <string name="fg_reports_desc">پیش‌نمایش زنده و شخصی‌سازی تم، رنگ، سایز و اندازه متن برای کارت آهنگ، متن آهنگ و آمار گوش دادن.</string>
+    <string name="fg_reports_where">منوی پخش‌کننده ← اشتراک · بالای متن آهنگ · آمار ← گزارش</string>
+    <string name="fg_lyrics_title">متن هماهنگ، اشتراک کارت و ویرایشگر LRC</string>
+    <string name="fg_lyrics_desc">از دکمه اشتراک بالای صفحه متن کارت بسازید، با لمس همگام‌سازی کنید یا خطوط LRC را ویرایش نمایید.</string>
+    <string name="fg_lyrics_where">پخش‌کننده ← دکمه متن آهنگ</string>
+    <string name="fg_fixer_title">اصلاح خودکار تگ و کاور آهنگ‌ها</string>
+    <string name="fg_fixer_desc">پاکسازی نام فایل‌های شلوغ سایت‌های دانلود و دریافت دانه به دانه متادیتا و کاور باکیفیت از دیزر، آیتونز و...</string>
+    <string name="fg_fixer_where">نوار بالای کتابخانه (عصای جادویی) · تنظیمات ← اصلاح تگ و کاور</string>
+    <string name="fg_downloader_title">دانلودر چندمنبعی و تب آنلاین خواننده</string>
+    <string name="fg_downloader_desc">آهنگ‌ها و آلبوم‌های آنلاین هر خواننده را مستقیم در صفحه خودش ببینید، پیش‌شنوایی کنید و دانلود نمایید.</string>
+    <string name="fg_downloader_where">خانه ← دانلود · صفحه خواننده ← تب آنلاین</string>
+    <string name="fg_privacy_title">فیلتر پوشه‌ها و حالت خصوصی</string>
+    <string name="fg_privacy_desc">توقف موقت ثبت آمار، انتخاب پوشه‌های مجاز و تغییر فونت فارسی/انگلیسی یا افزودن فونت دلخواه.</string>
+    <string name="fg_privacy_where">تنظیمات ← کتابخانه / پخش / تم و فونت</string>
     <string name="settings_donate_daramet_title">حمایت مالی (دارمت)</string>
     <string name="settings_donate_daramet_desc">daramet.com/yasinjahantigh</string>
     <string name="settings_donate_ton_title">حمایت با رمزارز GRAM (TON)</string>
     <string name="settings_donate_ton_desc">برای کپی آدرس کیف‌پول لمس کنید</string>
     <string name="settings_donate_ton_copied">آدرس کیف‌پول TON کپی شد</string>
+
+    <!-- Home Quick Actions -->
+    <string name="home_shuffle_compact">شافل</string>
+    <string name="home_quick_download">دانلود آهنگ</string>
+    <string name="home_quick_new_playlist">پلی‌لیست جدید</string>
+    <string name="home_quick_ai_mix">میکس هوشمند</string>
+    <string name="playlist_created_toast">پلی‌لیست «%1$s» ساخته شد</string>
+
+    <!-- Share Card Studio -->
+    <string name="share_card_preview_cd">پیش‌نمایش زنده کارت اشتراک‌گذاری</string>
+    <string name="share_card_style_label">تم کارت</string>
+    <string name="share_style_dark_glass">شیشه‌ای تیره</string>
+    <string name="share_style_vibrant">رنگی زنده</string>
+    <string name="share_style_minimal_light">روشن مینیمال</string>
+    <string name="share_style_warm_vinyl">گرامافون گرم</string>
+    <string name="share_card_size_label">اندازه و نسبت</string>
+    <string name="share_size_story">استوری ۹:۱۶</string>
+    <string name="share_size_post">پست ۴:۵</string>
+    <string name="share_size_square">مربع ۱:۱</string>
+    <string name="share_card_color_label">رنگ پس‌زمینه</string>
+    <string name="share_card_text_size_label">اندازه متن</string>
+    <string name="share_song_studio_title">اشتراک کارت آهنگ</string>
+    <string name="share_audio_file_action">فایل صوتی</string>
+    <string name="share_card_image_action">اشتراک تصویر</string>
+    <string name="share_card_preview_customize">پیش‌نمایش و شخصی‌سازی</string>
+    <string name="share_card_edit_lines">ویرایش خطوط</string>
+
+    <!-- Release Radar Overhaul -->
+    <string name="radar_new_count_badge">%1$d جدید</string>
+    <string name="radar_mark_all_seen">علامت‌گذاری همه به‌عنوان دیده‌شده</string>
+    <string name="radar_filter_all">همه</string>
+    <string name="radar_empty_card_title">هنوز انتشاری بارگذاری نشده</string>
+    <string name="radar_empty_vpn_hint">برای دریافت جدیدترین آثار روی «بررسی الان» بزنید. با اینترنت ایران، روشن بودن VPN نتیجه بهتری می‌دهد.</string>
+    <string name="radar_check_now">بررسی الان</string>
+    <string name="radar_vpn_tip_short">نکته: در صورت خطا، VPN را روشن کنید</string>
+    <string name="radar_badge_new">جدید</string>
+    <string name="radar_badge_latest">آخرین</string>
+
+    <!-- Batch Tag & Cover Fixer Overhaul -->
+    <string name="tools_fixer_hero_title">اصلاح هوشمند تگ و کاور آهنگ‌ها</string>
+    <string name="tools_fixer_hero_desc">نام فایل‌های شلوغ سایت‌های دانلود را پاکسازی می‌کند و دانه به دانه عنوان، خواننده، آلبوم، سال و کاور باکیفیت را از دیزر، آیتونز و موزیک‌برینز پیدا می‌کند.</string>
+    <string name="vpn_proactive_fixer_hint">پیشنهاد می‌شود برای جستجوی سریع‌تر و پیدا شدن کاور و اطلاعات کامل، VPN روشن باشد.</string>
+    <string name="tools_scan_progress_fmt">در حال بررسی %1$d از %2$d آهنگ…</string>
+    <string name="tools_online_matches_fmt">%1$d مورد آنلاین پیدا شد</string>
+    <string name="tools_scan_messy_btn">اصلاح آهنگ‌های نامرتب</string>
+    <string name="tools_scan_all_btn">اسکن همه</string>
+    <string name="tools_online_failed_vpn_hint">اتصال به منابع آنلاین برقرار نشد. لطفاً VPN را روشن کنید و دوباره اسکن بزنید تا اطلاعات و کاور آهنگ‌ها پیدا شود.</string>
+    <string name="tools_applying_progress_fmt">در حال ذخیره تگ‌ها %1$d از %2$d…</string>
+    <string name="tools_suggestions_count_fmt">%1$d آهنگ آماده اصلاح</string>
+    <string name="tools_updated_count_toast">%1$d آهنگ به‌روزرسانی شد</string>
+    <string name="tools_badge_online_match">تطابق آنلاین</string>
+    <string name="tools_edit_or_research">ویرایش / جستجوی مجدد</string>
+    <string name="tools_edit_suggestion_title">ویرایش یا جستجوی آنلاین آهنگ</string>
+    <string name="tools_research_online_btn">جستجوی مجدد آنلاین</string>
+    <string name="tools_research_found">اطلاعات از منبع آنلاین به‌روز شد</string>
+    <string name="tools_research_not_found_vpn">موردی پیدا نشد — نام آهنگ را دقیق‌تر کنید یا VPN را روشن نمایید.</string>
+
+    <!-- Artist Online Tab & VPN Guidance -->
+    <string name="artist_tab_library">در کتابخانه</string>
+    <string name="artist_tab_online">آنلاین</string>
+    <string name="vpn_proactive_online_hint">پیشنهاد می‌شود برای مشاهده کامل آهنگ‌های آنلاین و دانلود سریع‌تر، VPN روشن باشد.</string>
+    <string name="vpn_proactive_download_hint">پیشنهاد می‌شود برای جستجو و دانلود بدون محدودیت، VPN روشن باشد.</string>
+    <string name="vpn_proactive_lyrics_hint">نکته: اگر متن آنلاین پیدا نشد یا بارگذاری نشد، VPN را روشن کنید و دوباره بزنید.</string>
+    <string name="artist_online_loading">در حال جستجوی آثار آنلاین خواننده…</string>
+    <string name="artist_online_empty_title">آهنگ آنلاینی پیدا نشد</string>
+    <string name="artist_online_vpn_error">اتصال به منابع آنلاین برقرار نشد. لطفاً VPN را روشن کنید و روی تلاش مجدد بزنید.</string>
+    <string name="artist_online_empty_desc">در حال حاضر اثر آنلاینی برای این خواننده پیدا نشد.</string>
+    <string name="artist_online_albums_header">آلبوم‌های آنلاین</string>
+    <string name="artist_online_tracks_header">آهنگ‌های آنلاین</string>
+    <string name="download_status_completed">دانلود شده</string>
+
+    <!-- Multi-Page Settings Hub -->
+    <string name="settings_page_ai_data">هوش مصنوعی و بکاپ</string>
+    <string name="settings_hub_playback_sub">فید صدا، ReplayGain، حذف سکوت و ژست‌ها</string>
+    <string name="settings_hub_library_sub">اصلاح تگ و کاور، پوشه‌ها، تفکیک خواننده</string>
+    <string name="settings_hub_ai_data_sub">کلید هوش مصنوعی، بکاپ JSON و پلی‌لیست M3U</string>
+    <string name="settings_hub_about_sub">آپدیت، گیت‌هاب و حمایت مالی</string>
+    <string name="settings_hub_eq_sub">اکولایزر، تقویت بیس، بالانس و Auto-EQ</string>
+
+    <!-- Release Radar Dismiss & Artist Photo / Online Local Badge -->
+    <string name="radar_dismiss_release">حذف از رادار</string>
+    <string name="artist_online_on_device">روی گوشی</string>
+    <string name="artist_photo_edit_title">ویرایش عکس خواننده</string>
+    <string name="artist_photo_from_gallery">انتخاب از گالری</string>
+    <string name="artist_photo_reset">بازنشانی</string>
+    <string name="artist_photo_search_hint">جستجوی آنلاین عکس خواننده</string>
+    <string name="artist_photo_searching">در حال جستجوی عکس خواننده…</string>
+    <string name="artist_photo_empty">عکسی پیدا نشد — اسم خواننده را تغییر دهید یا VPN را روشن کنید.</string>
+
+    <!-- Batch Tag Fixer Rescan & Background Confirmation -->
+    <string name="tools_scanned_so_far_fmt">تا الان %1$d آهنگ اسکن شده (در اسکن بعدی دوباره چک نمی‌شوند)</string>
+    <string name="tools_rescan_dialog_title">اسکن مجدد آهنگ‌ها؟</string>
+    <string name="tools_rescan_dialog_remaining_msg">تا الان %1$d آهنگ قبلاً اسکن شده و %2$d آهنگ جدید باقی مانده. می‌توانید فقط باقی‌مانده‌ها را اسکن کنید یا همه را از اول بزنید.</string>
+    <string name="tools_rescan_dialog_all_done_msg">همه %1$d آهنگ این بخش قبلاً اسکن شده‌اند. می‌خواهید دوباره همه را از اول اسکن کنید؟</string>
+    <string name="tools_rescan_btn_remaining">ادامه برای %1$d آهنگ باقی‌مانده</string>
+    <string name="tools_rescan_btn_all">اسکن دوباره همه از اول</string>
+
+    <!-- First-Time Non-Blocking Contextual Micro-Tips -->
+    <string name="tip_player_cover">نکته: دو ضربه به چپ/راست برای ۱۰ ثانیه عقب‌جلو، یا آیکون صفحه بالا برای حالت گرامافون.</string>
+    <string name="tip_player_vinyl">گرامافون: برای آهنگ بعد/قبل به چپ و راست بکشید؛ نگه دارید و صفحه را بچرخانید تا عقب‌جلو شود.</string>
+    <string name="tip_lyrics_actions">نکته: با اشتراک بالا کارت متن بسازید، یا از منوی ⋮ زمان‌بندی متن را دقیق کنید.</string>
+    <string name="tip_library_gestures">نکته: کشیدن به راست = پخش بعدی، نگه داشتن = انتخاب چندتایی، و آیکون عصای جادویی بالا = اصلاح خودکار تگ و کاور.</string>
+    <string name="tip_artist_detail">نکته: روی عکس خواننده بزنید تا ویرایش شود، یا در تب «آنلاین» آثار دیگرش را ببینید و دانلود کنید.</string>
+    <string name="tip_stats_sort_share">نکته: پایین می‌توانید بر اساس تعداد پخش یا دقیقه سورت کنید و بالا کارت آمار بسازید.</string>
+    <string name="tip_tag_fixer_bg">نکته: اگر از صفحه بیرون بروید اسکن در پس‌زمینه ادامه دارد و آهنگ‌های قبلی دوباره اسکن نمی‌شوند.</string>
+    <string name="tip_home_radar">نکته: با × روی هر کارت می‌توانید آهنگ‌هایی که نمی‌خواهید دانلود کنید را حذف کنید.</string>
+    <string name="tip_equalizer_auto">نکته: تنظیمات اکولایزر برای هر هدفون و اسپیکر بلوتوث به‌صورت خودکار جداگانه ذخیره می‌شود.</string>
+    <string name="tip_download_preview">نکته: روی کاور هر آهنگ بزنید تا قبل از دانلود پیش‌نمایش بشنوید یا فیلتر آلبوم را بزنید.</string>
+
+    <!-- Full Artist Discography & Catalog Filter -->
+    <string name="artist_online_loading_more">در حال بارگذاری کامل آثار… (%1$d آهنگ پیدا شد)</string>
+    <string name="artist_online_filter_hint">جستجو بین آهنگ‌ها یا آلبوم‌ها…</string>
+    <string name="artist_online_download_missing_btn">دانلود باقی‌مانده‌ها (%1$d)</string>
+    <string name="artist_online_batch_queued_toast">%1$d آهنگ به صف دانلود اضافه شد</string>
+
+    <!-- Online Track Details Sheet & VPN-Aware Source Routing -->
+    <string name="online_track_preview_btn">پیش‌شنوایی</string>
+    <string name="online_track_play_local_btn">پخش از کتابخانه</string>
+    <string name="online_track_info_header">مشخصات آهنگ</string>
+    <string name="online_track_number_label">شماره قطعه</string>
+    <string name="online_track_source_label">منبع</string>
+    <string name="download_routing_vpn_probing">VPN روشن است · در حال سنجش سریع‌ترین منبع دانلود…</string>
+    <string name="download_routing_vpn_fastest">VPN روشن است · سریع‌ترین منبع فعلی: %1$s</string>
+    <string name="download_routing_no_vpn_musicman">حالت مستقیم (بدون VPN) · اولویت اول با موزیک‌من</string>
+
+    <!-- Duplicates Cleanup & File Size Matching -->
+    <string name="tools_duplicates_summary_fmt">%1$d گروه تکراری · %2$d فایل اضافی (%3$s)</string>
+    <string name="tools_duplicates_delete_all_btn">حذف همه تکراری‌ها (%1$d)</string>
+    <string name="tools_duplicates_best_badge">بهترین نسخه</string>
+    <string name="tools_duplicates_reason_size">هم‌حجم</string>
+    <string name="tools_duplicates_reason_multisource">منابع متفاوت</string>
+    <string name="tools_duplicates_reason_tags">تگ مشابه</string>
+    <string name="tools_duplicates_delete_one_cd">حذف این نسخه تکراری</string>
+    <string name="tools_duplicates_confirm_all_title">حذف همه فایل‌های تکراری؟</string>
+    <string name="tools_duplicates_confirm_all_body">با این کار %1$d فایل اضافی (%2$s) برای همیشه حذف می‌شود و از هر گروه بهترین نسخه باقی می‌ماند.</string>
+    <string name="tools_duplicates_deleted_count_toast">%1$d فایل تکراری حذف شد</string>
+
+    <!-- Lyrics Line Spacing & Instrumental Interlude -->
+    <string name="lyrics_line_spacing_action">فاصله خطوط متن</string>
+    <string name="lyrics_line_spacing_title">فاصله بین خطوط لیریک</string>
+    <string name="lyrics_line_spacing_compact">فشرده</string>
+    <string name="lyrics_line_spacing_normal">معمولی</string>
+    <string name="lyrics_line_spacing_spacious">باز</string>
+    <string name="lyrics_instrumental_cd">بخش بی‌کلام</string>
+
+    <!-- Audio Output Switcher -->
+    <string name="audio_output_title">خروجی صدا</string>
+    <string name="audio_output_subtitle">انتخاب دستگاه پخش صدا</string>
+    <string name="audio_output_speaker">اسپیکر گوشی</string>
+    <string name="audio_output_wired">هندزفری سیمی</string>
+    <string name="audio_output_usb">خروجی USB</string>
+    <string name="audio_output_bluetooth">دستگاه بلوتوث</string>
+    <string name="audio_output_active_badge">فعال</string>
+    <string name="audio_output_system_switcher">انتخابگر خروجی سیستم</string>
+    <string name="audio_output_volume_label">صدای رسانه</string>
+    <string name="cd_audio_output_switcher">تغییر خروجی صدا</string>
+
+    <!-- Local Search -> Online Download Fallback -->
+    <string name="search_online_download_cta">جستجوی آنلاین برای دانلود «%1$s»</string>
+    <string name="search_online_download_hint">روی گوشی نبود؟ مستقیم آنلاین بگرد و دانلودش کن.</string>
+
+    <!-- Adaptive On-Device Taste Engine Smart Playlists -->
+    <string name="smart_mix_for_you">سلیقه تو</string>
+    <string name="smart_mix_for_you_desc">به‌مرور از پخش‌ها، کامل گوش دادن‌ها، رد کردن‌ها و علاقه‌مندی‌هایت یاد می‌گیرد.</string>
+    <string name="smart_mix_time_vibe">حال‌وهوای این ساعت</string>
+    <string name="smart_mix_time_vibe_desc">بر اساس آهنگ‌هایی که واقعاً در این ساعت از روز گوش می‌دهی چیده می‌شود.</string>
+    <string name="smart_mix_hidden_gems">کشف‌های متناسب با سلیقه‌ات</string>
+    <string name="smart_mix_hidden_gems_desc">آهنگ‌های کمتر شنیده‌شده کتابخانه‌ات که با سلیقه یادگرفته‌شده‌ات هم‌خوان هستند.</string>
+    <string name="smart_taste_card_title">الگوی سلیقه یادگرفته‌شده</string>
+    <string name="smart_taste_learning_warming">در حال شناخت سلیقه تو… (%1$d پخش تحلیل شده)</string>
+    <string name="smart_taste_learning_ready">شخصی‌سازی از %1$d پخش واقعی · دقت %2$d%%</string>
+    <string name="smart_taste_top_artists">خواننده‌های محبوبت: %1$s</string>
+    <string name="smart_taste_top_genres">سبک‌های موردعلاقه: %1$s</string>
+    <string name="smart_taste_slot_morning">حال‌وهوای صبح</string>
+    <string name="smart_taste_slot_afternoon">حال‌وهوای ظهر و عصر</string>
+    <string name="smart_taste_slot_evening">حال‌وهوای غروب و شب</string>
+    <string name="smart_taste_slot_night">حال‌وهوای آخر شب</string>
 </resources>
+

@@ -35,12 +35,14 @@ import coil.compose.AsyncImage
 import com.yasinjahantigh.logarhythm.R
 import com.yasinjahantigh.logarhythm.core.utils.TimeUtils
 import com.yasinjahantigh.logarhythm.domain.model.AlbumStat
+import com.yasinjahantigh.logarhythm.domain.model.StatsSortBy
 
 @Composable
 fun StatsAlbumsTab(
     albums: List<AlbumStat>,
     onAlbumClick: (String, String) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    sortBy: StatsSortBy = StatsSortBy.PLAY_COUNT
 ) {
     if (albums.isEmpty()) {
         StatsEmptyTabContent(
@@ -60,6 +62,7 @@ fun StatsAlbumsTab(
             AlbumStatRow(
                 rank = index + 1,
                 stat = stat,
+                sortBy = sortBy,
                 onClick = { onAlbumClick(stat.album, stat.artist) }
             )
         }
@@ -70,6 +73,7 @@ fun StatsAlbumsTab(
 private fun AlbumStatRow(
     rank: Int,
     stat: AlbumStat,
+    sortBy: StatsSortBy,
     onClick: () -> Unit
 ) {
     val rankContainerColor = when (rank) {
@@ -163,6 +167,8 @@ private fun AlbumStatRow(
             )
             val playsStr = stringResource(R.string.stats_play_count, stat.playCount)
             val timeStr = TimeUtils.formatListeningTimeSummary(stat.totalListenTimeMs)
+            val primaryMetric = if (sortBy == StatsSortBy.LISTEN_TIME) timeStr else playsStr
+            val secondaryMetric = if (sortBy == StatsSortBy.LISTEN_TIME) playsStr else timeStr
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
@@ -176,7 +182,14 @@ private fun AlbumStatRow(
                     modifier = Modifier.weight(1f, fill = false)
                 )
                 Text(
-                    text = " • $playsStr • $timeStr",
+                    text = " • $primaryMetric",
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.primary,
+                    maxLines = 1
+                )
+                Text(
+                    text = " • $secondaryMetric",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1

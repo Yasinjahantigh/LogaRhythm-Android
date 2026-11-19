@@ -26,7 +26,9 @@ import dagger.hilt.android.EntryPointAccessors
 import dagger.hilt.components.SingletonComponent
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -79,9 +81,15 @@ object MusicWidgetUpdater {
     private const val PREFS_NAME = "music_widget_snapshot_cache"
     private const val KEY_SNAPSHOT_JSON = "snapshot_json"
 
+    private const val UPDATE_DEBOUNCE_MS = 100L
+
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val refreshing = AtomicBoolean(false)
     private val fullRefreshPending = AtomicBoolean(false)
+    @Volatile
+    private var pendingUpdateJob: Job? = null
+    @Volatile
+    private var pendingFullUpdate = false
 
     @Volatile
     private var snapshot: MusicWidgetSnapshot? = null
@@ -101,33 +109,78 @@ object MusicWidgetUpdater {
     )
 
     fun requestUpdate(context: Context) {
-        val appContext = context.applicationContext
-        scope.launch { refresh(appContext, allWidgets) }
+        scheduleUpdate(context.applicationContext, full = true)
     }
 
     /** Only widgets that show a clock or progress bar need the periodic refresh. */
     fun requestProgressUpdate(context: Context) {
-        val appContext = context.applicationContext
-        scope.launch { refresh(appContext, progressWidgets) }
+        scheduleUpdate(context.applicationContext, full = false)
+    }
+
+    private fun scheduleUpdate(appContext: Context, full: Boolean) {
+        if (full) pendingFullUpdate = true
+        pendingUpdateJob?.cancel()
+        pendingUpdateJob = scope.launch {
+            delay(UPDATE_DEBOUNCE_MS)
+            val widgets = if (pendingFullUpdate) {
+                pendingFullUpdate = false
+                allWidgets
+            } else {
+                progressWidgets
+            }
+            refresh(appContext, widgets)
+        }
     }
 
     suspend fun refresh(context: Context) = refresh(context, allWidgets)
+
+    private data class ActiveWidgetTarget(
+        val receiver: Class<out BroadcastReceiver>,
+        val widget: GlanceAppWidget,
+        val ids: IntArray
+    )
+
+    private fun findActiveWidgets(
+        context: Context,
+        widgets: List<Pair<Class<out BroadcastReceiver>, GlanceAppWidget>>
+    ): List<ActiveWidgetTarget> {
+        val appContext = context.applicationContext
+        val appWidgetManager = runCatching { AppWidgetManager.getInstance(appContext) }.getOrNull()
+            ?: return emptyList()
+        val active = ArrayList<ActiveWidgetTarget>(widgets.size)
+        for ((receiver, widget) in widgets) {
+            val ids = runCatching {
+                appWidgetManager.getAppWidgetIds(ComponentName(appContext, receiver))
+            }.getOrDefault(intArrayOf())
+            if (ids.isNotEmpty()) {
+                active.add(ActiveWidgetTarget(receiver, widget, ids))
+            }
+        }
+        return active
+    }
 
     private suspend fun refresh(
         context: Context,
         widgets: List<Pair<Class<out BroadcastReceiver>, GlanceAppWidget>>
     ) {
+        // Fast path: if no widgets of the requested type are placed on the home screen,
+        // skip all bitmap decoding, blurring, Room queries, and SharedPreferences writes.
+        val initialActive = findActiveWidgets(context, widgets)
+        if (initialActive.isEmpty()) return
+
         if (!refreshing.compareAndSet(false, true)) {
             if (widgets === allWidgets) fullRefreshPending.set(true)
             return
         }
         try {
-            var target = widgets
+            var activeTargets = initialActive
             while (true) {
-                publishState(context)
-                render(context, target)
+                val needsQueueThumbs = activeTargets.any { it.receiver == MusicWidgetQueueReceiver::class.java }
+                publishState(context, includeQueueThumbs = needsQueueThumbs)
+                render(context, activeTargets)
                 if (!fullRefreshPending.getAndSet(false)) break
-                target = allWidgets
+                activeTargets = findActiveWidgets(context, allWidgets)
+                if (activeTargets.isEmpty()) break
             }
         } finally {
             refreshing.set(false)
@@ -159,7 +212,7 @@ object MusicWidgetUpdater {
             ) to controllerIndex
         }
 
-    private suspend fun publishState(context: Context) {
+    private suspend fun publishState(context: Context, includeQueueThumbs: Boolean = true) {
         val entryPoint = EntryPointAccessors.fromApplication(
             context.applicationContext,
             MusicWidgetEntryPoint::class.java
@@ -195,8 +248,11 @@ object MusicWidgetUpdater {
             else -> queue.indexOfFirst { it.id == controller.currentTrack.value?.id }
         }
         val track = queue.getOrNull(currentIndex) ?: controller.currentTrack.value
-        val upcoming = if (currentIndex >= 0) {
-            queue.withIndex().drop(currentIndex + 1).take(4)
+        val upcoming = if (currentIndex >= 0 && currentIndex + 1 < queue.size) {
+            val end = minOf(currentIndex + 5, queue.size)
+            ArrayList<IndexedValue<Track>>(end - (currentIndex + 1)).apply {
+                for (i in (currentIndex + 1) until end) add(IndexedValue(i, queue[i]))
+            }
         } else {
             emptyList()
         }
@@ -227,12 +283,18 @@ object MusicWidgetUpdater {
         }
 
         val artworkUri = track?.artworkUri
-        val queueThumbs = LinkedHashMap<String, Bitmap?>()
-        queueWindow.take(15).forEach { indexed ->
-            val t = indexed.value
-            if (!queueThumbs.containsKey(t.id)) {
-                queueThumbs[t.id] = WidgetArtworkCache.thumbnail(context, t.artworkUri)
+        val queueThumbs = if (includeQueueThumbs) {
+            LinkedHashMap<String, Bitmap?>(24).also { map ->
+                val count = minOf(15, queueWindow.size)
+                for (i in 0 until count) {
+                    val t = queueWindow[i].value
+                    if (!map.containsKey(t.id)) {
+                        map[t.id] = WidgetArtworkCache.thumbnail(context, t.artworkUri)
+                    }
+                }
             }
+        } else {
+            snapshot?.artwork?.queueThumbnails ?: emptyMap()
         }
         val artwork = MusicWidgetArtwork(
             blurred = WidgetArtworkCache.blurred(context, artworkUri),
@@ -270,12 +332,24 @@ object MusicWidgetUpdater {
         currentIndex: Int,
         limit: Int = 40
     ): List<IndexedValue<Track>> {
-        if (queue.isEmpty()) return emptyList()
-        val indexed = queue.withIndex().toList()
-        if (currentIndex !in queue.indices) return indexed.take(limit)
-        val fromCurrent = indexed.drop(currentIndex)
-        val wrappedHead = indexed.take(currentIndex)
-        return (fromCurrent + wrappedHead).take(limit)
+        if (queue.isEmpty() || limit <= 0) return emptyList()
+        val count = minOf(limit, queue.size)
+        val result = ArrayList<IndexedValue<Track>>(count)
+        if (currentIndex !in queue.indices) {
+            for (i in 0 until count) result.add(IndexedValue(i, queue[i]))
+            return result
+        }
+        var i = currentIndex
+        while (i < queue.size && result.size < count) {
+            result.add(IndexedValue(i, queue[i]))
+            i++
+        }
+        var j = 0
+        while (j < currentIndex && result.size < count) {
+            result.add(IndexedValue(j, queue[j]))
+            j++
+        }
+        return result
     }
 
     internal fun sortTracks(tracks: List<Track>, fieldName: String, directionName: String): List<Track> {
@@ -388,23 +462,19 @@ object MusicWidgetUpdater {
 
     private suspend fun render(
         context: Context,
-        widgets: List<Pair<Class<out BroadcastReceiver>, GlanceAppWidget>>
+        activeTargets: List<ActiveWidgetTarget>
     ) {
         val appContext = context.applicationContext
-        val appWidgetManager = AppWidgetManager.getInstance(appContext)
         val glanceManager = GlanceAppWidgetManager(appContext)
-        widgets.forEach { (receiver, widget) ->
-            val ids = runCatching {
-                appWidgetManager.getAppWidgetIds(ComponentName(appContext, receiver))
-            }.getOrDefault(intArrayOf())
-            ids.forEach { appWidgetId ->
+        activeTargets.forEach { target ->
+            target.ids.forEach { appWidgetId ->
                 val finished = withTimeoutOrNull(5_000L) {
                     runCatching {
                         val glanceId = glanceManager.getGlanceIdBy(appWidgetId)
                         updateAppWidgetState(appContext, glanceId) {
                             it[revisionKey] = System.nanoTime()
                         }
-                        widget.update(appContext, glanceId)
+                        target.widget.update(appContext, glanceId)
                     }
                         .onFailure { Log.w(TAG, "update failed for widget $appWidgetId", it) }
                         .isSuccess

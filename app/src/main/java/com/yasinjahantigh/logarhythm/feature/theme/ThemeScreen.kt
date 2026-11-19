@@ -2,6 +2,7 @@ package com.yasinjahantigh.logarhythm.feature.theme
 
 import android.content.Intent
 import android.net.Uri
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import android.graphics.Color as AndroidColor
@@ -29,6 +30,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.DeleteOutline
+import androidx.compose.material.icons.filled.FileUpload
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Wallpaper
 import androidx.compose.material3.Button
@@ -91,8 +94,37 @@ fun ThemeScreen(
     val customBackgroundUri by viewModel.customBackgroundUri.collectAsStateWithLifecycle()
     val customBackgroundAlpha by viewModel.customBackgroundAlpha.collectAsStateWithLifecycle()
     val appFont by viewModel.appFont.collectAsStateWithLifecycle()
+    val customFontName by viewModel.customFontName.collectAsStateWithLifecycle()
+    val customFontPath by viewModel.customFontPath.collectAsStateWithLifecycle()
 
     val context = androidx.compose.ui.platform.LocalContext.current
+
+    androidx.compose.runtime.LaunchedEffect(Unit) {
+        viewModel.fontImportResult.collect { result ->
+            result.onSuccess { fontName ->
+                Toast.makeText(
+                    context,
+                    context.getString(R.string.theme_font_import_success, fontName),
+                    Toast.LENGTH_SHORT
+                ).show()
+            }.onFailure {
+                Toast.makeText(
+                    context,
+                    context.getString(R.string.theme_font_import_failed),
+                    Toast.LENGTH_LONG
+                ).show()
+            }
+        }
+    }
+
+    val fontPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri: Uri? ->
+        if (uri != null) {
+            viewModel.importCustomFont(uri)
+        }
+    }
+
     val imagePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
@@ -109,6 +141,12 @@ fun ThemeScreen(
 
     val presets = listOf(
         ThemePreset(
+            key = "album_art",
+            nameRes = R.string.theme_preset_album_art,
+            descriptionRes = R.string.theme_preset_album_art_desc,
+            colors = listOf(Color(0xFFE86A92), Color(0xFF6B4EFF), Color(0xFF0E1013))
+        ),
+        ThemePreset(
             key = "default",
             nameRes = R.string.theme_preset_default,
             descriptionRes = R.string.theme_preset_default_desc,
@@ -119,12 +157,6 @@ fun ThemeScreen(
             nameRes = R.string.theme_preset_oled,
             descriptionRes = R.string.theme_preset_oled_desc,
             colors = listOf(Color.Black, Color(0xFFF4B266))
-        ),
-        ThemePreset(
-            key = "album_art",
-            nameRes = R.string.theme_preset_album_art,
-            descriptionRes = R.string.theme_preset_album_art_desc,
-            colors = listOf(Color(0xFFE86A92), Color(0xFF6B4EFF), Color(0xFF0E1013))
         ),
         ThemePreset(
             key = "wallpaper",
@@ -153,16 +185,21 @@ fun ThemeScreen(
             )
         }
     ) { innerPadding ->
-        LazyColumn(
+        Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(innerPadding)
-                .widthIn(max = 840.dp),
-            contentPadding = PaddingValues(bottom = LocalPlaybackBottomPadding.current + 24.dp)
+                .padding(innerPadding),
+            contentAlignment = Alignment.TopCenter
         ) {
-            item {
-                ThemePreviewCard(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
-            }
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .widthIn(max = 860.dp),
+                contentPadding = PaddingValues(bottom = LocalPlaybackBottomPadding.current + 24.dp)
+            ) {
+                item {
+                    ThemePreviewCard(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
+                }
 
             item {
                 SectionTitle(stringResource(R.string.theme_curated_title))
@@ -325,22 +362,146 @@ fun ThemeScreen(
 
             item {
                 SectionTitle(stringResource(R.string.theme_font_title))
+                Text(
+                    text = stringResource(R.string.theme_font_dual_note),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(start = 20.dp, end = 20.dp, bottom = 10.dp)
+                )
+                val normalizedCurrentFont = com.yasinjahantigh.logarhythm.ui.theme.normalizeFontKey(appFont)
                 LazyRow(
                     contentPadding = PaddingValues(horizontal = 16.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    val fonts = listOf(
-                        "default" to R.string.theme_font_vazirmatn,
-                        "sans" to R.string.theme_font_sans,
-                        "serif" to R.string.theme_font_serif,
-                        "mono" to R.string.theme_font_mono
+                    items(com.yasinjahantigh.logarhythm.ui.theme.APP_FONT_PRESETS, key = { it.key }) { preset ->
+                        val previewPair = remember(preset.key) {
+                            com.yasinjahantigh.logarhythm.ui.theme.resolveFontFamilies(preset.key, context, null)
+                        }
+                        val selected = normalizedCurrentFont == preset.key
+                        Surface(
+                            modifier = Modifier
+                                .width(178.dp)
+                                .clip(RoundedCornerShape(20.dp))
+                                .clickable { viewModel.setAppFont(preset.key) }
+                                .testTag("font_preset_${preset.key}"),
+                            shape = RoundedCornerShape(20.dp),
+                            color = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerLow,
+                            border = BorderStroke(
+                                width = if (selected) 2.dp else 1.dp,
+                                color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)
+                            )
+                        ) {
+                            Column(modifier = Modifier.padding(14.dp)) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = "Aa  اب",
+                                        fontFamily = previewPair.second,
+                                        style = MaterialTheme.typography.titleLarge,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (selected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.primary
+                                    )
+                                    if (selected) {
+                                        Icon(
+                                            imageVector = Icons.Filled.Check,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
+                                }
+                                Spacer(Modifier.height(8.dp))
+                                Text(
+                                    text = stringResource(preset.labelRes),
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontFamily = previewPair.second,
+                                    fontWeight = FontWeight.SemiBold,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                Text(
+                                    text = stringResource(preset.subtitleRes),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    fontFamily = previewPair.first,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                        }
+                    }
+                }
+
+                Spacer(Modifier.height(12.dp))
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp),
+                    shape = RoundedCornerShape(20.dp),
+                    color = MaterialTheme.colorScheme.surfaceContainerLow,
+                    border = BorderStroke(
+                        1.dp,
+                        if (normalizedCurrentFont == "custom") MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
                     )
-                    items(fonts, key = { it.first }) { (key, labelRes) ->
-                        FilterChip(
-                            selected = appFont == key,
-                            onClick = { viewModel.setAppFont(key) },
-                            label = { Text(stringResource(labelRes)) }
-                        )
+                ) {
+                    Column(modifier = Modifier.padding(14.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = customFontName ?: stringResource(R.string.theme_font_custom_title),
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.SemiBold,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                Text(
+                                    text = stringResource(R.string.theme_font_custom_desc),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            if (customFontPath != null) {
+                                IconButton(
+                                    onClick = viewModel::clearCustomFont,
+                                    modifier = Modifier.testTag("clear_custom_font_button")
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Filled.DeleteOutline,
+                                        contentDescription = stringResource(R.string.theme_font_custom_remove),
+                                        tint = MaterialTheme.colorScheme.error
+                                    )
+                                }
+                            }
+                        }
+                        Spacer(Modifier.height(10.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Button(
+                                onClick = {
+                                    fontPickerLauncher.launch(
+                                        arrayOf("font/*", "application/x-font-ttf", "application/x-font-otf", "application/octet-stream", "*/*")
+                                    )
+                                },
+                                modifier = Modifier.weight(1f).testTag("import_custom_font_button")
+                            ) {
+                                Icon(Icons.Filled.FileUpload, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Spacer(Modifier.width(8.dp))
+                                Text(stringResource(R.string.theme_font_custom_import))
+                            }
+                            if (customFontPath != null && normalizedCurrentFont != "custom") {
+                                OutlinedButton(
+                                    onClick = { viewModel.setAppFont("custom") }
+                                ) {
+                                    Text(stringResource(R.string.theme_font_custom_use))
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -353,6 +514,7 @@ fun ThemeScreen(
                     modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp)
                 )
             }
+        }
         }
     }
 }

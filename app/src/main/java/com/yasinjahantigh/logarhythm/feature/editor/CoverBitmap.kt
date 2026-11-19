@@ -63,6 +63,27 @@ object CoverBitmap {
         }
     }
 
+    /** Decodes raw JPEG/PNG bytes safely on IO with downsampling so large covers never OOM. */
+    fun decodeBytes(bytes: ByteArray, maxEdge: Int = DECODE_EDGE): Bitmap? {
+        return try {
+            if (bytes.isEmpty()) return null
+            val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+            if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
+            var sample = 1
+            while (max(bounds.outWidth, bounds.outHeight) / (sample * 2) >= maxEdge) sample *= 2
+            val options = BitmapFactory.Options().apply {
+                inSampleSize = sample
+                inPreferredConfig = Bitmap.Config.ARGB_8888
+            }
+            BitmapFactory.decodeByteArray(bytes, 0, bytes.size, options)
+        } catch (_: Exception) {
+            null
+        } catch (_: OutOfMemoryError) {
+            null
+        }
+    }
+
     /** Source rectangle currently visible inside the square crop viewport. */
     fun visibleRect(source: Bitmap, containerPx: Float, zoom: Float, offsetX: Float, offsetY: Float): Rect {
         val baseScale = max(containerPx / source.width, containerPx / source.height)
@@ -71,21 +92,30 @@ object CoverBitmap {
         val drawnHeight = source.height * scale
         val left = (containerPx - drawnWidth) / 2f + offsetX
         val top = (containerPx - drawnHeight) / 2f + offsetY
-        val size = (containerPx / scale).roundToInt().coerceAtLeast(1)
+        val maxSquare = minOf(source.width, source.height).coerceAtLeast(1)
+        val size = (containerPx / scale).roundToInt().coerceIn(1, maxSquare)
         val x = (-left / scale).roundToInt().coerceIn(0, (source.width - size).coerceAtLeast(0))
         val y = (-top / scale).roundToInt().coerceIn(0, (source.height - size).coerceAtLeast(0))
         return Rect(x, y, size)
     }
 
     fun cropToSquare(source: Bitmap, containerPx: Float, zoom: Float, offsetX: Float, offsetY: Float): ByteArray? {
+        if (source.isRecycled || source.width <= 0 || source.height <= 0) return null
         return try {
             val rect = visibleRect(source, containerPx, zoom, offsetX, offsetY)
-            val cropped = Bitmap.createBitmap(source, rect.x, rect.y, rect.size, rect.size)
+            val safeX = rect.x.coerceIn(0, (source.width - 1).coerceAtLeast(0))
+            val safeY = rect.y.coerceIn(0, (source.height - 1).coerceAtLeast(0))
+            val safeSize = rect.size
+                .coerceAtMost(minOf(source.width - safeX, source.height - safeY))
+                .coerceAtLeast(1)
+            val cropped = Bitmap.createBitmap(source, safeX, safeY, safeSize, safeSize)
             val scaled = Bitmap.createScaledBitmap(cropped, OUTPUT_EDGE, OUTPUT_EDGE, true)
-            if (scaled !== cropped) cropped.recycle()
+            // Never recycle the caller's source bitmap: Bitmap.createBitmap/createScaledBitmap
+            // may return `source` itself when the crop matches full dimensions (e.g. square covers).
+            if (cropped !== source && cropped !== scaled) cropped.recycle()
             val out = ByteArrayOutputStream()
             scaled.compress(Bitmap.CompressFormat.JPEG, 92, out)
-            scaled.recycle()
+            if (scaled !== source) scaled.recycle()
             out.toByteArray()
         } catch (_: Exception) {
             null

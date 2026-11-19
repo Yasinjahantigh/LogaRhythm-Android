@@ -115,47 +115,59 @@ class TagEditorViewModel @Inject constructor(
     val coverCandidates: StateFlow<List<CoverCandidate>?> = _coverCandidates.asStateFlow()
     private val _findingCovers = MutableStateFlow(false)
     val findingCovers: StateFlow<Boolean> = _findingCovers.asStateFlow()
+    private val _choosingCover = MutableStateFlow(false)
+    val choosingCover: StateFlow<Boolean> = _choosingCover.asStateFlow()
+    private val _coverDownloadFailed = MutableStateFlow(false)
+    val coverDownloadFailed: StateFlow<Boolean> = _coverDownloadFailed.asStateFlow()
     private val _selectedCover = MutableStateFlow<Bitmap?>(null)
     val selectedCover: StateFlow<Bitmap?> = _selectedCover.asStateFlow()
 
-    fun findCovers() {
+    fun findCovers(titleOverride: String? = null, artistOverride: String? = null) {
         val current = track.value ?: return
         if (_findingCovers.value) return
         viewModelScope.launch {
             _findingCovers.value = true
+            _coverDownloadFailed.value = false
             _coverCandidates.value = emptyList()
-            val title = current.title
-            val artist = current.artist
+            val title = titleOverride?.trim().takeUnless { it.isNullOrBlank() } ?: current.title
+            val artist = artistOverride?.trim().takeUnless { it.isNullOrBlank() } ?: current.artist
             val itunes = runCatching { itunesClient.searchCandidates(title, artist) }.getOrDefault(emptyList())
                 .map { CoverCandidate(it.url, it.title, it.artist) }
             val deezer = runCatching { deezerClient.searchCandidates(title, artist) }.getOrDefault(emptyList())
                 .map { CoverCandidate(it.url, it.title, it.artist) }
             _coverCandidates.value = (itunes + deezer)
                 .distinctBy { it.url }
-                .take(10)
+                .take(12)
             _findingCovers.value = false
         }
     }
 
     fun dismissCovers() {
         _coverCandidates.value = null
+        _choosingCover.value = false
+        _coverDownloadFailed.value = false
     }
 
     fun chooseCover(url: String) {
-        if (_selectedCover.value != null) return
+        if (_choosingCover.value) return
         viewModelScope.launch {
+            _choosingCover.value = true
+            _coverDownloadFailed.value = false
             val bitmap = withContext(Dispatchers.IO) {
                 runCatching {
                     httpClient.newCall(Request.Builder().url(url).build()).execute().use { response ->
                         if (!response.isSuccessful) return@use null
                         val bytes = response.body?.bytes() ?: return@use null
-                        BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                        CoverBitmap.decodeBytes(bytes)
                     }
                 }.getOrNull()
             }
-            if (bitmap != null) {
+            _choosingCover.value = false
+            if (bitmap != null && !bitmap.isRecycled) {
                 _selectedCover.value = bitmap
                 _coverCandidates.value = null
+            } else {
+                _coverDownloadFailed.value = true
             }
         }
     }

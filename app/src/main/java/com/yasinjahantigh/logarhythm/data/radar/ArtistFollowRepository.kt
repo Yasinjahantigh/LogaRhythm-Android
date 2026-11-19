@@ -1,5 +1,6 @@
 package com.yasinjahantigh.logarhythm.data.radar
 
+import com.yasinjahantigh.logarhythm.data.datastore.PreferencesManager
 import com.yasinjahantigh.logarhythm.data.download.DownloadSearchService
 import com.yasinjahantigh.logarhythm.data.room.ArtistFollowDao
 import com.yasinjahantigh.logarhythm.data.room.ArtistReleaseEntity
@@ -13,6 +14,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
@@ -32,11 +35,18 @@ class ArtistFollowRepository @Inject constructor(
     private val dao: ArtistFollowDao,
     private val radarService: ReleaseRadarService,
     private val downloadRepository: DownloadRepository,
-    private val downloadSearchService: DownloadSearchService
+    private val downloadSearchService: DownloadSearchService,
+    private val preferencesManager: PreferencesManager
 ) {
 
     private val backgroundScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val radarMutex = Mutex()
+
+    private fun isDismissed(release: ArtistReleaseEntity, dismissed: Set<String>): Boolean {
+        if (dismissed.isEmpty()) return false
+        return release.releaseId in dismissed ||
+            ReleaseRadarService.titleKey(release.artistName, release.title) in dismissed
+    }
 
     fun observeFollowed(): Flow<List<FollowedArtistEntity>> = dao.observeFollowed()
 
@@ -46,9 +56,25 @@ class ArtistFollowRepository @Inject constructor(
         return dao.observeIsFollowed(key)
     }
 
-    fun observeReleases(): Flow<List<ArtistReleaseEntity>> = dao.observeReleases()
+    fun observeReleases(): Flow<List<ArtistReleaseEntity>> =
+        combine(dao.observeReleases(), preferencesManager.dismissedRadarIds) { list, dismissed ->
+            if (dismissed.isEmpty()) list else list.filterNot { isDismissed(it, dismissed) }
+        }
 
-    fun observeUnseenCount(): Flow<Int> = dao.observeUnseenCount()
+    fun observeUnseenCount(): Flow<Int> =
+        combine(dao.observeReleases(), preferencesManager.dismissedRadarIds) { list, dismissed ->
+            list.count { !it.isSeen && !isDismissed(it, dismissed) }
+        }
+
+    suspend fun dismissRelease(release: ArtistReleaseEntity) {
+        preferencesManager.dismissRadarRelease(
+            listOf(
+                release.releaseId,
+                ReleaseRadarService.titleKey(release.artistName, release.title)
+            )
+        )
+        dao.deleteRelease(release.releaseId)
+    }
 
     suspend fun toggleFollow(
         displayName: String,
@@ -74,13 +100,19 @@ class ArtistFollowRepository @Inject constructor(
                 followedAt = System.currentTimeMillis()
             )
             dao.upsertArtist(entity)
-            // Seed current catalog baseline in background so existing tracks do not flood alerts.
+            // Seed recent releases right away (marked seen so they don't spam notifications)
+            // so Release Radar shows fresh catalog immediately instead of looking empty.
             backgroundScope.launch {
                 radarMutex.withLock {
                     runCatching {
                         val current = dao.getByKey(key) ?: return@withLock
                         val result = radarService.checkArtist(current)
                         dao.upsertArtist(result.updatedArtist)
+                        val dismissed = preferencesManager.dismissedRadarIds.first()
+                        val visibleCatalog = result.recentCatalog.filterNot { isDismissed(it, dismissed) }
+                        if (visibleCatalog.isNotEmpty()) {
+                            dao.insertReleases(visibleCatalog)
+                        }
                     }
                 }
             }
@@ -111,13 +143,25 @@ class ArtistFollowRepository @Inject constructor(
         var anyReachable = false
         var anySuggestVpn = false
 
+        val dismissed = runCatching {
+            preferencesManager.dismissedRadarIds.first()
+        }.getOrDefault(emptySet())
+
+        val existingReleasesByArtist = runCatching {
+            dao.observeReleases().first()
+        }.getOrDefault(emptyList()).groupBy { it.artistKey }
+
         for (artist in followed) {
             try {
                 val res = radarService.checkArtist(artist)
                 dao.upsertArtist(res.updatedArtist)
-                if (res.newReleases.isNotEmpty()) {
-                    dao.insertReleases(res.newReleases)
-                    discovered += res.newReleases
+                val freshNew = res.newReleases.filterNot { isDismissed(it, dismissed) }
+                val freshCatalog = res.recentCatalog.filterNot { isDismissed(it, dismissed) }
+                if (freshNew.isNotEmpty()) {
+                    dao.insertReleases(freshNew)
+                    discovered += freshNew
+                } else if (existingReleasesByArtist[artist.artistKey].isNullOrEmpty() && freshCatalog.isNotEmpty()) {
+                    dao.insertReleases(freshCatalog)
                 }
                 if (res.reachable) anyReachable = true
                 if (res.suggestVpn) anySuggestVpn = true

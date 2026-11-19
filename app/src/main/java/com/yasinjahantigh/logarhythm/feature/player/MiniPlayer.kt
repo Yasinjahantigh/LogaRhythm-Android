@@ -92,27 +92,28 @@ fun MiniPlayerContent(
     val scope = rememberCoroutineScope()
     val dragOffsetX = remember { Animatable(0f) }
     val haptic = LocalHapticFeedback.current
+    val isRtl = LocalLayoutDirection.current == LayoutDirection.Rtl
     val scheme = MaterialTheme.colorScheme
     val accent = tint ?: scheme.primary
 
     val title = track.title.cleanMetaOrNull() ?: stringResource(R.string.unknown_title)
     val artist = track.artist.cleanMetaOrNull() ?: stringResource(R.string.unknown_artist)
-    val artSize = if (isCompact) 38.dp else 48.dp
-    val ringSize = if (isCompact) 42.dp else 50.dp
+    val artSize = if (isCompact) 38.dp else 46.dp
+    val ringSize = if (isCompact) 42.dp else 48.dp
 
     Row(
         modifier = modifier
             .fillMaxWidth()
             .offset { IntOffset(dragOffsetX.value.roundToInt(), 0) }
-            .pointerInput(Unit) {
+            .pointerInput(isRtl) {
                 detectHorizontalDragGestures(
                     onDragEnd = {
                         scope.launch {
                             val current = dragOffsetX.value
                             if (kotlin.math.abs(current) > 100f) {
                                 haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                // The next track lives on the right, so a leftward swipe advances.
-                                if (current < 0) onNext() else onPrevious()
+                                val goNext = if (isRtl) current > 0 else current < 0
+                                if (goNext) onNext() else onPrevious()
                             }
                             dragOffsetX.animateTo(0f, spring())
                         }
@@ -139,7 +140,7 @@ fun MiniPlayerContent(
                 }
             }
             .clickable(onClick = onExpand)
-            .padding(start = 10.dp, end = 8.dp, top = if (isCompact) 6.dp else 8.dp, bottom = if (isCompact) 6.dp else 8.dp)
+            .padding(start = 12.dp, end = 6.dp, top = if (isCompact) 6.dp else 8.dp, bottom = if (isCompact) 6.dp else 8.dp)
             .testTag("mini_player"),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -160,7 +161,7 @@ fun MiniPlayerContent(
                     uri = targetTrack.artworkUri,
                     fallbackKey = targetTitle,
                     modifier = Modifier.size(artSize),
-                    shape = RoundedCornerShape(if (isCompact) 12.dp else 16.dp),
+                    shape = RoundedCornerShape(if (isCompact) 10.dp else 14.dp),
                     contentDescription = stringResource(R.string.cd_artwork, targetTitle)
                 )
 
@@ -257,7 +258,7 @@ fun MiniPlayerContent(
                 }
                 IconButton(
                     onClick = onNext,
-                    modifier = Modifier.size(40.dp).testTag("mini_player_next")
+                    modifier = Modifier.size(48.dp).testTag("mini_player_next")
                 ) {
                     Icon(
                         imageVector = Icons.Default.SkipNext,

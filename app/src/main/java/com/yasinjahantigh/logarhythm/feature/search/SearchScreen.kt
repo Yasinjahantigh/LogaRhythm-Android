@@ -58,6 +58,7 @@ fun SearchScreen(
     onNavigateToAlbum: (String, String) -> Unit = { _, _ -> },
     onNavigateToArtist: (String) -> Unit = {},
     onNavigateToTagEditor: (String) -> Unit = {},
+    onNavigateToDownloadSearch: (String) -> Unit = {},
     viewModel: SearchViewModel = hiltViewModel(),
     playlistViewModel: PlaylistViewModel = hiltViewModel()
 ) {
@@ -234,6 +235,11 @@ fun SearchScreen(
                         onNavigateToArtist(artistName)
                     },
                     onClearQuery = viewModel::clearQuery,
+                    onSearchOnline = { term ->
+                        viewModel.saveRecentQuery(term)
+                        focusManager.clearFocus()
+                        onNavigateToDownloadSearch(term)
+                    },
                     onTrackMenuClick = { track ->
                         selectedTrackForMenu = track
                     },

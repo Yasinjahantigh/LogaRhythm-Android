@@ -32,3 +32,8 @@ KEYSTORE_INFO.txt
 # OS files
 .DS_Store
 Thumbs.db
+
+# Extra scratch
+.freebuff/
+.shots/
+*.zip

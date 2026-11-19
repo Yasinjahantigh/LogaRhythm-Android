@@ -80,9 +80,9 @@ fun RightNowCard(
     Card(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp)
+            .padding(horizontal = 16.dp, vertical = 6.dp)
             .testTag("home_right_now_card"),
-        shape = RoundedCornerShape(32.dp),
+        shape = RoundedCornerShape(28.dp),
         colors = CardDefaults.cardColors(containerColor = Color.Transparent)
     ) {
         Row(
@@ -96,7 +96,7 @@ fun RightNowCard(
                         )
                     )
                 )
-                .padding(start = 22.dp, top = 22.dp, bottom = 22.dp, end = 18.dp),
+                .padding(horizontal = 18.dp, vertical = 18.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column(modifier = Modifier.weight(1f)) {
@@ -105,19 +105,20 @@ fun RightNowCard(
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.72f)
                 )
+                Spacer(modifier = Modifier.height(2.dp))
                 Text(
                     text = title,
-                    style = MaterialTheme.typography.headlineMedium,
-                    
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onPrimaryContainer
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
                     text = subtitle,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.82f)
                 )
-                Spacer(modifier = Modifier.height(14.dp))
+                Spacer(modifier = Modifier.height(12.dp))
                 Button(
                     onClick = onPlay,
                     colors = ButtonDefaults.buttonColors(
@@ -140,14 +141,14 @@ fun RightNowCard(
 /** Three overlapping covers: a glanceable preview of what the queue holds. */
 @Composable
 private fun ArtworkStack(tracks: List<Track>, modifier: Modifier = Modifier) {
-    val size = 84.dp
-    val step = 30.dp
+    val size = 68.dp
+    val step = 20.dp
     val count = tracks.size.coerceAtLeast(1)
     Box(modifier = modifier.width(size + step * (count - 1)).height(size)) {
         // Draw back-to-front so the first track sits on top.
         for (index in tracks.indices.reversed()) {
             val track = tracks[index]
-            val shape = RoundedCornerShape(16.dp)
+            val shape = RoundedCornerShape(14.dp)
             val cover = Modifier
                 .offset(x = step * index)
                 .size(size)
@@ -162,13 +163,18 @@ private fun ArtworkStack(tracks: List<Track>, modifier: Modifier = Modifier) {
                     error = painterResource(R.drawable.ic_music_placeholder)
                 )
             } else {
-                Surface(modifier = cover, color = MaterialTheme.colorScheme.surfaceContainerHighest) {
+                Surface(
+                    modifier = cover,
+                    shape = shape,
+                    color = MaterialTheme.colorScheme.surfaceContainerHighest,
+                    tonalElevation = 2.dp
+                ) {
                     Box(contentAlignment = Alignment.Center) {
                         Icon(
                             imageVector = Icons.Filled.MusicNote,
                             contentDescription = null,
                             tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(28.dp)
+                            modifier = Modifier.size(24.dp)
                         )
                     }
                 }

@@ -3,6 +3,7 @@ package com.yasinjahantigh.logarhythm.domain.repository
 import com.yasinjahantigh.logarhythm.domain.model.AlbumStat
 import com.yasinjahantigh.logarhythm.domain.model.ArtistStat
 import com.yasinjahantigh.logarhythm.domain.model.PlayEvent
+import com.yasinjahantigh.logarhythm.domain.model.StatsSortBy
 import com.yasinjahantigh.logarhythm.domain.model.Track
 import com.yasinjahantigh.logarhythm.domain.model.TrackStat
 import kotlinx.coroutines.flow.Flow
@@ -22,11 +23,26 @@ interface StatsRepository {
 
     fun getPeakHour(sinceTimestamp: Long = 0L, untilTimestamp: Long = Long.MAX_VALUE): Flow<Int?>
 
-    fun getTopTracks(sinceTimestamp: Long = 0L, limit: Int = 50, untilTimestamp: Long = Long.MAX_VALUE): Flow<List<TrackStat>>
+    fun getTopTracks(
+        sinceTimestamp: Long = 0L,
+        limit: Int = 50,
+        untilTimestamp: Long = Long.MAX_VALUE,
+        sortBy: StatsSortBy = StatsSortBy.PLAY_COUNT
+    ): Flow<List<TrackStat>>
 
-    fun getTopArtists(sinceTimestamp: Long = 0L, limit: Int = 50, untilTimestamp: Long = Long.MAX_VALUE): Flow<List<ArtistStat>>
+    fun getTopArtists(
+        sinceTimestamp: Long = 0L,
+        limit: Int = 50,
+        untilTimestamp: Long = Long.MAX_VALUE,
+        sortBy: StatsSortBy = StatsSortBy.PLAY_COUNT
+    ): Flow<List<ArtistStat>>
 
-    fun getTopAlbums(sinceTimestamp: Long = 0L, limit: Int = 50, untilTimestamp: Long = Long.MAX_VALUE): Flow<List<AlbumStat>>
+    fun getTopAlbums(
+        sinceTimestamp: Long = 0L,
+        limit: Int = 50,
+        untilTimestamp: Long = Long.MAX_VALUE,
+        sortBy: StatsSortBy = StatsSortBy.PLAY_COUNT
+    ): Flow<List<AlbumStat>>
 
     fun getRecentlyPlayedTracks(limit: Int = 20): Flow<List<Track>>
 

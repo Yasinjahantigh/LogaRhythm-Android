@@ -37,15 +37,20 @@ import com.yasinjahantigh.logarhythm.domain.model.TrackPlayStat
 import com.yasinjahantigh.logarhythm.domain.repository.TrackRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.shareIn
 import kotlinx.coroutines.withContext
 import androidx.room.withTransaction
 import javax.inject.Inject
@@ -64,94 +69,125 @@ class TrackRepositoryImpl @Inject constructor(
     private val audioFileTagWriter: AudioFileTagWriter
 ) : TrackRepository {
 
-    override fun getAllTracks(): Flow<List<Track>> {
-        return combine(musicDao.getAllTracks(), preferencesManager.hiddenTrackIds) { list, hiddenIds ->
-            list.map { it.toDomain() }.filter { it.id !in hiddenIds }
-        }.flowOn(Dispatchers.Default)
+    private val repoScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    private val sharedPolicy = SharingStarted.WhileSubscribed(stopTimeoutMillis = 0L, replayExpirationMillis = 0L)
+
+    private val allTracksShared: Flow<List<Track>> = combine(
+        musicDao.getAllTracks().distinctUntilChanged(),
+        preferencesManager.hiddenTrackIds
+    ) { list, hiddenIds ->
+        if (hiddenIds.isEmpty()) {
+            list.map { it.toDomain() }
+        } else {
+            val result = ArrayList<Track>(list.size)
+            for (i in list.indices) {
+                val entity = list[i]
+                if (entity.id !in hiddenIds) result.add(entity.toDomain())
+            }
+            result
+        }
     }
+        .flowOn(Dispatchers.Default)
+        .distinctUntilChanged()
+        .shareIn(repoScope, sharedPolicy, replay = 1)
+
+    override fun getAllTracks(): Flow<List<Track>> = allTracksShared
 
     override fun getHiddenTracks(): Flow<List<Track>> {
-        return combine(musicDao.getAllTracks(), preferencesManager.hiddenTrackIds) { list, hiddenIds ->
-            list.map { it.toDomain() }.filter { it.id in hiddenIds }
-        }.flowOn(Dispatchers.Default)
+        return combine(musicDao.getAllTracks().distinctUntilChanged(), preferencesManager.hiddenTrackIds) { list, hiddenIds ->
+            if (hiddenIds.isEmpty()) emptyList()
+            else list.mapNotNull { entity -> if (entity.id in hiddenIds) entity.toDomain() else null }
+        }.flowOn(Dispatchers.Default).distinctUntilChanged()
     }
 
     override fun getTrackById(id: String): Flow<Track?> {
-        return musicDao.getTrackById(id).map { it?.toDomain() }
+        return musicDao.getTrackById(id).map { it?.toDomain() }.distinctUntilChanged()
     }
 
     override fun searchTracks(query: String): Flow<List<Track>> {
+        val tokens = SearchUtils.prepareTokens(query)
         return getAllTracks().map { allTracks ->
-            allTracks.filter { track ->
+            if (tokens.isEmpty()) allTracks
+            else allTracks.filter { track ->
                 val searchable = "${track.title} ${track.artist} ${track.album} ${track.genre}"
-                SearchUtils.matchesTokens(searchable, query)
+                SearchUtils.matchesPreparedTokens(searchable, tokens)
             }
         }.flowOn(Dispatchers.Default)
     }
 
     override fun searchAlbums(query: String): Flow<List<Album>> {
+        val tokens = SearchUtils.prepareTokens(query)
         return getAlbums().map { allAlbums ->
-            allAlbums.filter { album ->
+            if (tokens.isEmpty()) allAlbums
+            else allAlbums.filter { album ->
                 val searchable = "${album.name} ${album.artist}"
-                SearchUtils.matchesTokens(searchable, query)
+                SearchUtils.matchesPreparedTokens(searchable, tokens)
             }
-        }
+        }.flowOn(Dispatchers.Default)
     }
 
     override fun searchArtists(query: String): Flow<List<Artist>> {
+        val tokens = SearchUtils.prepareTokens(query)
         return getArtists().map { allArtists ->
-            allArtists.filter { artist ->
-                SearchUtils.matchesTokens(artist.name, query)
+            if (tokens.isEmpty()) allArtists
+            else allArtists.filter { artist ->
+                SearchUtils.matchesPreparedTokens(artist.name, tokens)
             }
-        }
+        }.flowOn(Dispatchers.Default)
     }
 
     override fun searchGenres(query: String): Flow<List<Genre>> {
+        val tokens = SearchUtils.prepareTokens(query)
         return getGenres().map { allGenres ->
-            allGenres.filter { genre ->
-                SearchUtils.matchesTokens(genre.name, query)
+            if (tokens.isEmpty()) allGenres
+            else allGenres.filter { genre ->
+                SearchUtils.matchesPreparedTokens(genre.name, tokens)
             }
-        }
-    }
-
-    override fun getAlbums(): Flow<List<Album>> {
-        return getAllTracks().map { tracks ->
-            class AlbumAcc(
-                val name: String,
-                val artist: String,
-                var trackCount: Int,
-                var artworkUri: String?,
-                var year: Int
-            )
-            val map = linkedMapOf<Pair<String, String>, AlbumAcc>()
-            for (track in tracks) {
-                // The full album-artist string stays the grouping key: "A & B" is its own album
-                // artist and must not collapse into either solo artist's discography.
-                val artistKey = track.albumArtist.ifBlank { track.artist }
-                val key = track.album to artistKey
-                val existing = map[key]
-                if (existing == null) {
-                    map[key] = AlbumAcc(track.album, artistKey, 1, track.artworkUri, track.year)
-                } else {
-                    existing.trackCount++
-                    if (existing.artworkUri.isNullOrBlank() && !track.artworkUri.isNullOrBlank()) {
-                        existing.artworkUri = track.artworkUri
-                    }
-                    if (track.year > existing.year) existing.year = track.year
-                }
-            }
-            map.values.map {
-                Album(
-                    id = "album:${it.name}:${it.artist}",
-                    name = it.name,
-                    artist = it.artist,
-                    trackCount = it.trackCount,
-                    artworkUri = it.artworkUri,
-                    year = it.year
-                )
-            }.sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.name })
         }.flowOn(Dispatchers.Default)
     }
+
+    private val albumsShared: Flow<List<Album>> = allTracksShared.map { tracks ->
+        class AlbumAcc(
+            val name: String,
+            val artist: String,
+            var trackCount: Int,
+            var artworkUri: String?,
+            var year: Int
+        )
+        val map = LinkedHashMap<Pair<String, String>, AlbumAcc>()
+        for (i in tracks.indices) {
+            val track = tracks[i]
+            // The full album-artist string stays the grouping key: "A & B" is its own album
+            // artist and must not collapse into either solo artist's discography.
+            val artistKey = track.albumArtist.ifBlank { track.artist }
+            val key = track.album to artistKey
+            val existing = map[key]
+            if (existing == null) {
+                map[key] = AlbumAcc(track.album, artistKey, 1, track.artworkUri, track.year)
+            } else {
+                existing.trackCount++
+                if (existing.artworkUri.isNullOrBlank() && !track.artworkUri.isNullOrBlank()) {
+                    existing.artworkUri = track.artworkUri
+                }
+                if (track.year > existing.year) existing.year = track.year
+            }
+        }
+        map.values.map {
+            Album(
+                id = "album:${it.name}:${it.artist}",
+                name = it.name,
+                artist = it.artist,
+                trackCount = it.trackCount,
+                artworkUri = it.artworkUri,
+                year = it.year
+            )
+        }.sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.name })
+    }
+        .flowOn(Dispatchers.Default)
+        .distinctUntilChanged()
+        .shareIn(repoScope, sharedPolicy, replay = 1)
+
+    override fun getAlbums(): Flow<List<Album>> = albumsShared
 
     private fun splitConfig(): Flow<ArtistSplitConfig> =
         combine(
@@ -168,15 +204,20 @@ class TrackRepositoryImpl @Inject constructor(
             } else {
                 ArtistSplitConfig.OFF
             }
-        }
+        }.distinctUntilChanged()
 
-    private fun artistIndexFlow(): Flow<ArtistIndex> =
+    private val artistIndexShared: Flow<ArtistIndex> =
         splitConfig().flatMapLatest { config ->
-            getAllTracks().map { tracks -> ArtistIndex.build(tracks, config) }
+            allTracksShared.map { tracks -> ArtistIndex.build(tracks, config) }
                 .flowOn(Dispatchers.Default)
-        }
+        }.shareIn(repoScope, sharedPolicy, replay = 1)
 
-    override fun getArtists(): Flow<List<Artist>> = artistIndexFlow().map { it.artists }
+    private fun artistIndexFlow(): Flow<ArtistIndex> = artistIndexShared
+
+    private val artistsShared: Flow<List<Artist>> =
+        artistIndexShared.map { it.artists }.distinctUntilChanged().shareIn(repoScope, sharedPolicy, replay = 1)
+
+    override fun getArtists(): Flow<List<Artist>> = artistsShared
 
     override fun getArtistProfile(artist: String): Flow<ArtistProfile?> =
         combine(artistIndexFlow(), getPlayStats()) { index, playStats ->
@@ -192,54 +233,78 @@ class TrackRepositoryImpl @Inject constructor(
                 .thenBy(String.CASE_INSENSITIVE_ORDER) { it.title }
         ).take(5)
 
-    override fun getPlayStats(): Flow<Map<String, TrackPlayStat>> =
-        musicDao.getPlayStats().map { stats -> stats.associateBy { it.trackId } }
+    private val playStatsShared: Flow<Map<String, TrackPlayStat>> =
+        musicDao.getPlayStats()
+            .distinctUntilChanged()
+            .map { stats -> stats.associateBy { it.trackId } }
+            .flowOn(Dispatchers.Default)
+            .shareIn(repoScope, sharedPolicy, replay = 1)
 
-    override fun getFavoriteTrackIds(): Flow<Set<String>> =
+    override fun getPlayStats(): Flow<Map<String, TrackPlayStat>> = playStatsShared
+
+    private val favoriteTrackIdsShared: Flow<Set<String>> =
         playlistDao.observePlaylistTrackIds(Playlist.FAVORITES_ID)
-            .map { ids -> ids.toSet() }
+            .distinctUntilChanged()
+            .map { ids -> ids.toHashSet() as Set<String> }
             .flowOn(Dispatchers.Default)
+            .distinctUntilChanged()
+            .shareIn(repoScope, sharedPolicy, replay = 1)
 
-    override fun getDownloadedTrackUris(): Flow<Set<String>> =
+    override fun getFavoriteTrackIds(): Flow<Set<String>> = favoriteTrackIdsShared
+
+    private val downloadedTrackUrisShared: Flow<Set<String>> =
         downloadDao.observeSavedContentUris()
-            .map { uris -> uris.filter { it.isNotBlank() }.toSet() }
+            .distinctUntilChanged()
+            .map { uris -> uris.filterTo(HashSet()) { it.isNotBlank() } as Set<String> }
             .flowOn(Dispatchers.Default)
+            .distinctUntilChanged()
+            .shareIn(repoScope, sharedPolicy, replay = 1)
 
-    override fun getFolders(): Flow<List<Folder>> {
-        return getAllTracks().map { tracks ->
-            val byFolder = LinkedHashMap<String, Int>()
-            for (track in tracks) {
-                if (track.folder.isNotBlank()) {
-                    byFolder[track.folder] = (byFolder[track.folder] ?: 0) + 1
-                }
-            }
-            byFolder.entries.map {
-                Folder(
-                    id = "folder:${it.key}",
-                    name = it.key,
-                    trackCount = it.value
-                )
-            }.sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.name })
-        }.flowOn(Dispatchers.Default)
-    }
+    override fun getDownloadedTrackUris(): Flow<Set<String>> = downloadedTrackUrisShared
 
-    override fun getGenres(): Flow<List<Genre>> {
-        return getAllTracks().map { tracks ->
-            val byGenre = LinkedHashMap<String, Int>()
-            for (track in tracks) {
-                if (track.genre.isNotBlank() && !track.genre.equals("Unknown Genre", ignoreCase = true)) {
-                    byGenre[track.genre] = (byGenre[track.genre] ?: 0) + 1
-                }
+    private val foldersShared: Flow<List<Folder>> = allTracksShared.map { tracks ->
+        val byFolder = LinkedHashMap<String, Int>()
+        for (i in tracks.indices) {
+            val folder = tracks[i].folder
+            if (folder.isNotBlank()) {
+                byFolder[folder] = (byFolder[folder] ?: 0) + 1
             }
-            byGenre.entries.map {
-                Genre(
-                    id = "genre:${it.key}",
-                    name = it.key,
-                    trackCount = it.value
-                )
-            }.sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.name })
-        }.flowOn(Dispatchers.Default)
+        }
+        byFolder.entries.map {
+            Folder(
+                id = "folder:${it.key}",
+                name = it.key,
+                trackCount = it.value
+            )
+        }.sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.name })
     }
+        .flowOn(Dispatchers.Default)
+        .distinctUntilChanged()
+        .shareIn(repoScope, sharedPolicy, replay = 1)
+
+    override fun getFolders(): Flow<List<Folder>> = foldersShared
+
+    private val genresShared: Flow<List<Genre>> = allTracksShared.map { tracks ->
+        val byGenre = LinkedHashMap<String, Int>()
+        for (i in tracks.indices) {
+            val genre = tracks[i].genre
+            if (genre.isNotBlank() && !genre.equals("Unknown Genre", ignoreCase = true)) {
+                byGenre[genre] = (byGenre[genre] ?: 0) + 1
+            }
+        }
+        byGenre.entries.map {
+            Genre(
+                id = "genre:${it.key}",
+                name = it.key,
+                trackCount = it.value
+            )
+        }.sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.name })
+    }
+        .flowOn(Dispatchers.Default)
+        .distinctUntilChanged()
+        .shareIn(repoScope, sharedPolicy, replay = 1)
+
+    override fun getGenres(): Flow<List<Genre>> = genresShared
 
     override fun getTracksByAlbum(album: String, albumArtist: String): Flow<List<Track>> {
         return getAllTracks().map { tracks ->
@@ -290,15 +355,16 @@ class TrackRepositoryImpl @Inject constructor(
         }
         val whitelistMode = preferencesManager.folderWhitelistMode.first()
         val whitelistedFolders = preferencesManager.whitelistedFolders.first()
+        val existing = musicDao.getTracksBySourceType(SourceType.LOCAL.prefix)
+        val existingMap = existing.associateBy { it.id }
         val scanned = localMusicSource.scanTracks(
             minDurationMs = minSec * 1000L,
             excludedFolders = excludedFolders,
             showSystemAudio = showSystemAudio,
             whitelistMode = whitelistMode,
-            whitelistedFolders = whitelistedFolders
+            whitelistedFolders = whitelistedFolders,
+            existingById = existingMap
         )
-        val existing = musicDao.getTracksBySourceType(SourceType.LOCAL.prefix)
-        val existingMap = existing.associateBy { it.id }
 
         val toInsert = mutableListOf<TrackEntity>()
         val toUpdate = mutableListOf<TrackEntity>()

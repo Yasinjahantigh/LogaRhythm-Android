@@ -9,10 +9,18 @@ import androidx.media3.common.Player
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import com.yasinjahantigh.logarhythm.data.datastore.PreferencesManager
+import com.yasinjahantigh.logarhythm.domain.curation.TrackCuration
 import com.yasinjahantigh.logarhythm.domain.model.Track
+import com.yasinjahantigh.logarhythm.domain.repository.PlaylistRepository
+import com.yasinjahantigh.logarhythm.domain.repository.StatsRepository
+import com.yasinjahantigh.logarhythm.domain.repository.TrackRepository
+import com.yasinjahantigh.logarhythm.domain.taste.TasteProfile
+import dagger.Lazy
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -21,6 +29,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -31,7 +40,10 @@ class PlayerControllerImpl @Inject constructor(
     private val playScrobbler: PlayScrobbler,
     private val sleepTimerManager: SleepTimerManager,
     private val equalizerManager: EqualizerManager,
-    private val preferencesManager: PreferencesManager
+    private val preferencesManager: PreferencesManager,
+    private val trackRepositoryLazy: Lazy<TrackRepository>,
+    private val playlistRepositoryLazy: Lazy<PlaylistRepository>,
+    private val statsRepositoryLazy: Lazy<StatsRepository>
 ) : PlayerController {
 
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
@@ -40,9 +52,16 @@ class PlayerControllerImpl @Inject constructor(
     private val pendingActions = mutableListOf<(MediaController) -> Unit>()
     private val trackMap = mutableMapOf<String, Track>()
     private var originalQueue: List<Track> = emptyList()
+    private var endlessAppendJob: Job? = null
+    private var saveQueueJob: Job? = null
+    private var playPrepJob: Job? = null
 
     private companion object {
         const val MAX_RECONNECT_ATTEMPTS = 5
+        const val ENDLESS_BATCH_SIZE = 15
+        const val ENDLESS_TRIGGER_REMAINING = 2
+        const val QUEUE_SAVE_DEBOUNCE_MS = 400L
+        const val ASYNC_MEDIA_MAP_THRESHOLD = 100
     }
 
     private val _currentTrack = MutableStateFlow<Track?>(null)
@@ -130,26 +149,71 @@ class PlayerControllerImpl @Inject constructor(
             override fun onIsPlayingChanged(playing: Boolean) {
                 _isPlaying.value = playing
                 com.yasinjahantigh.logarhythm.widget.MusicWidgetUpdater.requestUpdate(context)
-                if (!playing) saveQueueState()
+                if (!playing) saveQueueState(immediate = true)
             }
             override fun onTimelineChanged(timeline: androidx.media3.common.Timeline, reason: Int) {
                 _queueIndex.value = controller.currentMediaItemIndex
             }
             override fun onMediaItemTransition(item: MediaItem?, reason: Int) {
-                _queueIndex.value = controller.currentMediaItemIndex
-                onTrackChanged(item)
+                val index = controller.currentMediaItemIndex
+                val previousIndex = _queueIndex.value
+                _queueIndex.value = index
+                val isRepeat = reason == Player.MEDIA_ITEM_TRANSITION_REASON_REPEAT ||
+                    (reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO && index == previousIndex) ||
+                    (reason == Player.MEDIA_ITEM_TRANSITION_REASON_SEEK && index == previousIndex && _position.value == 0L)
+                onTrackChanged(item, isRepeat = isRepeat)
                 saveQueueState()
+                maybePrefetchEndlessQueue(controller, playNextWhenReady = false)
+            }
+            override fun onPositionDiscontinuity(
+                oldPosition: Player.PositionInfo,
+                newPosition: Player.PositionInfo,
+                reason: Int
+            ) {
+                if (reason == Player.DISCONTINUITY_REASON_AUTO_TRANSITION) {
+                    val track = _currentTrack.value
+                    if (track != null) {
+                        playScrobbler.onTrackLooped(track.id)
+                    }
+                }
             }
             override fun onPlaybackStateChanged(state: Int) {
                 _isPlaying.value = controller.isPlaying
                 if (controller.duration > 0L) _duration.value = controller.duration
+                if (state == Player.STATE_ENDED &&
+                    controller.repeatMode == Player.REPEAT_MODE_OFF &&
+                    !hasActiveSleepTimer()
+                ) {
+                    maybePrefetchEndlessQueue(controller, playNextWhenReady = true)
+                }
             }
             override fun onRepeatModeChanged(mode: Int) {
                 _repeatMode.value = mode
                 com.yasinjahantigh.logarhythm.widget.MusicWidgetUpdater.requestUpdate(context)
             }
             override fun onPlaybackParametersChanged(parameters: PlaybackParameters) {
-                _playbackSpeed.value = parameters.speed
+                if (playbackParamsJob?.isActive != true) {
+                    val s = parameters.speed
+                    val p = parameters.pitch
+                    if (s.isFinite() && s in 0.5f..2.0f) _playbackSpeed.value = s
+                    if (p.isFinite() && p in 0.5f..2.0f) _playbackPitch.value = p
+                }
+            }
+            override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
+                // Recover gracefully if an AudioSink/Sonic reconfiguration error occurs after speed/pitch tweaks.
+                if (!recoveringFromSpeedError && (_playbackSpeed.value != 1.0f || _playbackPitch.value != 1.0f)) {
+                    recoveringFromSpeedError = true
+                    val resumePos = controller.currentPosition.coerceAtLeast(0L)
+                    val shouldPlay = controller.playWhenReady
+                    controller.setPlaybackParameters(PlaybackParameters(_playbackSpeed.value, _playbackPitch.value))
+                    controller.prepare()
+                    if (resumePos > 0L) controller.seekTo(resumePos)
+                    if (shouldPlay) controller.play()
+                    scope.launch {
+                        delay(1_500L)
+                        recoveringFromSpeedError = false
+                    }
+                }
             }
         })
         controller.shuffleModeEnabled = false
@@ -191,7 +255,10 @@ class PlayerControllerImpl @Inject constructor(
             _currentTrack.value = track
             _position.value = restored.positionMs
             if (track != null && track.durationMs > 0L) _duration.value = track.durationMs
-            val mediaItems = restored.tracks.map { MediaItemMapper.toMediaItem(it) }
+            val mediaItems = withContext(Dispatchers.Default) {
+                restored.tracks.map { MediaItemMapper.toMediaItem(it) }
+            }
+            if (controller.mediaItemCount != 0) return@launch
             controller.setMediaItems(mediaItems, restored.currentIndex, restored.positionMs)
             controller.prepare()
         }
@@ -200,7 +267,11 @@ class PlayerControllerImpl @Inject constructor(
     private fun startPositionTracker() {
         scope.launch {
             while (isActive) {
-                delay(if (_isPlaying.value) 500L else 1_000L)
+                if (!_isPlaying.value) {
+                    // Suspend completely while paused/idle instead of polling MediaController IPC every second.
+                    _isPlaying.first { it }
+                }
+                delay(500L)
                 val controller = mediaController ?: continue
                 val playing = controller.isPlaying
                 _isPlaying.value = playing
@@ -213,23 +284,23 @@ class PlayerControllerImpl @Inject constructor(
                     controller.seekTo(loopStart)
                     _position.value = loopStart
                 }
-                playScrobbler.onTick(playing, _currentTrack.value, _duration.value)
+                playScrobbler.onTick(playing, _currentTrack.value, _duration.value, pos)
             }
         }
     }
 
-    private fun onTrackChanged(mediaItem: MediaItem?) {
+    private fun onTrackChanged(mediaItem: MediaItem?, isRepeat: Boolean = false) {
         val track = mediaItem?.mediaId?.let { trackMap[it] }
         val isDifferentTrack = _currentTrack.value?.id != track?.id
         _currentTrack.value = track
         if (track != null && track.durationMs > 0L) _duration.value = track.durationMs
         // setMediaItems can emit a transition for the same seed track during radio/queue restore.
-        // Preserve its seek position; only a genuinely different track starts at zero.
-        if (isDifferentTrack) {
+        // Preserve its seek position; only a genuinely different track or explicit repeat starts at zero.
+        if (isDifferentTrack || isRepeat) {
             _position.value = 0L
             clearAbLoop()
         }
-        playScrobbler.onTrackChanged(track?.id)
+        playScrobbler.onTrackChanged(track?.id, force = isRepeat || isDifferentTrack)
         com.yasinjahantigh.logarhythm.widget.MusicWidgetUpdater.requestUpdate(context)
     }
 
@@ -238,53 +309,89 @@ class PlayerControllerImpl @Inject constructor(
         if (controller != null) action(controller) else pendingActions.add(action)
     }
 
-    private fun saveQueueState() {
-        val q = _queue.value
-        val idx = mediaController?.currentMediaItemIndex ?: 0
-        val pos = _position.value
-        val shuffled = _shuffle.value
-        val original = originalQueue
-        scope.launch { queuePersistenceManager.saveQueue(q, idx, pos, shuffled, original) }
+    private fun saveQueueState(immediate: Boolean = false) {
+        saveQueueJob?.cancel()
+        saveQueueJob = scope.launch {
+            if (!immediate) delay(QUEUE_SAVE_DEBOUNCE_MS)
+            val q = _queue.value
+            val idx = mediaController?.currentMediaItemIndex ?: 0
+            val pos = _position.value
+            val shuffled = _shuffle.value
+            val original = originalQueue
+            queuePersistenceManager.saveQueue(q, idx, pos, shuffled, original)
+        }
         com.yasinjahantigh.logarhythm.widget.MusicWidgetUpdater.requestUpdate(context)
     }
 
     override fun play(list: List<Track>, startIndex: Int) {
         if (list.isEmpty()) return
-        originalQueue = list
-        trackMap.clear()
-        list.forEach { trackMap[it.id] = it }
+        playPrepJob?.cancel()
         val validIndex = startIndex.coerceIn(0, list.lastIndex)
+        val startTrack = list[validIndex]
+        val shouldShuffle = _shuffle.value
 
-        if (_shuffle.value) {
-            val startTrack = list[validIndex]
-            val otherTracks = list.filterIndexed { i, _ -> i != validIndex }.shuffled()
-            val shuffledList = listOf(startTrack) + otherTracks
-            _queue.value = shuffledList
-            _currentTrack.value = startTrack
-            _duration.value = startTrack.durationMs
-            _position.value = 0L
-            playScrobbler.onTrackChanged(startTrack.id, force = true)
-            val mediaItems = shuffledList.map { MediaItemMapper.toMediaItem(it) }
+        originalQueue = list
+        _currentTrack.value = startTrack
+        _duration.value = startTrack.durationMs
+        _position.value = 0L
+        playScrobbler.onTrackChanged(startTrack.id, force = true)
+
+        if (list.size <= ASYNC_MEDIA_MAP_THRESHOLD) {
+            trackMap.clear()
+            list.forEach { trackMap[it.id] = it }
+            val targetQueue = if (shouldShuffle) {
+                val otherTracks = list.filterIndexed { i, _ -> i != validIndex }.shuffled()
+                ArrayList<Track>(list.size).apply {
+                    add(startTrack)
+                    addAll(otherTracks)
+                }
+            } else {
+                list
+            }
+            val targetIndex = if (shouldShuffle) 0 else validIndex
+            _queue.value = targetQueue
+            val mediaItems = targetQueue.map { MediaItemMapper.toMediaItem(it) }
             execute { controller ->
                 controller.shuffleModeEnabled = false
-                controller.setMediaItems(mediaItems, 0, 0L)
+                controller.setMediaItems(mediaItems, targetIndex, 0L)
                 controller.prepare()
                 controller.play()
                 saveQueueState()
             }
         } else {
-            _queue.value = list
-            _currentTrack.value = list[validIndex]
-            _duration.value = list[validIndex].durationMs
-            _position.value = 0L
-            playScrobbler.onTrackChanged(list[validIndex].id, force = true)
-            val mediaItems = list.map { MediaItemMapper.toMediaItem(it) }
-            execute { controller ->
-                controller.shuffleModeEnabled = false
-                controller.setMediaItems(mediaItems, validIndex, 0L)
-                controller.prepare()
-                controller.play()
-                saveQueueState()
+            // Large library playback: shuffle & build MediaItems off the Main thread to avoid tap jank.
+            trackMap[startTrack.id] = startTrack
+            playPrepJob = scope.launch {
+                val (targetQueue, mediaItems, newMap) = withContext(Dispatchers.Default) {
+                    val map = HashMap<String, Track>((list.size * 4) / 3 + 1)
+                    for (t in list) map[t.id] = t
+                    val queue = if (shouldShuffle) {
+                        val otherTracks = ArrayList<Track>(list.size - 1)
+                        for (i in list.indices) {
+                            if (i != validIndex) otherTracks.add(list[i])
+                        }
+                        otherTracks.shuffle()
+                        ArrayList<Track>(list.size).apply {
+                            add(startTrack)
+                            addAll(otherTracks)
+                        }
+                    } else {
+                        list
+                    }
+                    val items = queue.map { MediaItemMapper.toMediaItem(it) }
+                    Triple(queue, items, map)
+                }
+                val targetIndex = if (shouldShuffle) 0 else validIndex
+                trackMap.clear()
+                trackMap.putAll(newMap)
+                _queue.value = targetQueue
+                execute { controller ->
+                    controller.shuffleModeEnabled = false
+                    controller.setMediaItems(mediaItems, targetIndex, 0L)
+                    controller.prepare()
+                    controller.play()
+                    saveQueueState()
+                }
             }
         }
     }
@@ -322,9 +429,95 @@ class PlayerControllerImpl @Inject constructor(
         }
     }
 
-    override fun pause() = execute { it.pause(); saveQueueState() }
+    override fun pause() = execute { it.pause(); saveQueueState(immediate = true) }
     override fun resume() = execute { it.play() }
-    override fun next() = execute { if (it.hasNextMediaItem()) it.seekToNextMediaItem() }
+    override fun next() = execute { controller ->
+        if (controller.hasNextMediaItem()) {
+            controller.seekToNextMediaItem()
+        } else if (controller.repeatMode == Player.REPEAT_MODE_OFF && _queue.value.isNotEmpty()) {
+            maybePrefetchEndlessQueue(controller, playNextWhenReady = true)
+        }
+    }
+
+    private fun hasActiveSleepTimer(): Boolean =
+        sleepTimerRemainingMs.value != null ||
+            sleepTimerRemainingTracks.value != null ||
+            isSleepTimerEndOfTrack.value
+
+    /**
+     * Endless listening: when the queue approaches its final tracks (or ends), build a similar
+     * next-up mix from the listener's taste profile and append it seamlessly so music never stops.
+     */
+    private fun maybePrefetchEndlessQueue(controller: MediaController, playNextWhenReady: Boolean) {
+        if (controller.repeatMode != Player.REPEAT_MODE_OFF) return
+        val currentQueue = _queue.value
+        if (currentQueue.isEmpty()) return
+        val currentIndex = controller.currentMediaItemIndex.takeIf { it in currentQueue.indices }
+            ?: currentQueue.lastIndex
+        val remaining = currentQueue.lastIndex - currentIndex
+        if (!playNextWhenReady && remaining > ENDLESS_TRIGGER_REMAINING) return
+        if (endlessAppendJob?.isActive == true) return
+
+        val seedTrack = currentQueue.getOrNull(currentIndex) ?: currentQueue.last()
+        val recentTailIds = currentQueue.takeLast(24).map { it.id }.toSet()
+        val allQueuedIds = currentQueue.map { it.id }.toSet()
+
+        endlessAppendJob = scope.launch {
+            val nextBatch = withContext(Dispatchers.Default) {
+                try {
+                    val library = trackRepositoryLazy.get().getAllTracks().first()
+                    if (library.isEmpty()) return@withContext emptyList<Track>()
+                    val events = runCatching { statsRepositoryLazy.get().getAllPlayEvents().first() }.getOrDefault(emptyList())
+                    val favIds = runCatching {
+                        trackRepositoryLazy.get().getFavoriteTrackIds().first()
+                    }.getOrDefault(emptySet())
+                    val profile = TasteProfile.build(events, favIds, library = library)
+
+                    // 1) Prefer similar tracks not yet in the current queue.
+                    val freshSimilar = TrackCuration.recommendNextTracks(
+                        currentTrack = seedTrack,
+                        allTracks = library,
+                        limit = ENDLESS_BATCH_SIZE,
+                        excludedTrackIds = allQueuedIds,
+                        profile = profile
+                    )
+                    if (freshSimilar.isNotEmpty()) return@withContext freshSimilar
+
+                    // 2) If most of the library was queued, recommend similar tracks avoiding the recent tail.
+                    val cycledSimilar = TrackCuration.recommendNextTracks(
+                        currentTrack = seedTrack,
+                        allTracks = library,
+                        limit = ENDLESS_BATCH_SIZE,
+                        excludedTrackIds = recentTailIds,
+                        profile = profile
+                    )
+                    if (cycledSimilar.isNotEmpty()) return@withContext cycledSimilar
+
+                    // 3) Small library fallback: shuffle tracks other than the currently playing one.
+                    val fallbackPool = library.filter { it.id != seedTrack.id }.ifEmpty { library }
+                    fallbackPool.shuffled().take(ENDLESS_BATCH_SIZE)
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (_: Exception) {
+                    emptyList()
+                }
+            }
+
+            if (nextBatch.isEmpty()) return@launch
+            val liveController = mediaController ?: return@launch
+            val insertAt = _queue.value.size
+            val updatedQueue = _queue.value + nextBatch
+            originalQueue = originalQueue + nextBatch
+            nextBatch.forEach { trackMap[it.id] = it }
+            _queue.value = updatedQueue
+            liveController.addMediaItems(nextBatch.map(MediaItemMapper::toMediaItem))
+            if (playNextWhenReady && insertAt < liveController.mediaItemCount) {
+                liveController.seekToDefaultPosition(insertAt)
+                liveController.play()
+            }
+            saveQueueState()
+        }
+    }
     override fun previous() = execute {
         if (it.currentPosition > 3000L) it.seekTo(0L)
         else if (it.hasPreviousMediaItem()) it.seekToPreviousMediaItem()
@@ -474,38 +667,112 @@ class PlayerControllerImpl @Inject constructor(
     override fun currentQueueIndex(): Int = mediaController?.currentMediaItemIndex ?: -1
 
     override fun clearQueue() {
+        playPrepJob?.cancel()
         originalQueue = emptyList()
         _queue.value = emptyList()
         _currentTrack.value = null
         _position.value = 0L
-        execute { it.clearMediaItems(); saveQueueState() }
+        execute { it.clearMediaItems(); saveQueueState(immediate = true) }
+    }
+
+    private var playbackParamsJob: kotlinx.coroutines.Job? = null
+    private var recoveringFromSpeedError: Boolean = false
+
+    private fun normalizeRate(value: Float): Float {
+        if (!value.isFinite()) return 1.0f
+        return ((value.coerceIn(0.5f, 2.0f) * 20f).toInt() / 20f).coerceIn(0.5f, 2.0f)
+    }
+
+    private fun applyPlaybackParametersDebounced(
+        speed: Float,
+        pitch: Float,
+        immediate: Boolean = false,
+        persistPitch: Boolean = false,
+        persistSlowed: Boolean? = null
+    ) {
+        val safeSpeed = normalizeRate(speed)
+        val safePitch = normalizeRate(pitch)
+        _playbackSpeed.value = safeSpeed
+        _playbackPitch.value = safePitch
+
+        playbackParamsJob?.cancel()
+        playbackParamsJob = scope.launch {
+            if (!immediate) {
+                delay(110L)
+            }
+            if (persistPitch) {
+                preferencesManager.setPlaybackPitch(safePitch)
+            }
+            if (persistSlowed != null) {
+                preferencesManager.setSlowedReverbEnabled(persistSlowed)
+            }
+            execute { controller ->
+                val cur = controller.playbackParameters
+                val changed = kotlin.math.abs(cur.speed - safeSpeed) > 0.005f ||
+                    kotlin.math.abs(cur.pitch - safePitch) > 0.005f
+                if (changed) {
+                    val wasPlaying = controller.playWhenReady
+                    runCatching {
+                        controller.playbackParameters = PlaybackParameters(safeSpeed, safePitch)
+                    }
+                    // If ExoPlayer hit an error or became IDLE during rapid sonic reconfiguration, recover cleanly.
+                    if (controller.playerError != null || (wasPlaying && controller.playbackState == Player.STATE_IDLE && controller.mediaItemCount > 0)) {
+                        val pos = controller.currentPosition.coerceAtLeast(0L)
+                        controller.prepare()
+                        if (pos > 0L) controller.seekTo(pos)
+                        if (wasPlaying) controller.play()
+                    }
+                }
+            }
+        }
     }
 
     override fun setPlaybackSpeed(speed: Float) {
-        val clamped = speed.coerceIn(0.5f, 2.0f)
-        _playbackSpeed.value = clamped
-        execute { it.playbackParameters = PlaybackParameters(clamped, _playbackPitch.value) }
+        val clamped = normalizeRate(speed)
+        if (_slowedReverb.value && kotlin.math.abs(clamped - 0.85f) > 0.01f) {
+            _slowedReverb.value = false
+            equalizerManager.setReverbEnabled(false)
+            applyPlaybackParametersDebounced(clamped, _playbackPitch.value, persistSlowed = false)
+        } else {
+            applyPlaybackParametersDebounced(clamped, _playbackPitch.value)
+        }
     }
 
     override fun setPlaybackPitch(pitch: Float) {
-        val clamped = pitch.coerceIn(0.5f, 2.0f)
-        _playbackPitch.value = clamped
-        scope.launch { preferencesManager.setPlaybackPitch(clamped) }
-        execute { it.playbackParameters = PlaybackParameters(_playbackSpeed.value, clamped) }
+        val clamped = normalizeRate(pitch)
+        if (_slowedReverb.value && kotlin.math.abs(clamped - 0.88f) > 0.02f) {
+            _slowedReverb.value = false
+            equalizerManager.setReverbEnabled(false)
+            applyPlaybackParametersDebounced(_playbackSpeed.value, clamped, persistPitch = true, persistSlowed = false)
+        } else {
+            applyPlaybackParametersDebounced(_playbackSpeed.value, clamped, persistPitch = true)
+        }
     }
 
     override fun setSlowedReverb(enabled: Boolean) {
         _slowedReverb.value = enabled
         val newSpeed = if (enabled) 0.85f else 1.0f
         val newPitch = if (enabled) 0.88f else 1.0f
-        _playbackSpeed.value = newSpeed
-        _playbackPitch.value = newPitch
         equalizerManager.setReverbEnabled(enabled)
-        scope.launch {
-            preferencesManager.setSlowedReverbEnabled(enabled)
-            preferencesManager.setPlaybackPitch(newPitch)
-        }
-        execute { it.playbackParameters = PlaybackParameters(newSpeed, newPitch) }
+        applyPlaybackParametersDebounced(
+            speed = newSpeed,
+            pitch = newPitch,
+            immediate = true,
+            persistPitch = true,
+            persistSlowed = enabled
+        )
+    }
+
+    override fun resetPlaybackSpeedAndPitch() {
+        _slowedReverb.value = false
+        equalizerManager.setReverbEnabled(false)
+        applyPlaybackParametersDebounced(
+            speed = 1.0f,
+            pitch = 1.0f,
+            immediate = true,
+            persistPitch = true,
+            persistSlowed = false
+        )
     }
 
     override fun toggleAbLoopMarker() {

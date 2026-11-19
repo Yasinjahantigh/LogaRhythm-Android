@@ -21,20 +21,28 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Album
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -46,6 +54,7 @@ import com.yasinjahantigh.logarhythm.R
 import com.yasinjahantigh.logarhythm.domain.model.DownloadItem
 import com.yasinjahantigh.logarhythm.domain.model.DownloadResultKind
 import com.yasinjahantigh.logarhythm.domain.model.DownloadSearchResult
+import com.yasinjahantigh.logarhythm.domain.model.DownloadStatus
 import com.yasinjahantigh.logarhythm.ui.components.ArtworkImage
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -62,10 +71,27 @@ fun DownloadCollectionSheet(
     onRefresh: () -> Unit,
     onDownloadAll: (List<DownloadSearchResult>) -> Unit,
     onTrackClick: (DownloadSearchResult) -> Unit,
+    onTrackDownload: (DownloadSearchResult) -> Unit = onTrackClick,
     onAlbumClick: (DownloadSearchResult) -> Unit
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val isArtist = state.header.kind == DownloadResultKind.ARTIST
+    var filterQuery by remember(state.header.id) { mutableStateOf("") }
+
+    val filteredTracks = remember(state.tracks, filterQuery) {
+        val q = filterQuery.trim()
+        if (q.isBlank()) state.tracks
+        else state.tracks.filter {
+            it.title.contains(q, ignoreCase = true) || it.album.contains(q, ignoreCase = true)
+        }
+    }
+
+    val downloadedUrls = remember(history) {
+        history.filter { it.status == DownloadStatus.SAVED }.mapTo(HashSet()) { it.sourceUrl }
+    }
+    val remainingToDownload = remember(filteredTracks, downloadedUrls) {
+        filteredTracks.filterNot { it.url in downloadedUrls }
+    }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -74,7 +100,7 @@ fun DownloadCollectionSheet(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .heightIn(max = 620.dp)
+                .heightIn(max = 660.dp)
                 .animateContentSize()
                 .padding(bottom = 24.dp)
         ) {
@@ -116,7 +142,13 @@ fun DownloadCollectionSheet(
                             overflow = TextOverflow.Ellipsis
                         )
                     }
-                    if (state.fromCache) {
+                    if (state.loadingMore) {
+                        Text(
+                            text = stringResource(R.string.artist_online_loading_more, state.tracks.size),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    } else if (state.fromCache) {
                         Text(
                             text = stringResource(R.string.download_cached_offline_badge),
                             style = MaterialTheme.typography.labelSmall,
@@ -140,7 +172,7 @@ fun DownloadCollectionSheet(
                     }
                     Spacer(modifier = Modifier.width(4.dp))
                 }
-                IconButton(onClick = onRefresh, enabled = !state.loading) {
+                IconButton(onClick = onRefresh, enabled = !state.loading && !state.loadingMore) {
                     Icon(
                         imageVector = Icons.Filled.Refresh,
                         contentDescription = stringResource(R.string.download_refresh_collection)
@@ -148,9 +180,19 @@ fun DownloadCollectionSheet(
                 }
             }
 
+            if (state.loadingMore) {
+                LinearProgressIndicator(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 20.dp, vertical = 2.dp)
+                        .height(3.dp)
+                )
+            }
+
             if (state.tracks.isNotEmpty()) {
                 Button(
-                    onClick = { onDownloadAll(state.tracks) },
+                    onClick = { onDownloadAll(remainingToDownload.ifEmpty { filteredTracks }) },
+                    enabled = remainingToDownload.isNotEmpty(),
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 20.dp, vertical = 8.dp),
@@ -159,10 +201,35 @@ fun DownloadCollectionSheet(
                     Icon(Icons.Filled.Download, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = stringResource(R.string.download_all_tracks_action, state.tracks.size),
+                        text = if (remainingToDownload.isEmpty()) {
+                            stringResource(R.string.download_status_completed)
+                        } else {
+                            stringResource(R.string.download_all_tracks_action, remainingToDownload.size)
+                        },
                         fontWeight = FontWeight.SemiBold
                     )
                 }
+            }
+
+            if (state.tracks.size > 10) {
+                OutlinedTextField(
+                    value = filterQuery,
+                    onValueChange = { filterQuery = it },
+                    placeholder = { Text(stringResource(R.string.artist_online_filter_hint)) },
+                    leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null, modifier = Modifier.size(18.dp)) },
+                    trailingIcon = if (filterQuery.isNotEmpty()) {
+                        {
+                            IconButton(onClick = { filterQuery = "" }) {
+                                Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.btn_close), modifier = Modifier.size(18.dp))
+                            }
+                        }
+                    } else null,
+                    singleLine = true,
+                    shape = RoundedCornerShape(14.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 20.dp, vertical = 4.dp)
+                )
             }
 
             if (state.loading && state.tracks.isEmpty() && state.albums.isEmpty()) {
@@ -186,10 +253,10 @@ fun DownloadCollectionSheet(
                     contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    if (state.albums.isNotEmpty()) {
+                    if (state.albums.isNotEmpty() && filterQuery.isBlank()) {
                         item {
                             Text(
-                                text = stringResource(R.string.download_category_album),
+                                text = "${stringResource(R.string.download_category_album)} (${state.albums.size})",
                                 style = MaterialTheme.typography.labelLarge,
                                 color = MaterialTheme.colorScheme.primary,
                                 modifier = Modifier.padding(horizontal = 4.dp, vertical = 4.dp)
@@ -233,16 +300,16 @@ fun DownloadCollectionSheet(
                         }
                     }
 
-                    if (state.tracks.isNotEmpty()) {
+                    if (filteredTracks.isNotEmpty()) {
                         item {
                             Text(
-                                text = stringResource(R.string.download_category_track),
+                                text = "${stringResource(R.string.download_category_track)} (${filteredTracks.size})",
                                 style = MaterialTheme.typography.labelLarge,
                                 color = MaterialTheme.colorScheme.primary,
                                 modifier = Modifier.padding(horizontal = 4.dp, vertical = 4.dp)
                             )
                         }
-                        items(state.tracks, key = { "col_trk_${it.source.raw}_${it.id}" }) { track ->
+                        items(filteredTracks, key = { "col_trk_${it.source.raw}_${it.id}" }) { track ->
                             val activeItem = history.firstOrNull {
                                 it.sourceUrl == track.url || (it.videoId == track.id && it.source == track.source)
                             }
@@ -253,7 +320,8 @@ fun DownloadCollectionSheet(
                                 isPreviewLoading = previewState.trackKey == pKey && previewState.isLoading,
                                 isPreviewPlaying = previewState.trackKey == pKey && previewState.isPlaying,
                                 onTogglePreview = onTogglePreview?.let { cb -> { cb(track) } },
-                                onClick = { onTrackClick(track) }
+                                onClick = { onTrackClick(track) },
+                                onDownloadClick = { onTrackDownload(track) }
                             )
                         }
                     }

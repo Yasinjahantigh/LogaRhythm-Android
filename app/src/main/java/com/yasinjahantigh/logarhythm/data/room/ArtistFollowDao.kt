@@ -41,4 +41,7 @@ interface ArtistFollowDao {
 
     @Query("DELETE FROM artist_releases WHERE artistKey = :artistKey")
     suspend fun deleteReleasesForArtist(artistKey: String)
+
+    @Query("DELETE FROM artist_releases WHERE releaseId = :releaseId")
+    suspend fun deleteRelease(releaseId: String)
 }

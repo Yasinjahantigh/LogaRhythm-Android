@@ -2,6 +2,7 @@ package com.yasinjahantigh.logarhythm.data.download.radiojavan
 
 import com.yasinjahantigh.logarhythm.domain.download.DownloadPipelineException
 import com.yasinjahantigh.logarhythm.domain.model.DownloadErrorKind
+import com.yasinjahantigh.logarhythm.domain.model.DownloadResultKind
 import com.yasinjahantigh.logarhythm.domain.model.DownloadSearchResult
 import com.yasinjahantigh.logarhythm.domain.model.DownloadSource
 import kotlinx.coroutines.Dispatchers
@@ -78,35 +79,84 @@ class RadioJavanClient @Inject constructor(
         null
     }
 
+    suspend fun lookupArtistTracks(artistQuery: String, limit: Int = 50): List<DownloadSearchResult> = withContext(Dispatchers.IO) {
+        val clean = artistQuery.trim()
+        if (clean.isBlank()) return@withContext emptyList()
+        val encoded = URLEncoder.encode(clean, Charsets.UTF_8.name())
+        for (host in apiHosts) {
+            val endpoints = listOf(
+                "$host/api2/artist_mp3s?id=$encoded",
+                "$host/api2/artist?id=$encoded",
+                "$host/api2/search?query=$encoded"
+            )
+            for (ep in endpoints) {
+                val json = fetchJson(ep) ?: continue
+                val parsed = parseSearchResults(json, limit).filter { it.kind == DownloadResultKind.TRACK }
+                if (parsed.isNotEmpty()) return@withContext parsed
+            }
+        }
+        emptyList()
+    }
+
     private fun parseSearchResults(root: JSONObject, limit: Int): List<DownloadSearchResult> {
-        val mp3s = root.optJSONArray("mp3s") ?: return emptyList()
         val results = mutableListOf<DownloadSearchResult>()
 
-        for (i in 0 until mp3s.length().coerceAtMost(limit)) {
-            val item = mp3s.optJSONObject(i) ?: continue
-            val id = item.opt("id")?.toString()?.takeIf { it.isNotBlank() } ?: continue
-            val song = item.optString("song").trim().takeIf { it.isNotBlank() }
-                ?: item.optString("title").trim().takeIf { it.isNotBlank() }
-                ?: continue
-            val artist = item.optString("artist").trim()
-            val photo = item.optString("photo").takeIf { it.startsWith("http") }
-                ?: item.optString("photo_player").takeIf { it.startsWith("http") }
-            val durationSec = item.optDouble("duration", 0.0)
-            val durationMs = if (durationSec > 0) (durationSec * 1000).toLong() else 0L
-            val link = item.optString("link").takeIf { it.startsWith("http") }
-                ?: "https://www.radiojavan.com/mp3s/mp3/$artist-$song"
+        val artists = root.optJSONArray("artists")
+        if (artists != null) {
+            for (i in 0 until artists.length().coerceAtMost(limit)) {
+                val item = artists.optJSONObject(i) ?: continue
+                val name = item.optString("name").trim().takeIf { it.isNotBlank() }
+                    ?: item.optString("artist").trim().takeIf { it.isNotBlank() }
+                    ?: continue
+                val id = item.opt("id")?.toString()?.trim()?.takeIf { it.isNotBlank() } ?: name
+                val photo = item.optString("photo").takeIf { it.startsWith("http") }
+                    ?: item.optString("photo_player").takeIf { it.startsWith("http") }
 
-            results.add(
-                DownloadSearchResult(
-                    id = id,
-                    title = song,
-                    artist = artist,
-                    source = DownloadSource.RADIOJAVAN,
-                    url = link,
-                    durationMs = durationMs,
-                    thumbnailUrl = photo
+                results.add(
+                    DownloadSearchResult(
+                        id = id,
+                        title = name,
+                        artist = "",
+                        source = DownloadSource.RADIOJAVAN,
+                        url = "https://www.radiojavan.com/artist/$id",
+                        durationMs = 0L,
+                        thumbnailUrl = photo,
+                        kind = DownloadResultKind.ARTIST,
+                        artistId = id
+                    )
                 )
-            )
+            }
+        }
+
+        val mp3s = root.optJSONArray("mp3s")
+        if (mp3s != null) {
+            for (i in 0 until mp3s.length().coerceAtMost(limit)) {
+                val item = mp3s.optJSONObject(i) ?: continue
+                val id = item.opt("id")?.toString()?.takeIf { it.isNotBlank() } ?: continue
+                val song = item.optString("song").trim().takeIf { it.isNotBlank() }
+                    ?: item.optString("title").trim().takeIf { it.isNotBlank() }
+                    ?: continue
+                val artist = item.optString("artist").trim()
+                val photo = item.optString("photo").takeIf { it.startsWith("http") }
+                    ?: item.optString("photo_player").takeIf { it.startsWith("http") }
+                val durationSec = item.optDouble("duration", 0.0)
+                val durationMs = if (durationSec > 0) (durationSec * 1000).toLong() else 0L
+                val link = item.optString("link").takeIf { it.startsWith("http") }
+                    ?: "https://www.radiojavan.com/mp3s/mp3/$artist-$song"
+
+                results.add(
+                    DownloadSearchResult(
+                        id = id,
+                        title = song,
+                        artist = artist,
+                        source = DownloadSource.RADIOJAVAN,
+                        url = link,
+                        durationMs = durationMs,
+                        thumbnailUrl = photo,
+                        kind = DownloadResultKind.TRACK
+                    )
+                )
+            }
         }
         return results
     }

@@ -8,16 +8,51 @@
 -keep public class * extends android.content.BroadcastReceiver
 -keep public class * extends android.content.ContentProvider
 
-# Hilt generates components reflectively, and app classes are kept to stay safe across releases.
--keep class com.yasinjahantigh.logarhythm.** { *; }
+# Room entities, DAOs, and database
+-keep class * extends androidx.room.RoomDatabase
+-keep @androidx.room.Entity class * { *; }
+-keep @androidx.room.Dao class * { *; }
+-keep class * implements androidx.room.RoomDatabase$Callback
+-dontwarn androidx.room.paging.**
+
+# Data models and JSON/DataStore serialization
+-keepclassmembers class com.yasinjahantigh.logarhythm.domain.model.** {
+    <fields>;
+    <init>(...);
+}
+-keepclassmembers class com.yasinjahantigh.logarhythm.data.** {
+    <fields>;
+    <init>(...);
+}
+
+# Hilt & Dependency Injection
 -keep class **.Hilt_* { *; }
 -keep class dagger.hilt.** { *; }
 -keep class * extends dagger.hilt.internal.GeneratedComponent
 -keep class * implements dagger.hilt.internal.GeneratedComponent
 -keep class * implements dagger.hilt.internal.UnstableApi
 -keepclassmembers class * {
+    @javax.inject.Inject <init>(...);
     @dagger.hilt.android.EarlyEntryPoint *;
 }
+
+# ViewModels
+-keep class * extends androidx.lifecycle.ViewModel {
+    <init>(...);
+}
+
+# Glance App Widget
+-keep class * extends androidx.glance.appwidget.GlanceAppWidget
+-keep class * extends androidx.glance.appwidget.GlanceAppWidgetReceiver
+
+# WorkManager
+-keep class * extends androidx.work.ListenableWorker {
+    <init>(...);
+}
+
+# Media3 Session
+-keep class * extends androidx.media3.session.MediaSessionService
+-keep class * extends androidx.media3.session.MediaLibraryService
 
 -dontwarn org.slf4j.**
 

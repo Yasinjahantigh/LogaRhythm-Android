@@ -1,5 +1,35 @@
 # Changelog
 
+## 2.1.0 - 2026-11-18
+
+### Playback & Vinyl
+- Endless playback: queues automatically keep going with similar songs from your library instead of stopping after a few tracks
+- Vinyl mode now supports horizontal swipes to switch tracks with a calm sleeve-unboxing animation, plus holding or dragging the grooves to spin and scrub
+- Removed the square shadow outline behind playing album artwork
+
+### Home, Navigation & Settings
+- Brought back the animated floating bottom navigation bar and made transitions lighter across the app
+- Cleaned up the Home screen: removed the 15/30/60 min session buttons, scaled down the Shuffle button, and placed Download and New Playlist near the top
+- Split Settings into clear pages and added a two-pane layout for tablets
+- Updated the Feature Guide so every item matches real features in the app
+
+### Release Radar, Artist Online & Tag Fixer
+- Rebuilt Release Radar with artist filter chips, release dates on every card, a dismiss button (`×`) for tracks you don't want, and iTunes fallback
+- Added an Online tab on every artist page to preview and download tracks directly (songs already on your phone show cleanly without a download button and play locally)
+- Artist photos now load automatically online and can be edited from your gallery or online search if a match is wrong
+- Added a one-tap Tag & Cover Fixer shortcut in the Library header, with step-by-step filename cleanup and metadata/cover matching from Deezer, iTunes, MusicBrainz, RadioJavan, and MusicMan
+- Fixed a crash when picking an online cover in the Tag Editor and saving the crop
+- Added helpful VPN notices in online sections for restricted networks
+
+### Share Cards, Lyrics & Stats
+- Added live previews and customization (theme, colors, aspect ratio, text size) when sharing songs, lyrics, or listening reports
+- Fixed overlapping Persian/English lines on lyric cards, added a Share button to the Lyrics top bar, and kept selected lines from resetting while the song plays
+- Listening Stats can now rank top tracks, artists, and albums by either **play count** or **listening time (minutes)** (and Listening Report cards reflect your choice)
+
+### Theme & Fonts
+- Album Art dynamic colors are now the default theme
+- Vazirmatn remains the default font, with System Font, paired English + Persian font options, and custom `.ttf`/`.otf` font import
+
 ## 2.0.0 - 2026-11-16
 
 ### Release Radar & Followed Artists

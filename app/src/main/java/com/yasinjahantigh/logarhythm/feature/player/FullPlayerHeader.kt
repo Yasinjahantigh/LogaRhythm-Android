@@ -24,6 +24,7 @@ import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -77,7 +78,7 @@ fun FullPlayerHeader(
     ) {
         IconButton(
             onClick = onCollapse,
-            modifier = Modifier.testTag("collapse_player_button")
+            modifier = Modifier.size(48.dp).testTag("collapse_player_button")
         ) {
             Icon(
                 imageVector = Icons.Default.KeyboardArrowDown,
@@ -120,7 +121,7 @@ fun FullPlayerHeader(
         Box {
             IconButton(
                 onClick = { showMoreMenu = true },
-                modifier = Modifier.testTag("player_more_options_button")
+                modifier = Modifier.size(48.dp).testTag("player_more_options_button")
             ) {
                 Icon(
                     imageVector = Icons.Default.MoreVert,
@@ -143,6 +144,16 @@ fun FullPlayerHeader(
                     onClick = { showMoreMenu = false; onStartRadio() }
                 )
                 DropdownMenuItem(
+                    text = {
+                        Text(
+                            abLoopLabel ?: stringResource(R.string.player_ab_loop_action)
+                        )
+                    },
+                    leadingIcon = { Icon(Icons.Default.Repeat, contentDescription = null) },
+                    onClick = { showMoreMenu = false; onToggleAbLoop() }
+                )
+                HorizontalDivider(modifier = Modifier)
+                DropdownMenuItem(
                     text = { Text(stringResource(R.string.player_menu_equalizer)) },
                     leadingIcon = { Icon(Icons.Default.GraphicEq, contentDescription = null) },
                     onClick = { showMoreMenu = false; onOpenEqualizer() }
@@ -158,33 +169,25 @@ fun FullPlayerHeader(
                     modifier = Modifier.testTag("player_style_toggle")
                 )
                 DropdownMenuItem(
+                    text = { Text(stringResource(R.string.player_car_mode)) },
+                    leadingIcon = { Icon(Icons.Default.DirectionsCar, contentDescription = null) },
+                    onClick = { showMoreMenu = false; onOpenCarMode() }
+                )
+                HorizontalDivider(modifier = Modifier)
+                DropdownMenuItem(
                     text = { Text(stringResource(R.string.action_edit_track_info)) },
                     leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null) },
                     onClick = { showMoreMenu = false; onEditSongDetails() }
                 )
                 DropdownMenuItem(
-                    text = {
-                        Text(
-                            abLoopLabel ?: stringResource(R.string.player_ab_loop_action)
-                        )
-                    },
-                    leadingIcon = { Icon(Icons.Default.Repeat, contentDescription = null) },
-                    onClick = { showMoreMenu = false; onToggleAbLoop() }
-                )
-                DropdownMenuItem(
-                    text = { Text(stringResource(R.string.player_car_mode)) },
-                    leadingIcon = { Icon(Icons.Default.DirectionsCar, contentDescription = null) },
-                    onClick = { showMoreMenu = false; onOpenCarMode() }
+                    text = { Text(stringResource(R.string.action_song_details)) },
+                    leadingIcon = { Icon(Icons.Default.Info, contentDescription = null) },
+                    onClick = { showMoreMenu = false; onOpenSongDetails() }
                 )
                 DropdownMenuItem(
                     text = { Text(stringResource(R.string.action_search_lyrics_google)) },
                     leadingIcon = { Icon(Icons.Default.OpenInBrowser, contentDescription = null) },
                     onClick = { showMoreMenu = false; onSearchGoogleLyrics() }
-                )
-                DropdownMenuItem(
-                    text = { Text(stringResource(R.string.action_song_details)) },
-                    leadingIcon = { Icon(Icons.Default.Info, contentDescription = null) },
-                    onClick = { showMoreMenu = false; onOpenSongDetails() }
                 )
                 DropdownMenuItem(
                     text = { Text(stringResource(R.string.action_share_song)) },

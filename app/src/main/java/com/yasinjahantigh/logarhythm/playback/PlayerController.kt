@@ -50,6 +50,7 @@ interface PlayerController {
     fun setPlaybackSpeed(speed: Float)
     fun setPlaybackPitch(pitch: Float)
     fun setSlowedReverb(enabled: Boolean)
+    fun resetPlaybackSpeedAndPitch()
     fun toggleAbLoopMarker()
     fun clearAbLoop()
     fun setSleepTimer(minutes: Int)

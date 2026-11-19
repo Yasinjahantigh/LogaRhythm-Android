@@ -183,6 +183,7 @@ fun ArtistsTabContent(
     artists: List<Artist>,
     onArtistClick: (String) -> Unit,
     modifier: Modifier = Modifier,
+    artistPhotos: Map<String, String> = emptyMap(),
     onOpenSmartOrganizer: (() -> Unit)? = null
 ) {
     if (artists.isEmpty()) {
@@ -204,56 +205,63 @@ fun ArtistsTabContent(
         if (onOpenSmartOrganizer != null) {
             item(span = { GridItemSpan(maxLineSpan) }) {
                 Surface(
+                    onClick = onOpenSmartOrganizer,
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    shape = RoundedCornerShape(16.dp),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(bottom = 6.dp)
-                        .clip(RoundedCornerShape(18.dp))
-                        .clickable(onClick = onOpenSmartOrganizer),
-                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.65f),
-                    shape = RoundedCornerShape(18.dp)
+                        .padding(bottom = 2.dp)
                 ) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                            .padding(horizontal = 12.dp, vertical = 10.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Box(
                             modifier = Modifier
-                                .size(40.dp)
+                                .size(34.dp)
                                 .clip(CircleShape)
-                                .background(MaterialTheme.colorScheme.primary),
+                                .background(MaterialTheme.colorScheme.primaryContainer),
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
                                 imageVector = Icons.Filled.AutoAwesome,
                                 contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onPrimary,
-                                modifier = Modifier.size(22.dp)
+                                tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                modifier = Modifier.size(18.dp)
                             )
                         }
-                        Spacer(modifier = Modifier.width(14.dp))
+                        Spacer(modifier = Modifier.width(12.dp))
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
                                 text = stringResource(R.string.tools_artist_organizer_banner_title),
-                                style = MaterialTheme.typography.titleSmall,
+                                style = MaterialTheme.typography.labelLarge,
                                 fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer
+                                color = MaterialTheme.colorScheme.onSurface,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
                             )
                             Text(
                                 text = stringResource(R.string.tools_artist_organizer_banner_desc),
                                 style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
                         }
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
                 }
             }
         }
         items(items = artists, key = { it.id }) { artist ->
             val name = artist.name.cleanMetaOrNull() ?: stringResource(R.string.unknown_artist)
+            val photoUri = artistPhotos[com.yasinjahantigh.logarhythm.data.radar.ReleaseRadarService.normalizeArtistKey(artist.name)]
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -263,7 +271,7 @@ fun ArtistsTabContent(
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 ArtworkImage(
-                    uri = null,
+                    uri = photoUri,
                     fallbackKey = name,
                     modifier = Modifier.fillMaxWidth().aspectRatio(1f),
                     shape = CircleShape,

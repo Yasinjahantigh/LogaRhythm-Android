@@ -110,14 +110,8 @@ class EqualizerManager @Inject constructor(
                 _equalizerState.update { it.copy(isVirtualizerSupported = false) }
             }
 
-            try {
-                val rev = PresetReverb(0, audioSessionId)
-                val reverbOn = _equalizerState.value.reverbEnabled
-                rev.preset = if (reverbOn) PresetReverb.PRESET_LARGEROOM else PresetReverb.PRESET_NONE
-                rev.enabled = reverbOn
-                presetReverb = rev
-            } catch (e: Exception) {
-                Log.w("EqualizerManager", "PresetReverb not supported: ${e.message}")
+            if (_equalizerState.value.reverbEnabled) {
+                attachReverbLocked(audioSessionId)
             }
         } catch (e: Exception) {
             Log.w("EqualizerManager", "Equalizer not supported on this device/session: ${e.message}")
@@ -290,12 +284,44 @@ class EqualizerManager @Inject constructor(
         scope.launch(Dispatchers.IO) { preferencesManager.setMonoAudio(enabled) }
     }
 
+    private fun attachReverbLocked(audioSessionId: Int) {
+        if (audioSessionId == 0) return
+        try {
+            presetReverb?.release()
+            val rev = PresetReverb(0, audioSessionId)
+            rev.preset = PresetReverb.PRESET_LARGEROOM
+            rev.enabled = true
+            presetReverb = rev
+        } catch (e: Exception) {
+            Log.w("EqualizerManager", "PresetReverb not supported on session $audioSessionId: ${e.message}")
+            runCatching { presetReverb?.release() }
+            presetReverb = null
+        }
+    }
+
     fun setReverbEnabled(enabled: Boolean) {
-        runCatching {
-            presetReverb?.apply {
-                preset = if (enabled) PresetReverb.PRESET_LARGEROOM else PresetReverb.PRESET_NONE
-                this.enabled = enabled
+        if (_equalizerState.value.reverbEnabled == enabled && (!enabled || presetReverb != null)) {
+            return
+        }
+        if (enabled) {
+            val existing = presetReverb
+            if (existing != null) {
+                runCatching {
+                    existing.preset = PresetReverb.PRESET_LARGEROOM
+                    existing.enabled = true
+                }.onFailure {
+                    runCatching { existing.release() }
+                    presetReverb = null
+                }
+            } else if (currentAudioSessionId != 0) {
+                attachReverbLocked(currentAudioSessionId)
             }
+        } else {
+            runCatching {
+                presetReverb?.enabled = false
+                presetReverb?.release()
+            }
+            presetReverb = null
         }
         _equalizerState.update { it.copy(reverbEnabled = enabled) }
     }

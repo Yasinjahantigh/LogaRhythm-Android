@@ -11,6 +11,9 @@ import com.yasinjahantigh.logarhythm.domain.repository.PlaylistRepository
 import com.yasinjahantigh.logarhythm.domain.repository.StatsRepository
 import com.yasinjahantigh.logarhythm.domain.taste.TasteProfile
 import com.yasinjahantigh.logarhythm.domain.repository.TrackRepository
+import com.yasinjahantigh.logarhythm.playback.AudioOutputDevice
+import com.yasinjahantigh.logarhythm.playback.AudioOutputManager
+import com.yasinjahantigh.logarhythm.playback.AudioOutputState
 import com.yasinjahantigh.logarhythm.playback.PlayerController
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
@@ -34,14 +37,32 @@ class PlayerViewModel @Inject constructor(
     private val trackRepository: TrackRepository,
     private val statsRepository: StatsRepository,
     private val preferencesManager: PreferencesManager,
-    private val savedQueueDao: SavedQueueDao
+    private val savedQueueDao: SavedQueueDao,
+    private val audioOutputManager: AudioOutputManager
 ) : ViewModel() {
+
+    val audioOutputState: StateFlow<AudioOutputState> = audioOutputManager.state
+
+    fun refreshAudioOutputs() = audioOutputManager.refresh()
+    fun selectAudioOutput(device: AudioOutputDevice): Boolean = audioOutputManager.selectDevice(device)
+    fun setMediaVolume(fraction: Float) = audioOutputManager.setMediaVolume(fraction)
+    fun openSystemAudioOutputSwitcher(context: android.content.Context): Boolean =
+        audioOutputManager.openSystemOutputSwitcher(context)
 
     val isCompactMiniPlayer: StateFlow<Boolean> = preferencesManager.isCompactMiniPlayer
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
 
     val doubleTapSeekEnabled: StateFlow<Boolean> = preferencesManager.doubleTapSeek
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
+
+    val isVinylMode: StateFlow<Boolean> = preferencesManager.vinylMode
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), preferencesManager.isVinylModeCached())
+
+    fun setVinylMode(enabled: Boolean) {
+        viewModelScope.launch {
+            preferencesManager.setVinylMode(enabled)
+        }
+    }
 
     val savedQueues: StateFlow<List<SavedQueueEntity>> = savedQueueDao.observeAll()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
@@ -77,6 +98,12 @@ class PlayerViewModel @Inject constructor(
     private val _isDismissed = MutableStateFlow(false)
     val isDismissed: StateFlow<Boolean> = _isDismissed.asStateFlow()
 
+    private val _showLyrics = MutableStateFlow(false)
+    val showLyrics: StateFlow<Boolean> = _showLyrics.asStateFlow()
+
+    private val _showShareCardStudio = MutableStateFlow(false)
+    val showShareCardStudio: StateFlow<Boolean> = _showShareCardStudio.asStateFlow()
+
     init {
         viewModelScope.launch {
             currentTrack.collect {
@@ -90,9 +117,21 @@ class PlayerViewModel @Inject constructor(
     }
 
     fun expand() { _isExpanded.value = true }
-    fun collapse() { _isExpanded.value = false; _isQueueOpen.value = false }
+    fun collapse() {
+        _isExpanded.value = false
+        _isQueueOpen.value = false
+        _showLyrics.value = false
+        _showShareCardStudio.value = false
+    }
 
-    fun openQueue() { _isQueueOpen.value = true }
+    fun setShowLyrics(show: Boolean) { _showLyrics.value = show }
+    fun setShowShareCardStudio(show: Boolean) { _showShareCardStudio.value = show }
+
+    fun openQueue() {
+        _isQueueOpen.value = true
+        _showLyrics.value = false
+        _showShareCardStudio.value = false
+    }
     fun closeQueue() { _isQueueOpen.value = false }
 
     fun togglePlayPause() {
@@ -124,6 +163,7 @@ class PlayerViewModel @Inject constructor(
     fun setPlaybackSpeed(speed: Float) = playerController.setPlaybackSpeed(speed)
     fun setPlaybackPitch(pitch: Float) = playerController.setPlaybackPitch(pitch)
     fun setSlowedReverb(enabled: Boolean) = playerController.setSlowedReverb(enabled)
+    fun resetPlaybackSpeedAndPitch() = playerController.resetPlaybackSpeedAndPitch()
     fun toggleAbLoopMarker() = playerController.toggleAbLoopMarker()
     fun clearAbLoop() = playerController.clearAbLoop()
 

@@ -66,43 +66,53 @@ object ArtworkColorExtractor {
         val height = bitmap.height
         if (width <= 0 || height <= 0) return fallbackColor
 
-        var bestColor = fallbackColor
+        val pixels = IntArray(width * height)
+        bitmap.getPixels(pixels, 0, width, 0, 0, width, height)
+
+        var bestR = -1
+        var bestG = 0
+        var bestB = 0
         var highestScore = -1f
 
         val step = max(1, min(width, height) / 16)
+        val inv255 = 1f / 255f
 
-        for (x in 0 until width step step) {
-            for (y in 0 until height step step) {
-                val pixel = bitmap.getPixel(x, y)
-                val alpha = (pixel shr 24) and 0xFF
-                if (alpha < 128) continue
+        var y = 0
+        while (y < height) {
+            val rowOffset = y * width
+            var x = 0
+            while (x < width) {
+                val pixel = pixels[rowOffset + x]
+                val alpha = (pixel ushr 24) and 0xFF
+                if (alpha >= 128) {
+                    val r = (pixel ushr 16) and 0xFF
+                    val g = (pixel ushr 8) and 0xFF
+                    val b = pixel and 0xFF
 
-                val r = (pixel shr 16) and 0xFF
-                val g = (pixel shr 8) and 0xFF
-                val b = pixel and 0xFF
-
-                val rf = r / 255f
-                val gf = g / 255f
-                val bf = b / 255f
-
-                val maxC = max(rf, max(gf, bf))
-                val minC = min(rf, min(gf, bf))
-                val delta = maxC - minC
-
-                val saturation = if (maxC == 0f) 0f else delta / maxC
-                val lightness = (maxC + minC) / 2f
-
-                // Prefer saturated colors with balanced lightness
-                if (saturation > 0.15f && lightness in 0.15f..0.85f) {
-                    val score = saturation * (1f - kotlin.math.abs(lightness - 0.5f))
-                    if (score > highestScore) {
-                        highestScore = score
-                        bestColor = Color(r, g, b)
+                    val maxInt = max(r, max(g, b))
+                    val minInt = min(r, min(g, b))
+                    if (maxInt > 0) {
+                        val delta = maxInt - minInt
+                        val saturation = delta.toFloat() / maxInt.toFloat()
+                        if (saturation > 0.15f) {
+                            val lightness = (maxInt + minInt) * (0.5f * inv255)
+                            if (lightness in 0.15f..0.85f) {
+                                val score = saturation * (1f - kotlin.math.abs(lightness - 0.5f))
+                                if (score > highestScore) {
+                                    highestScore = score
+                                    bestR = r
+                                    bestG = g
+                                    bestB = b
+                                }
+                            }
+                        }
                     }
                 }
+                x += step
             }
+            y += step
         }
 
-        return bestColor
+        return if (bestR >= 0) Color(bestR, bestG, bestB) else fallbackColor
     }
 }

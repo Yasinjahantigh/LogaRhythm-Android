@@ -1,5 +1,7 @@
 package com.yasinjahantigh.logarhythm.feature.playlist
 
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -15,6 +17,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -449,8 +452,9 @@ private fun SongMenuOption(
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .defaultMinSize(minHeight = 48.dp)
             .clickable(onClick = onClick)
-            .padding(horizontal = 24.dp, vertical = 13.dp)
+            .padding(horizontal = 24.dp, vertical = 12.dp)
             .testTag(tag),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -502,7 +506,15 @@ private fun SongDetailsDialog(
                     DetailRow(label = stringResource(R.string.detail_file_size), value = fileSizeMb)
                 }
                 if (filePath != null) {
-                    DetailRow(label = stringResource(R.string.detail_file_path), value = filePath)
+                    DetailRow(
+                        label = stringResource(R.string.detail_file_path),
+                        value = filePath,
+                        onClick = {
+                            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+                            clipboard?.setPrimaryClip(ClipData.newPlainText("File Path", filePath))
+                            Toast.makeText(context, context.getString(R.string.detail_path_copied), Toast.LENGTH_SHORT).show()
+                        }
+                    )
                 }
             }
         },
@@ -515,8 +527,23 @@ private fun SongDetailsDialog(
 }
 
 @Composable
-private fun DetailRow(label: String, value: String) {
-    Column(modifier = Modifier.fillMaxWidth()) {
+private fun DetailRow(
+    label: String,
+    value: String,
+    onClick: (() -> Unit)? = null
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .then(
+                if (onClick != null) {
+                    Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable(onClick = onClick)
+                        .padding(vertical = 2.dp)
+                } else Modifier
+            )
+    ) {
         Text(
             text = label,
             style = MaterialTheme.typography.labelSmall,

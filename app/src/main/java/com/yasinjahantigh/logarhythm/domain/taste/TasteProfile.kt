@@ -56,19 +56,26 @@ class TasteProfile private constructor(
     }
 
     fun artistAffinity(artist: String): Double {
+        if (artistAffinities.isEmpty()) return 0.0
         val keys = artistKeys(artist)
         if (keys.isEmpty()) return 0.0
-        return keys.maxOf { (key, _) -> artistAffinities[key] ?: 0.0 }
+        var best = Double.NEGATIVE_INFINITY
+        for (i in keys.indices) {
+            val v = artistAffinities[keys[i].first] ?: 0.0
+            if (v > best) best = v
+        }
+        return if (best == Double.NEGATIVE_INFINITY) 0.0 else best
     }
 
     fun genreAffinity(genre: String): Double {
+        if (genreAffinities.isEmpty()) return 0.0
         val key = MetadataNormalizer.genreGroupKey(genre)
         if (key.isEmpty()) return 0.0
         return genreAffinities[key] ?: 0.0
     }
 
     fun eraAffinity(year: Int): Double {
-        if (year !in 1920..2100) return 0.0
+        if (eraAffinities.isEmpty() || year !in 1920..2100) return 0.0
         return eraAffinities[(year / 10) * 10] ?: 0.0
     }
 
@@ -90,9 +97,25 @@ class TasteProfile private constructor(
      * 2+ tracks by the track's artist or 3+ tracks in its genre family within the last 3 hours.
      */
     fun sessionPenalty(track: Track): Double {
-        val artistSkips = artistKeys(track.artist).maxOfOrNull { (key, _) -> sessionArtistSkips[key] ?: 0 } ?: 0
-        val genreKey = MetadataNormalizer.genreGroupKey(track.genre)
-        val genreSkips = if (genreKey.isNotEmpty()) sessionGenreSkips[genreKey] ?: 0 else 0
+        if (sessionArtistSkips.isEmpty() && sessionGenreSkips.isEmpty()) return 0.0
+        val aKeys = if (sessionArtistSkips.isNotEmpty()) artistKeys(track.artist) else emptyList()
+        val genreKey = if (sessionGenreSkips.isNotEmpty()) MetadataNormalizer.genreGroupKey(track.genre) else ""
+        return sessionPenaltyFromKeys(aKeys, genreKey)
+    }
+
+    private fun sessionPenaltyFromKeys(aKeys: List<Pair<String, String>>, genreKey: String): Double {
+        var artistSkips = 0
+        if (sessionArtistSkips.isNotEmpty()) {
+            for (i in aKeys.indices) {
+                val c = sessionArtistSkips[aKeys[i].first] ?: 0
+                if (c > artistSkips) artistSkips = c
+            }
+        }
+        val genreSkips = if (genreKey.isNotEmpty() && sessionGenreSkips.isNotEmpty()) {
+            sessionGenreSkips[genreKey] ?: 0
+        } else {
+            0
+        }
 
         var penalty = 0.0
         if (artistSkips >= SESSION_ARTIST_SKIP_THRESHOLD) {
@@ -109,19 +132,68 @@ class TasteProfile private constructor(
      * across artist, bilingual genre family, decade era, sonic DNA centroid, minus skip penalties.
      */
     fun tasteMatchScore(track: Track): Double {
+        val aKeys = if (artistAffinities.isNotEmpty() || sessionArtistSkips.isNotEmpty()) {
+            artistKeys(track.artist)
+        } else {
+            emptyList()
+        }
+        val genreKey = if (genreAffinities.isNotEmpty() || sessionGenreSkips.isNotEmpty()) {
+            MetadataNormalizer.genreGroupKey(track.genre)
+        } else {
+            ""
+        }
+        val sessionPen = if (sessionArtistSkips.isEmpty() && sessionGenreSkips.isEmpty()) {
+            0.0
+        } else {
+            sessionPenaltyFromKeys(aKeys, genreKey)
+        }
+        return computeTasteMatchScore(track, aKeys, genreKey, precomputedDna = null, sessionPen = sessionPen)
+    }
+
+    internal fun tasteMatchScoreWithPrecomputed(
+        track: Track,
+        dna: TrackCuration.TrackDna?,
+        sessionPen: Double
+    ): Double {
+        val aKeys = if (artistAffinities.isNotEmpty()) artistKeys(track.artist) else emptyList()
+        val genreKey = if (genreAffinities.isNotEmpty()) MetadataNormalizer.genreGroupKey(track.genre) else ""
+        return computeTasteMatchScore(track, aKeys, genreKey, precomputedDna = dna, sessionPen = sessionPen)
+    }
+
+    private fun computeTasteMatchScore(
+        track: Track,
+        aKeys: List<Pair<String, String>>,
+        genreKey: String,
+        precomputedDna: TrackCuration.TrackDna?,
+        sessionPen: Double
+    ): Double {
         val trackScore = (affinity(track.id) * 0.45).coerceIn(-2.0, 2.5)
-        val artistScore = saturate(artistAffinity(track.artist), scale = 4.0) * 1.8
-        val genreScore = saturate(genreAffinity(track.genre), scale = 8.0) * 1.2
+        var artistAff = 0.0
+        if (artistAffinities.isNotEmpty() && aKeys.isNotEmpty()) {
+            var best = Double.NEGATIVE_INFINITY
+            for (i in aKeys.indices) {
+                val v = artistAffinities[aKeys[i].first] ?: 0.0
+                if (v > best) best = v
+            }
+            if (best != Double.NEGATIVE_INFINITY) artistAff = best
+        }
+        val artistScore = saturate(artistAff, scale = 4.0) * 1.8
+        val genreAff = if (genreKey.isNotEmpty() && genreAffinities.isNotEmpty()) {
+            genreAffinities[genreKey] ?: 0.0
+        } else {
+            0.0
+        }
+        val genreScore = saturate(genreAff, scale = 8.0) * 1.2
         val eraScore = saturate(eraAffinity(track.year), scale = 8.0) * 0.5
         val dnaScore = preferredDna?.let { target ->
-            val dna = TrackCuration.analyzeTrackDna(track)
+            val dna = precomputedDna ?: TrackCuration.analyzeTrackDna(track)
             val dist = abs(target.energyScore - dna.energyScore) +
                 abs(target.moodValence - dna.moodValence) +
                 abs(target.acousticScore - dna.acousticScore)
             ((1.0 - dist / 1.5).coerceIn(0.0, 1.0)) * 0.6
         } ?: 0.0
         val dislikedPenalty = if (isDisliked(track.id)) 3.0 else 0.0
-        val activeSkipPenalty = sessionPenalty(track) * 2.0
+        val activeSkipPenalty = sessionPen * 2.0
         return trackScore + artistScore + genreScore + eraScore + dnaScore - dislikedPenalty - activeSkipPenalty
     }
 
@@ -177,6 +249,12 @@ class TasteProfile private constructor(
         }.joinToString(" | ")
     }
 
+    private class CachedTrackFeatures(
+        val artistKeys: List<Pair<String, String>>,
+        val genreKey: String,
+        var dna: TrackCuration.TrackDna? = null
+    )
+
     companion object {
         const val DAY_MS = 24L * 60 * 60 * 1000
         const val HOUR_MS = 60L * 60 * 1000
@@ -189,6 +267,9 @@ class TasteProfile private constructor(
         private const val SESSION_WINDOW_MS = 3L * HOUR_MS
         private const val SESSION_ARTIST_SKIP_THRESHOLD = 2
         private const val SESSION_GENRE_SKIP_THRESHOLD = 3
+        private const val ARTIST_KEYS_CACHE_LIMIT = 4096
+
+        private val artistKeysCache = java.util.concurrent.ConcurrentHashMap<String, List<Pair<String, String>>>()
 
         val EMPTY = TasteProfile(
             affinities = emptyMap(),
@@ -222,6 +303,7 @@ class TasteProfile private constructor(
             if (events.isEmpty() && favoriteTrackIds.isEmpty()) return EMPTY
 
             val libraryById = if (library.isEmpty()) emptyMap() else library.associateBy { it.id }
+            val trackFeatureCache = HashMap<String, CachedTrackFeatures>(minOf(library.size, events.size + favoriteTrackIds.size + 16))
             val affinities = HashMap<String, Double>()
             val plays = HashMap<String, Int>()
             val skips = HashMap<String, Int>()
@@ -246,16 +328,25 @@ class TasteProfile private constructor(
                 return 0.5.pow(ageDays / HALF_LIFE_DAYS)
             }
 
-            fun addTransferWeights(track: Track, signedDelta: Double, positiveForDna: Double = 0.0) {
-                val aKeys = artistKeys(track.artist)
+            fun featuresFor(track: Track): CachedTrackFeatures =
+                trackFeatureCache.getOrPut(track.id) {
+                    CachedTrackFeatures(
+                        artistKeys = artistKeys(track.artist),
+                        genreKey = MetadataNormalizer.genreGroupKey(track.genre)
+                    )
+                }
+
+            fun addTransferWeights(track: Track, features: CachedTrackFeatures, signedDelta: Double, positiveForDna: Double = 0.0) {
+                val aKeys = features.artistKeys
                 if (aKeys.isNotEmpty()) {
                     val share = signedDelta / aKeys.size
-                    for ((key, display) in aKeys) {
+                    for (i in aKeys.indices) {
+                        val (key, display) = aKeys[i]
                         artistAffinities[key] = (artistAffinities[key] ?: 0.0) + share
                         artistDisplayNames.putIfAbsent(key, display)
                     }
                 }
-                val genreKey = MetadataNormalizer.genreGroupKey(track.genre)
+                val genreKey = features.genreKey
                 if (genreKey.isNotEmpty()) {
                     genreAffinities[genreKey] = (genreAffinities[genreKey] ?: 0.0) + signedDelta
                     if (!genreDisplayNames.containsKey(genreKey)) {
@@ -267,7 +358,7 @@ class TasteProfile private constructor(
                     eraAffinities[decade] = (eraAffinities[decade] ?: 0.0) + signedDelta
                 }
                 if (positiveForDna > 0.0) {
-                    val dna = TrackCuration.analyzeTrackDna(track)
+                    val dna = features.dna ?: TrackCuration.analyzeTrackDna(track).also { features.dna = it }
                     dnaWeightSum += positiveForDna
                     dnaEnergySum += dna.energyScore * positiveForDna
                     dnaAcousticSum += dna.acousticScore * positiveForDna
@@ -290,13 +381,16 @@ class TasteProfile private constructor(
                     val delta = -SKIP_WEIGHT * recency * earlyMult
                     affinities[event.trackId] = (affinities[event.trackId] ?: 0.0) + delta
                     if (track != null) {
-                        addTransferWeights(track, delta)
+                        val features = featuresFor(track)
+                        addTransferWeights(track, features, delta)
                         val ageMs = nowMs - event.timestamp
                         if (ageMs in 0L..SESSION_WINDOW_MS) {
-                            for ((key, _) in artistKeys(track.artist)) {
+                            val aKeys = features.artistKeys
+                            for (i in aKeys.indices) {
+                                val key = aKeys[i].first
                                 sessionArtistSkips[key] = (sessionArtistSkips[key] ?: 0) + 1
                             }
-                            val genreKey = MetadataNormalizer.genreGroupKey(track.genre)
+                            val genreKey = features.genreKey
                             if (genreKey.isNotEmpty()) {
                                 sessionGenreSkips[genreKey] = (sessionGenreSkips[genreKey] ?: 0) + 1
                             }
@@ -326,7 +420,7 @@ class TasteProfile private constructor(
                     buckets[(h + 1) % 24] += w * 0.5
                     buckets[(h + 23) % 24] += w * 0.5
                     if (track != null) {
-                        addTransferWeights(track, w, positiveForDna = w)
+                        addTransferWeights(track, featuresFor(track), w, positiveForDna = w)
                     }
                 }
             }
@@ -335,7 +429,7 @@ class TasteProfile private constructor(
                 affinities[id] = (affinities[id] ?: 0.0) + FAVORITE_BONUS
                 val track = libraryById[id]
                 if (track != null) {
-                    addTransferWeights(track, FAVORITE_BONUS * 0.75, positiveForDna = FAVORITE_BONUS * 0.75)
+                    addTransferWeights(track, featuresFor(track), FAVORITE_BONUS * 0.75, positiveForDna = FAVORITE_BONUS * 0.75)
                 }
             }
 
@@ -384,15 +478,24 @@ class TasteProfile private constructor(
         }
 
         private fun artistKeys(rawArtist: String): List<Pair<String, String>> {
-            if (MetadataNormalizer.isPlaceholderField(rawArtist)) return emptyList()
-            return ArtistSplitter.split(rawArtist)
-                .mapNotNull { part ->
-                    val cleaned = MetadataNormalizer.cleanDisplayText(part)
-                    if (cleaned.isEmpty() || MetadataNormalizer.isPlaceholderField(cleaned)) return@mapNotNull null
-                    val key = MetadataNormalizer.normalizeForComparison(cleaned)
-                    if (key.isEmpty()) null else key to cleaned
-                }
-                .distinctBy { it.first }
+            artistKeysCache[rawArtist]?.let { return it }
+            val result = if (MetadataNormalizer.isPlaceholderField(rawArtist)) {
+                emptyList()
+            } else {
+                ArtistSplitter.split(rawArtist)
+                    .mapNotNull { part ->
+                        val cleaned = MetadataNormalizer.cleanDisplayText(part)
+                        if (cleaned.isEmpty() || MetadataNormalizer.isPlaceholderField(cleaned)) return@mapNotNull null
+                        val key = MetadataNormalizer.normalizeForComparison(cleaned)
+                        if (key.isEmpty()) null else key to cleaned
+                    }
+                    .distinctBy { it.first }
+            }
+            if (artistKeysCache.size >= ARTIST_KEYS_CACHE_LIMIT) {
+                artistKeysCache.clear()
+            }
+            artistKeysCache[rawArtist] = result
+            return result
         }
 
         private fun saturate(raw: Double, scale: Double): Double {

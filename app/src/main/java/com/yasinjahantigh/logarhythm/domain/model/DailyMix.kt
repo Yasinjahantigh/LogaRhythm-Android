@@ -1,5 +1,7 @@
 package com.yasinjahantigh.logarhythm.domain.model
 
+import androidx.compose.runtime.Immutable
+
 enum class MixTrackReason {
     FAVORITE,
     HEAVY_ROTATION,
@@ -12,6 +14,7 @@ enum class MixTrackReason {
 /**
  * Represents an offline-generated smart mix for the current day.
  */
+@Immutable
 data class DailyMix(
     val id: String,
     val tracks: List<Track>,

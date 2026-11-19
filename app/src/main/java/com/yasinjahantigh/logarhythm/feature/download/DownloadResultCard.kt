@@ -49,6 +49,7 @@ fun DownloadResultCard(
     result: DownloadSearchResult,
     activeItem: DownloadItem?,
     onClick: () -> Unit,
+    onDownloadClick: (() -> Unit)? = null,
     onDownloadAlbum: (() -> Unit)? = null,
     isPreviewLoading: Boolean = false,
     isPreviewPlaying: Boolean = false,
@@ -92,7 +93,7 @@ fun DownloadResultCard(
                 )
                 Spacer(modifier = Modifier.padding(top = 3.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    SourceBadge(result)
+                    SourceBadges(result)
                     if (result.source == com.yasinjahantigh.logarhythm.domain.model.DownloadSource.MUSICMAN &&
                         result.kind == DownloadResultKind.TRACK &&
                         !result.hasReadyAudio
@@ -110,15 +111,17 @@ fun DownloadResultCard(
                             )
                         }
                     }
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = result.artist.ifBlank { stringResource(R.string.unknown_artist) },
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f, fill = false)
-                    )
+                    if (result.kind != DownloadResultKind.ARTIST || (result.artist.isNotBlank() && result.matchedSources.size <= 1)) {
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = result.artist.ifBlank { stringResource(R.string.unknown_artist) },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f, fill = false)
+                        )
+                    }
                 }
                 if (activeItem != null && activeItem.isActive) {
                     Spacer(modifier = Modifier.padding(top = 8.dp))
@@ -200,7 +203,7 @@ fun DownloadResultCard(
                         tint = MaterialTheme.colorScheme.primary
                     )
                     else -> FilledIconButton(
-                        onClick = onClick,
+                        onClick = { (onDownloadClick ?: onClick).invoke() },
                         modifier = Modifier.testTag("download_action_${result.source.raw}_${result.id}")
                     ) {
                         Icon(
@@ -215,16 +218,37 @@ fun DownloadResultCard(
 }
 
 @Composable
-private fun SourceBadge(result: DownloadSearchResult) {
-    Surface(
-        shape = CircleShape,
-        color = MaterialTheme.colorScheme.secondaryContainer,
-        contentColor = MaterialTheme.colorScheme.onSecondaryContainer
-    ) {
-        Text(
-            text = stringResource(downloadSourceLabelRes(result.source)),
-            style = MaterialTheme.typography.labelSmall,
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
-        )
+private fun SourceBadges(result: DownloadSearchResult) {
+    if (result.kind == DownloadResultKind.ARTIST && result.matchedSources.size > 1) {
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            result.matchedSources.sortedBy { it.ordinal }.forEach { src ->
+                Surface(
+                    shape = CircleShape,
+                    color = MaterialTheme.colorScheme.secondaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+                ) {
+                    Text(
+                        text = stringResource(downloadSourceLabelRes(src)),
+                        style = MaterialTheme.typography.labelSmall,
+                        modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp)
+                    )
+                }
+            }
+        }
+    } else {
+        Surface(
+            shape = CircleShape,
+            color = MaterialTheme.colorScheme.secondaryContainer,
+            contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+        ) {
+            Text(
+                text = stringResource(downloadSourceLabelRes(result.source)),
+                style = MaterialTheme.typography.labelSmall,
+                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+            )
+        }
     }
 }

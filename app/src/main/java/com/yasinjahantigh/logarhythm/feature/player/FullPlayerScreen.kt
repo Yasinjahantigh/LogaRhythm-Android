@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -40,9 +41,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Album
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.GraphicEq
+import androidx.compose.material.icons.filled.TouchApp
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.window.Dialog
@@ -180,15 +183,19 @@ fun FullPlayerScreen(
     val playlists by playlistViewModel.playlists.collectAsStateWithLifecycle()
     val artistSplitConfig by artistSplitViewModel.config.collectAsStateWithLifecycle()
 
+    val isVinylMode by viewModel.isVinylMode.collectAsStateWithLifecycle()
+    val audioOutputState by viewModel.audioOutputState.collectAsStateWithLifecycle()
+
     var showLyrics by remember { mutableStateOf(false) }
     var showSpeedDialog by remember { mutableStateOf(false) }
     var showSleepTimerDialog by remember { mutableStateOf(false) }
     var showEqualizerSheet by remember { mutableStateOf(false) }
+    var showAudioOutputSheet by remember { mutableStateOf(false) }
     var showAddToPlaylistDialog by remember { mutableStateOf(false) }
     var showDetailsDialog by remember { mutableStateOf(false) }
-    var isVinylMode by remember { mutableStateOf(false) }
     var showRemainingTime by remember { mutableStateOf(false) }
     var showFullArtworkDialog by remember { mutableStateOf(false) }
+    var showSongShareSheet by remember { mutableStateOf(false) }
     var isCarMode by remember { mutableStateOf(false) }
 
     val track = currentTrack
@@ -196,6 +203,26 @@ fun FullPlayerScreen(
 
     val coroutineScope = rememberCoroutineScope()
     val artworkDragOffsetX = remember { Animatable(0f) }
+
+    if (showAudioOutputSheet) {
+        AudioOutputPickerSheet(
+            state = audioOutputState,
+            onRefresh = viewModel::refreshAudioOutputs,
+            onSelectDevice = { device ->
+                val switched = viewModel.selectAudioOutput(device)
+                if (!switched) {
+                    showAudioOutputSheet = false
+                    viewModel.openSystemAudioOutputSwitcher(context)
+                }
+            },
+            onVolumeChange = viewModel::setMediaVolume,
+            onOpenSystemSwitcher = {
+                showAudioOutputSheet = false
+                viewModel.openSystemAudioOutputSwitcher(context)
+            },
+            onDismiss = { showAudioOutputSheet = false }
+        )
+    }
 
     if (showSpeedDialog) {
         PlaybackSpeedDialog(
@@ -205,6 +232,7 @@ fun FullPlayerScreen(
             onPitchSelected = viewModel::setPlaybackPitch,
             slowedReverbEnabled = slowedReverb,
             onToggleSlowedReverb = viewModel::setSlowedReverb,
+            onReset = viewModel::resetPlaybackSpeedAndPitch,
             onDismiss = { showSpeedDialog = false }
         )
     }
@@ -300,6 +328,15 @@ fun FullPlayerScreen(
         Color(blended)
     }
 
+    if (showSongShareSheet && track != null) {
+        com.yasinjahantigh.logarhythm.ui.components.SongShareStudioSheet(
+            track = track,
+            defaultAccentColor = animatedBgColor.toArgb(),
+            onShareAudioFile = { shareTrack(context, track) },
+            onDismiss = { showSongShareSheet = false }
+        )
+    }
+
     val albumText = track?.album.cleanMetaOrNull()
     val timerLabel: String? = when {
         sleepTimerRemainingTracks != null -> {
@@ -356,6 +393,8 @@ fun FullPlayerScreen(
                                 track = track,
                                 isFavorite = isFavorite,
                                 onToggleFavorite = viewModel::toggleFavorite,
+                                audioOutputState = audioOutputState,
+                                onOpenAudioOutput = { showAudioOutputSheet = true },
                                 artistSplitConfig = artistSplitConfig,
                                 onArtistClick = onNavigateToArtist
                             )
@@ -375,8 +414,7 @@ fun FullPlayerScreen(
                         modifier = Modifier.fillMaxSize(),
                         contentAlignment = Alignment.Center
                     ) {
-                        // The artwork is the hero: as large as the space allows, never clipped.
-                        val artworkSize = minOf(maxWidth, maxHeight - 8.dp, 400.dp).coerceAtLeast(120.dp)
+                        val artworkSize = minOf(maxWidth, maxHeight - 8.dp, 430.dp).coerceAtLeast(132.dp)
                         PlayerArtwork(
                             track = track,
                             isPlaying = isPlaying,
@@ -385,6 +423,9 @@ fun FullPlayerScreen(
                             queue = queue,
                             currentIndex = queueIndex,
                             doubleTapSeekEnabled = doubleTapSeekEnabled,
+                            positionProvider = { positionState.value },
+                            durationMs = durationMs,
+                            onSeek = viewModel::seekTo,
                             onRewind10 = onRewind10,
                             onForward10 = onForward10,
                             onCommit = viewModel::commitCoverPeek,
@@ -410,15 +451,16 @@ fun FullPlayerScreen(
                 glow = scheme.tertiary
             )
 
-            BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-                val isLandscapeLayout = maxWidth > maxHeight
+            BoxWithConstraints(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                val isLandscapeLayout = maxWidth > maxHeight || maxWidth >= 700.dp
 
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
+                        .widthIn(max = 1120.dp)
                         .statusBarsPadding()
                         .navigationBarsPadding()
-                        .padding(horizontal = if (isLandscapeLayout) 28.dp else 24.dp, vertical = 6.dp),
+                        .padding(horizontal = if (isLandscapeLayout) 32.dp else 24.dp, vertical = 6.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     FullPlayerHeader(
@@ -426,7 +468,7 @@ fun FullPlayerScreen(
                         subtitle = albumText,
                         isVinylMode = isVinylMode,
                         onCollapse = onCollapse,
-                        onToggleVinyl = { isVinylMode = !isVinylMode },
+                        onToggleVinyl = { viewModel.setVinylMode(!isVinylMode) },
                         onStartRadio = {
                             viewModel.startTrackRadio { count ->
                                 val message = if (count > 0) {
@@ -449,7 +491,7 @@ fun FullPlayerScreen(
                         onOpenSongDetails = { showDetailsDialog = true },
                         onShareSong = {
                             if (track != null) {
-                                shareTrack(context, track)
+                                showSongShareSheet = true
                             }
                         },
                         onEditSongDetails = { track?.let { onNavigateToTagEditor(it.id) } },
@@ -462,6 +504,21 @@ fun FullPlayerScreen(
                             }
                         }
                     )
+
+                    if (!showLyrics) {
+                        com.yasinjahantigh.logarhythm.ui.components.FeatureMicroTip(
+                            hintId = if (isVinylMode) {
+                                com.yasinjahantigh.logarhythm.ui.components.FeatureHintIds.PLAYER_VINYL
+                            } else {
+                                com.yasinjahantigh.logarhythm.ui.components.FeatureHintIds.PLAYER_COVER
+                            },
+                            text = stringResource(
+                                if (isVinylMode) R.string.tip_player_vinyl else R.string.tip_player_cover
+                            ),
+                            icon = if (isVinylMode) Icons.Filled.Album else Icons.Filled.TouchApp,
+                            modifier = Modifier.padding(top = 2.dp, bottom = 4.dp)
+                        )
+                    }
 
                     if (isLandscapeLayout) {
                         Row(
@@ -485,6 +542,8 @@ fun FullPlayerScreen(
                                     track = track,
                                     isFavorite = isFavorite,
                                     onToggleFavorite = viewModel::toggleFavorite,
+                                    audioOutputState = audioOutputState,
+                                    onOpenAudioOutput = { showAudioOutputSheet = true },
                                     artistSplitConfig = artistSplitConfig,
                                     onArtistClick = onNavigateToArtist
                                 )
@@ -531,6 +590,8 @@ fun FullPlayerScreen(
                                 track = track,
                                 isFavorite = isFavorite,
                                 onToggleFavorite = viewModel::toggleFavorite,
+                                audioOutputState = audioOutputState,
+                                onOpenAudioOutput = { showAudioOutputSheet = true },
                                 artistSplitConfig = artistSplitConfig,
                                 onArtistClick = onNavigateToArtist
                             )
@@ -613,6 +674,8 @@ fun FullPlayerScreen(
  * cheap gradients (drawn once) instead of a blurred copy of the cover, which costs a full-screen
  * GPU blur and made the player feel heavy on mid-range phones.
  */
+private val HeroArtworkShape = RoundedCornerShape(32.dp)
+
 @Composable
 private fun PlayerBackdrop(
     tint: Color,
@@ -623,37 +686,31 @@ private fun PlayerBackdrop(
     Box(
         modifier = modifier
             .fillMaxSize()
-            .drawBehind {
-                drawRect(
-                    brush = Brush.radialGradient(
-                        colors = listOf(tint.copy(alpha = 0.55f), Color.Transparent),
-                        center = Offset(size.width * 0.12f, size.height * 0.06f),
-                        radius = size.maxDimension * 0.9f
+            .drawWithCache {
+                val topGlow = Brush.radialGradient(
+                    colors = listOf(tint.copy(alpha = 0.55f), Color.Transparent),
+                    center = Offset(size.width * 0.12f, size.height * 0.06f),
+                    radius = size.maxDimension * 0.9f
+                )
+                val bottomGlow = Brush.radialGradient(
+                    colors = listOf(glow.copy(alpha = 0.14f), Color.Transparent),
+                    center = Offset(size.width * 0.96f, size.height * 0.88f),
+                    radius = size.maxDimension * 0.75f
+                )
+                val scrim = Brush.verticalGradient(
+                    colors = listOf(
+                        surface.copy(alpha = 0.30f),
+                        surface.copy(alpha = 0.80f),
+                        surface
                     )
                 )
-                drawRect(
-                    brush = Brush.radialGradient(
-                        colors = listOf(glow.copy(alpha = 0.14f), Color.Transparent),
-                        center = Offset(size.width * 0.96f, size.height * 0.88f),
-                        radius = size.maxDimension * 0.75f
-                    )
-                )
+                onDrawBehind {
+                    drawRect(brush = topGlow)
+                    drawRect(brush = bottomGlow)
+                    drawRect(brush = scrim)
+                }
             }
-    ) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(
-                    Brush.verticalGradient(
-                        colors = listOf(
-                            surface.copy(alpha = 0.30f),
-                            surface.copy(alpha = 0.80f),
-                            surface
-                        )
-                    )
-                )
-        )
-    }
+    )
 }
 
 /**
@@ -670,26 +727,44 @@ private fun PlayerArtwork(
     queue: List<Track>,
     currentIndex: Int,
     doubleTapSeekEnabled: Boolean,
+    positionProvider: () -> Long,
+    durationMs: Long,
+    onSeek: (Long) -> Unit,
     onRewind10: () -> Unit,
     onForward10: () -> Unit,
     onCommit: (Int, Int) -> Unit,
     onArtworkClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    if (isVinylMode) {
+        VinylSleeveStage(
+            track = track,
+            isPlaying = isPlaying,
+            queue = queue,
+            currentIndex = currentIndex,
+            positionProvider = positionProvider,
+            durationMs = durationMs,
+            onSeek = onSeek,
+            onCommit = onCommit,
+            onArtworkClick = onArtworkClick,
+            modifier = modifier
+        )
+        return
+    }
+
     val haptic = LocalHapticFeedback.current
     val dragX = remember(currentIndex, queue) { Animatable(0f) }
     var coverWidth by remember { mutableFloatStateOf(0f) }
     val scale by animateFloatAsState(
-        targetValue = if (isPlaying) 1f else 0.9f,
-        animationSpec = spring(dampingRatio = 0.72f, stiffness = 180f),
+        targetValue = if (isPlaying) 1f else 0.92f,
+        animationSpec = spring(dampingRatio = 0.74f, stiffness = 200f),
         label = "artwork_breathing"
     )
-    val shape = RoundedCornerShape(36.dp)
+    val shape = HeroArtworkShape
     val title = track?.title.cleanMetaOrNull() ?: stringResource(R.string.unknown_title)
 
     Box(
         modifier = modifier
-            .clip(androidx.compose.ui.graphics.RectangleShape)
             .onSizeChanged { coverWidth = it.width.toFloat() }
             .pointerInput(currentIndex, queue) {
                 kotlinx.coroutines.coroutineScope {
@@ -701,7 +776,7 @@ private fun PlayerArtwork(
                             motion = launch {
                                 val target = coverPeekTarget(distance, coverWidth, currentIndex, queue.size, true)
                                 if (target != null) {
-                                    dragX.animateTo(if (distance > 0) coverWidth else -coverWidth, tween(160))
+                                    dragX.animateTo(if (distance > 0) coverWidth else -coverWidth, tween(170))
                                     haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                     onCommit(currentIndex, target)
                                     dragX.snapTo(0f)
@@ -720,17 +795,50 @@ private fun PlayerArtwork(
             },
         contentAlignment = Alignment.Center
     ) {
-        val peekIndex = coverPeekTarget(dragX.value, coverWidth, currentIndex, queue.size, false)
+        // Feathered circular ambient glow behind the cover — cached Brush, zero per-frame allocations.
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .drawWithCache {
+                    val glowBrush = Brush.radialGradient(
+                        colors = listOf(
+                            glowColor.copy(alpha = if (isPlaying) 0.34f else 0.16f),
+                            glowColor.copy(alpha = if (isPlaying) 0.12f else 0.04f),
+                            Color.Transparent
+                        ),
+                        center = Offset(size.width / 2f, size.height / 2f),
+                        radius = size.maxDimension * 0.62f
+                    )
+                    onDrawBehind {
+                        drawCircle(brush = glowBrush)
+                    }
+                }
+        )
+
+        val peekIndex by remember(currentIndex, queue, coverWidth) {
+            androidx.compose.runtime.derivedStateOf {
+                coverPeekTarget(dragX.value, coverWidth, currentIndex, queue.size, false)
+            }
+        }
         if (peekIndex != null) {
-            val neighbour = queue[peekIndex]
-            Box(Modifier.fillMaxSize().graphicsLayer {
-                translationX = dragX.value + if (dragX.value > 0) -coverWidth else coverWidth
-                scaleX = scale
-                scaleY = scale
-            }) {
+            val neighbour = queue[peekIndex!!]
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .padding(10.dp)
+                    .graphicsLayer {
+                        translationX = dragX.value + if (dragX.value > 0) -coverWidth else coverWidth
+                        scaleX = scale
+                        scaleY = scale
+                    }
+                    .clip(shape)
+            ) {
                 ArtworkImage(
-                    uri = neighbour.artworkUri, fallbackKey = neighbour.title, shape = shape,
-                    glyphSize = 96.sp, contentDescription = stringResource(R.string.cd_artwork, neighbour.title),
+                    uri = neighbour.artworkUri,
+                    fallbackKey = neighbour.title,
+                    shape = shape,
+                    glyphSize = 96.sp,
+                    contentDescription = stringResource(R.string.cd_artwork, neighbour.title),
                     modifier = Modifier.fillMaxSize()
                 )
                 Text(
@@ -739,74 +847,77 @@ private fun PlayerArtwork(
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                     style = MaterialTheme.typography.titleMedium,
-                    modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth()
-                        .background(Color.Black.copy(alpha = 0.65f)).padding(16.dp)
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .fillMaxWidth()
+                        .background(Color.Black.copy(alpha = 0.65f))
+                        .padding(16.dp)
                 )
             }
         }
+
+        var seekBadge by remember { mutableStateOf<String?>(null) }
+        LaunchedEffect(seekBadge) {
+            if (seekBadge != null) {
+                kotlinx.coroutines.delay(550)
+                seekBadge = null
+            }
+        }
+
         Box(
-            modifier = Modifier.fillMaxSize().graphicsLayer {
-                translationX = dragX.value
-                scaleX = scale
-                scaleY = scale
-            },
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(10.dp)
+                .graphicsLayer {
+                    translationX = dragX.value
+                    scaleX = scale
+                    scaleY = scale
+                },
             contentAlignment = Alignment.Center
         ) {
-            if (isVinylMode) {
-                VinylTurntable(track, isPlaying, Modifier.fillMaxSize(), onArtworkClick = onArtworkClick)
-            } else {
-                var seekBadge by remember { mutableStateOf<String?>(null) }
-                LaunchedEffect(seekBadge) {
-                    if (seekBadge != null) {
-                        kotlinx.coroutines.delay(550)
-                        seekBadge = null
-                    }
-                }
-                Box(modifier = Modifier.fillMaxSize()) {
-                    ArtworkImage(
-                        uri = track?.artworkUri,
-                        fallbackKey = title,
-                        shape = shape,
-                        glyphSize = 96.sp,
-                        contentDescription = stringResource(R.string.cd_artwork, title),
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .shadow(
-                                elevation = 18.dp,
-                                shape = shape,
-                                ambientColor = glowColor.copy(alpha = 0.6f),
-                                spotColor = glowColor
-                            )
-                            .pointerInput(doubleTapSeekEnabled, onArtworkClick, onRewind10, onForward10) {
-                                detectTapGestures(
-                                    onTap = { onArtworkClick() },
-                                    onDoubleTap = if (doubleTapSeekEnabled) { offset ->
-                                        if (offset.x < size.width / 2f) {
-                                            onRewind10()
-                                            seekBadge = "−10s"
-                                        } else {
-                                            onForward10()
-                                            seekBadge = "+10s"
-                                        }
-                                    } else null
-                                )
-                            }
-                    )
-                    seekBadge?.let { label ->
-                        Surface(
-                            shape = CircleShape,
-                            color = Color.Black.copy(alpha = 0.72f),
-                            modifier = Modifier.align(Alignment.Center)
-                        ) {
-                            Text(
-                                text = label,
-                                style = MaterialTheme.typography.titleLarge,
-                                fontWeight = FontWeight.Bold,
-                                color = Color.White,
-                                modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp)
+            Surface(
+                shape = shape,
+                shadowElevation = if (isPlaying) 14.dp else 6.dp,
+                color = Color.Transparent,
+                modifier = Modifier.fillMaxSize()
+            ) {
+                ArtworkImage(
+                    uri = track?.artworkUri,
+                    fallbackKey = title,
+                    shape = shape,
+                    glyphSize = 96.sp,
+                    contentDescription = stringResource(R.string.cd_artwork, title),
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .pointerInput(doubleTapSeekEnabled, onArtworkClick, onRewind10, onForward10) {
+                            detectTapGestures(
+                                onTap = { onArtworkClick() },
+                                onDoubleTap = if (doubleTapSeekEnabled) { offset ->
+                                    if (offset.x < size.width / 2f) {
+                                        onRewind10()
+                                        seekBadge = "−10s"
+                                    } else {
+                                        onForward10()
+                                        seekBadge = "+10s"
+                                    }
+                                } else null
                             )
                         }
-                    }
+                )
+            }
+            seekBadge?.let { label ->
+                Surface(
+                    shape = CircleShape,
+                    color = Color.Black.copy(alpha = 0.72f),
+                    modifier = Modifier.align(Alignment.Center)
+                ) {
+                    Text(
+                        text = label,
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White,
+                        modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp)
+                    )
                 }
             }
         }
@@ -820,13 +931,22 @@ private fun FavoriteButton(
     modifier: Modifier = Modifier
 ) {
     val scheme = MaterialTheme.colorScheme
+    val haptic = LocalHapticFeedback.current
     val favoriteContainer by animateColorAsState(
         targetValue = if (isFavorite) scheme.primaryContainer else scheme.surfaceContainerHighest.copy(alpha = 0.6f),
         animationSpec = tween(250),
         label = "favorite_container"
     )
+    val heartScale by animateFloatAsState(
+        targetValue = if (isFavorite) 1.18f else 1f,
+        animationSpec = spring(dampingRatio = 0.45f, stiffness = 400f),
+        label = "favorite_scale"
+    )
     IconButton(
-        onClick = onToggleFavorite,
+        onClick = {
+            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+            onToggleFavorite()
+        },
         modifier = modifier
             .size(52.dp)
             .background(favoriteContainer, CircleShape)
@@ -836,7 +956,41 @@ private fun FavoriteButton(
             imageVector = if (isFavorite) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
             contentDescription = stringResource(if (isFavorite) R.string.cd_unfavorite else R.string.cd_favorite),
             tint = if (isFavorite) scheme.onPrimaryContainer else scheme.onSurfaceVariant,
-            modifier = Modifier.size(26.dp)
+            modifier = Modifier
+                .size(26.dp)
+                .graphicsLayer {
+                    scaleX = heartScale
+                    scaleY = heartScale
+                }
+        )
+    }
+}
+
+@Composable
+private fun AudioOutputButton(
+    audioOutputState: com.yasinjahantigh.logarhythm.playback.AudioOutputState,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val scheme = MaterialTheme.colorScheme
+    val isExternal = audioOutputState.activeKind != com.yasinjahantigh.logarhythm.playback.AudioOutputKind.SPEAKER
+    val container by animateColorAsState(
+        targetValue = if (isExternal) scheme.secondaryContainer else scheme.surfaceContainerHighest.copy(alpha = 0.6f),
+        animationSpec = tween(250),
+        label = "audio_output_container"
+    )
+    IconButton(
+        onClick = onClick,
+        modifier = modifier
+            .size(48.dp)
+            .background(container, CircleShape)
+            .testTag("player_audio_output_button")
+    ) {
+        Icon(
+            imageVector = audioOutputState.activeKind.icon(),
+            contentDescription = stringResource(R.string.cd_audio_output_switcher),
+            tint = if (isExternal) scheme.onSecondaryContainer else scheme.onSurfaceVariant,
+            modifier = Modifier.size(22.dp)
         )
     }
 }
@@ -848,6 +1002,8 @@ private fun CompactTrackRow(
     isFavorite: Boolean,
     onToggleFavorite: () -> Unit,
     modifier: Modifier = Modifier,
+    audioOutputState: com.yasinjahantigh.logarhythm.playback.AudioOutputState = com.yasinjahantigh.logarhythm.playback.AudioOutputState(),
+    onOpenAudioOutput: (() -> Unit)? = null,
     artistSplitConfig: com.yasinjahantigh.logarhythm.domain.library.ArtistSplitConfig = com.yasinjahantigh.logarhythm.domain.library.ArtistSplitConfig(),
     onArtistClick: ((String) -> Unit)? = null
 ) {
@@ -883,7 +1039,15 @@ private fun CompactTrackRow(
                 color = MaterialTheme.colorScheme.primary
             )
         }
-        FavoriteButton(isFavorite = isFavorite, onToggleFavorite = onToggleFavorite)
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            if (onOpenAudioOutput != null) {
+                AudioOutputButton(audioOutputState = audioOutputState, onClick = onOpenAudioOutput)
+            }
+            FavoriteButton(isFavorite = isFavorite, onToggleFavorite = onToggleFavorite)
+        }
     }
 }
 
@@ -893,6 +1057,8 @@ fun TrackIdentityAndActions(
     isFavorite: Boolean,
     onToggleFavorite: () -> Unit,
     modifier: Modifier = Modifier,
+    audioOutputState: com.yasinjahantigh.logarhythm.playback.AudioOutputState = com.yasinjahantigh.logarhythm.playback.AudioOutputState(),
+    onOpenAudioOutput: (() -> Unit)? = null,
     artistSplitConfig: com.yasinjahantigh.logarhythm.domain.library.ArtistSplitConfig = com.yasinjahantigh.logarhythm.domain.library.ArtistSplitConfig(),
     onArtistClick: ((String) -> Unit)? = null
 ) {
@@ -926,7 +1092,15 @@ fun TrackIdentityAndActions(
                 color = scheme.primary
             )
         }
-        FavoriteButton(isFavorite = isFavorite, onToggleFavorite = onToggleFavorite)
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            if (onOpenAudioOutput != null) {
+                AudioOutputButton(audioOutputState = audioOutputState, onClick = onOpenAudioOutput)
+            }
+            FavoriteButton(isFavorite = isFavorite, onToggleFavorite = onToggleFavorite)
+        }
     }
 }
 

@@ -1,13 +1,14 @@
 package com.yasinjahantigh.logarhythm.core.utils
 
+import android.app.ActivityManager
 import android.content.ContentResolver
 import android.content.Context
-import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.drawable.BitmapDrawable
 import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.os.Build
+import android.util.LruCache
 import android.util.Size
 import coil.ImageLoader
 import coil.decode.DataSource
@@ -18,29 +19,40 @@ import coil.fetch.Fetcher
 import coil.fetch.SourceResult
 import coil.request.Options
 import coil.size.pxOrElse
+import com.yasinjahantigh.logarhythm.core.artwork.ArtworkVersionStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okio.Buffer
 
 /**
- * Custom Coil fetcher for loading audio album artwork in highest possible quality.
- * Prioritizes extracting the original embedded picture from the audio file tags
- * at full 32-bit (ARGB_8888) resolution (supporting up to 2048px for large screen & full player displays).
- * Falls back to scoped storage thumbnails or content streams only when embedded artwork is absent.
+ * Custom Coil fetcher for loading audio album artwork cleanly and efficiently.
+ * Uses MediaStore's native thumbnail cache for small list rows, returns embedded pictures as
+ * [SourceResult] so Coil applies exact target sizing, RGB_565 when allowed, and DiskCache
+ * persistence, and remembers coverless tracks in a versioned negative cache to avoid repeat I/O.
  */
 class AudioArtworkFetcher(
     private val context: Context,
     private val uri: Uri,
-    private val options: Options
+    private val options: Options,
+    private val maxHeroEdge: Int
 ) : Fetcher {
 
-    /** Edge length needed on screen; list rows request ~150px, full player / detail requests up to 1440px+. */
+    /** Edge length needed on screen; list rows request ~150px, full player / detail requests up to maxHeroEdge. */
     private val targetEdge: Int = maxOf(
-        options.size.width.pxOrElse { 1080 },
-        options.size.height.pxOrElse { 1080 }
-    ).coerceIn(128, 2048)
+        options.size.width.pxOrElse { 720 },
+        options.size.height.pxOrElse { 720 }
+    ).coerceIn(128, maxHeroEdge)
 
     override suspend fun fetch(): FetchResult? = withContext(Dispatchers.IO) {
+        val uriString = uri.toString()
+        val version = ArtworkVersionStore.versionOf(uriString)
+        val negativeKey = "$uriString#v$version"
+        synchronized(missingArtCache) {
+            if (missingArtCache.get(negativeKey) == true) {
+                return@withContext null
+            }
+        }
+
         val resolver = context.contentResolver
         val isThumbnail = targetEdge <= 320
 
@@ -58,51 +70,30 @@ class AudioArtworkFetcher(
             }
         }
 
-        // Embedded picture extraction (downsampled tightly to targetEdge to keep memory/scroll fast)
-        try {
-            val retriever = MediaMetadataRetriever()
-            retriever.setDataSource(context, uri)
-            val picture = retriever.embeddedPicture
+        // Embedded picture extraction: always release retriever in finally and hand raw encoded
+        // bytes to Coil via SourceResult so DiskCache, RGB_565, and exact target sizing all apply.
+        val picture: ByteArray? = run {
+            var retriever: MediaMetadataRetriever? = null
             try {
-                retriever.release()
-            } catch (_: Exception) {}
-
-            if (picture != null) {
-                if (isThumbnail) {
-                    // Return encoded bytes via SourceResult so Coil both downsamples to exact
-                    // list item bounds and persists into DiskCache, avoiding repeat file reads.
-                    val buffer = Buffer().write(picture)
-                    return@withContext SourceResult(
-                        source = ImageSource(buffer, context),
-                        mimeType = null,
-                        dataSource = DataSource.DISK
-                    )
-                }
-
-                val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-                BitmapFactory.decodeByteArray(picture, 0, picture.size, bounds)
-
-                var sample = 1
-                val maxLimit = targetEdge.coerceIn(128, 2048)
-                while (bounds.outWidth / (sample * 2) >= maxLimit && bounds.outHeight / (sample * 2) >= maxLimit) {
-                    sample *= 2
-                }
-
-                val decodeOptions = BitmapFactory.Options().apply {
-                    inSampleSize = sample
-                    inPreferredConfig = Bitmap.Config.ARGB_8888
-                }
-                val bitmap = BitmapFactory.decodeByteArray(picture, 0, picture.size, decodeOptions)
-                if (bitmap != null) {
-                    return@withContext DrawableResult(
-                        drawable = BitmapDrawable(context.resources, bitmap),
-                        isSampled = sample > 1,
-                        dataSource = DataSource.DISK
-                    )
-                }
+                retriever = MediaMetadataRetriever()
+                retriever.setDataSource(context, uri)
+                retriever.embeddedPicture
+            } catch (_: Exception) {
+                null
+            } finally {
+                try {
+                    retriever?.release()
+                } catch (_: Exception) {}
             }
-        } catch (_: Exception) {
-            // Embedded picture extraction failed or not available for this URI
+        }
+
+        if (picture != null && picture.isNotEmpty()) {
+            val buffer = Buffer().write(picture)
+            return@withContext SourceResult(
+                source = ImageSource(buffer, context),
+                mimeType = null,
+                dataSource = DataSource.DISK
+            )
         }
 
         // Fall back to scoped storage loadThumbnail on Android Q+
@@ -111,7 +102,7 @@ class AudioArtworkFetcher(
                 val bitmap = resolver.loadThumbnail(uri, Size(targetEdge, targetEdge), null)
                 return@withContext DrawableResult(
                     drawable = BitmapDrawable(context.resources, bitmap),
-                    isSampled = false,
+                    isSampled = true,
                     dataSource = DataSource.DISK
                 )
             } catch (_: Exception) {
@@ -119,14 +110,16 @@ class AudioArtworkFetcher(
             }
         }
 
-        // 3. Fall back to direct stream decode (e.g. for image file URIs)
+        // Fall back to direct stream decode (e.g. for image file URIs), downsampled to targetEdge.
         try {
-            resolver.openInputStream(uri)?.use { stream ->
-                val bitmap = BitmapFactory.decodeStream(stream)
-                if (bitmap != null) {
-                    return@withContext DrawableResult(
-                        drawable = BitmapDrawable(context.resources, bitmap),
-                        isSampled = false,
+            val bytes = resolver.openInputStream(uri)?.use { it.readBytes() }
+            if (bytes != null && bytes.isNotEmpty()) {
+                val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+                if (bounds.outWidth > 0 && bounds.outHeight > 0) {
+                    return@withContext SourceResult(
+                        source = ImageSource(Buffer().write(bytes), context),
+                        mimeType = null,
                         dataSource = DataSource.DISK
                     )
                 }
@@ -135,19 +128,31 @@ class AudioArtworkFetcher(
             // No stream available
         }
 
+        synchronized(missingArtCache) {
+            missingArtCache.put(negativeKey, true)
+        }
         null
     }
 
     class Factory(private val context: Context) : Fetcher.Factory<Uri> {
+        private val maxHeroEdge: Int by lazy {
+            val am = context.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager
+            if (am?.isLowRamDevice == true) 1024 else 1440
+        }
+
         override fun create(data: Uri, options: Options, imageLoader: ImageLoader): Fetcher? {
             val scheme = data.scheme
             val authority = data.authority
             if (scheme == ContentResolver.SCHEME_CONTENT &&
                 (authority == "media" || authority?.contains("media") == true)
             ) {
-                return AudioArtworkFetcher(context, data, options)
+                return AudioArtworkFetcher(context, data, options, maxHeroEdge)
             }
             return null
         }
+    }
+
+    companion object {
+        private val missingArtCache = LruCache<String, Boolean>(512)
     }
 }

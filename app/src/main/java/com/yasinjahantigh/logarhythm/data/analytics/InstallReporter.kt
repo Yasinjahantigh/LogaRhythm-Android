@@ -45,19 +45,19 @@ class InstallReporter @Inject constructor(
     }
 
     private val appContext = context.applicationContext
-    private val prefs = appContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+    private val prefs by lazy { appContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE) }
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private val client = baseClient.newBuilder()
-        .callTimeout(15, TimeUnit.SECONDS)
-        .build()
+    private val client by lazy {
+        baseClient.newBuilder()
+            .callTimeout(15, TimeUnit.SECONDS)
+            .build()
+    }
 
     val hitEndpoint: String = BuildConfig.INSTALL_ENDPOINT.takeIf { it.isNotBlank() } ?: DEFAULT_HIT_ENDPOINT
     val statsEndpoint: String = hitEndpoint.replace(Regex("""/hit/?$"""), "/stats")
     val isConfigured: Boolean = hitEndpoint.isNotBlank()
 
-    private val _totalInstalls = MutableStateFlow<Long?>(
-        prefs.getLong(KEY_CACHED_TOTAL, -1L).takeIf { it >= 0 }
-    )
+    private val _totalInstalls = MutableStateFlow<Long?>(null)
     val totalInstalls: StateFlow<Long?> = _totalInstalls.asStateFlow()
 
     private val isTestRuntime: Boolean =
@@ -66,16 +66,19 @@ class InstallReporter @Inject constructor(
 
     fun reportOnce() {
         if (!isConfigured || isTestRuntime || BuildConfig.DEBUG) return
-        val reported = prefs.getBoolean(KEY_REPORTED, false)
-        val lastPingAt = prefs.getLong(KEY_LAST_PING_AT, 0L)
-        val now = System.currentTimeMillis()
-        val needsPing = !reported || (now - lastPingAt >= HEARTBEAT_INTERVAL_MS)
-
-        val installId = prefs.getString(KEY_INSTALL_ID, null) ?: UUID.randomUUID().toString().also {
-            prefs.edit().putString(KEY_INSTALL_ID, it).apply()
-        }
-
         scope.launch {
+            val cached = prefs.getLong(KEY_CACHED_TOTAL, -1L).takeIf { it >= 0 }
+            if (cached != null && _totalInstalls.value == null) {
+                _totalInstalls.value = cached
+            }
+            val reported = prefs.getBoolean(KEY_REPORTED, false)
+            val lastPingAt = prefs.getLong(KEY_LAST_PING_AT, 0L)
+            val now = System.currentTimeMillis()
+            val needsPing = !reported || (now - lastPingAt >= HEARTBEAT_INTERVAL_MS)
+
+            val installId = prefs.getString(KEY_INSTALL_ID, null) ?: UUID.randomUUID().toString().also {
+                prefs.edit().putString(KEY_INSTALL_ID, it).apply()
+            }
             if (needsPing) {
                 val payload = JSONObject().apply {
                     put("installId", installId)

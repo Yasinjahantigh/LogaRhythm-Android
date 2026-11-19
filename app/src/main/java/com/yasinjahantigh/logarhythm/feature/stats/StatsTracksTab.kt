@@ -38,6 +38,7 @@ import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.yasinjahantigh.logarhythm.R
 import com.yasinjahantigh.logarhythm.core.utils.TimeUtils
+import com.yasinjahantigh.logarhythm.domain.model.StatsSortBy
 import com.yasinjahantigh.logarhythm.domain.model.Track
 import com.yasinjahantigh.logarhythm.domain.model.TrackStat
 
@@ -46,7 +47,8 @@ fun StatsTracksTab(
     tracks: List<TrackStat>,
     onTrackClick: (Int) -> Unit,
     onTrackMenuClick: (Track) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    sortBy: StatsSortBy = StatsSortBy.PLAY_COUNT
 ) {
     if (tracks.isEmpty()) {
         StatsEmptyTabContent(
@@ -66,6 +68,7 @@ fun StatsTracksTab(
             TrackStatRow(
                 rank = index + 1,
                 stat = stat,
+                sortBy = sortBy,
                 onClick = { onTrackClick(index) },
                 onMenuClick = { onTrackMenuClick(stat.track) }
             )
@@ -77,6 +80,7 @@ fun StatsTracksTab(
 private fun TrackStatRow(
     rank: Int,
     stat: TrackStat,
+    sortBy: StatsSortBy,
     onClick: () -> Unit,
     onMenuClick: () -> Unit
 ) {
@@ -171,6 +175,8 @@ private fun TrackStatRow(
             )
             val playsStr = stringResource(R.string.stats_play_count, stat.playCount)
             val timeStr = TimeUtils.formatListeningTimeSummary(stat.totalListenTimeMs)
+            val primaryMetric = if (sortBy == StatsSortBy.LISTEN_TIME) timeStr else playsStr
+            val secondaryMetric = if (sortBy == StatsSortBy.LISTEN_TIME) playsStr else timeStr
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
@@ -184,7 +190,14 @@ private fun TrackStatRow(
                     modifier = Modifier.weight(1f, fill = false)
                 )
                 Text(
-                    text = " • $playsStr • $timeStr",
+                    text = " • $primaryMetric",
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.primary,
+                    maxLines = 1
+                )
+                Text(
+                    text = " • $secondaryMetric",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1
