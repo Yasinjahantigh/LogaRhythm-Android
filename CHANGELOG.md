@@ -1,5 +1,29 @@
 # Changelog
 
+## 2.2.0 - 2026-11-25
+
+### Security, Licensing & Store Compliance
+- Unified project license under **GNU GPL-3.0** (`LICENSE`, `NOTICE`, `THIRD_PARTY_NOTICES`) with bundled license text and an in-app Open-Source Licenses viewer
+- Removed TLS certificate bypasses, enforced HTTPS in `network_security_config`, encrypted YouTube `cookies.txt` via Android KeyStore (AES-256-GCM) with `0600` temp cleanup, and added host + package + signing-certificate verification for self-updates
+- Added `-PdistributionChannel=myket` release build support: strips `REQUEST_INSTALL_PACKAGES` from the merged manifest and routes updates to Myket while keeping GitHub self-update for GitHub builds
+
+### Privacy, Feedback & Backend
+- Replaced the 24-hour device-info install ping with a true one-time minimal install record (`installId`, version, channel)
+- Added a transparent first-run Privacy Consent sheet, **Settings → Privacy** controls, sanitized crash reporting, **Shake-to-Report**, **Settings → Suggestions**, and optional anonymous weekly listening stats backed by Cloudflare Worker + Telegram bot alerts
+
+### Bug Fixes & Stability
+- Fixed mini-player disappearance after launching playback from home screen widgets by hydrating live `MediaController` queue/metadata on attach and resetting dismissed state
+- Fixed Audio Output picker applying routes directly via `MediaRouter2` / `ExoPlayer.setPreferredAudioDevice` and updating the player icon immediately
+- Fixed AI Playlist generation failures on Gemini 2.5 thinking responses and OpenAI reasoning models, plus provider switching and clear server error surfacing
+- Fixed `yt-dlp` runtime update vs. concurrent download race conditions, MusicMan/RadioJavan/Saavn `0..100%` download progress scaling, HTTP download cancellation, and Android 8–15 foreground service/Samsung & Xiaomi compatibility
+- Fixed Release Radar dates by querying iTunes Artist Lookup + Deezer Artist Albums with strict recency filtering instead of relying on inaccurate source dates
+
+### New Features & Spotify-Inspired UX
+- Added Spotify-style 2-column **Quick Picks** on Home, **Up Next** & **About Artist / Audio Specs** inside the player, and direct **Delete from device** in the player 3-dot menu
+- Added inline **Playlist Search** and **Favorite/Pinned Playlists** with heart indicator
+- Added **Cover Detail Sheets** and automatic **Hide Owned Tracks** filtering across Downloads and Release Radar
+- Added free **Bilingual Lyrics Translation** (no API key required, locally cached) and subtle **Instrumental Silence** animations
+
 ## 2.1.0 - 2026-11-18
 
 ### Playback & Vinyl

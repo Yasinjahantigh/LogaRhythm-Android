@@ -4,17 +4,17 @@
 
 # LogaRhythm
 
-**A modern, offline-first Android music player built for people who still love owning their music.**  
-No subscriptions, no accounts, no ads, and no telemetry. Your library belongs entirely to you.
+An offline-first Android music player for people who keep their own audio files.  
+No ads, no accounts, no paywalls, and no behavioral tracking.
 
 <a href="https://github.com/Yasinjahantigh/LogaRhythm-Android/releases/latest"><img alt="Download APK" src="https://img.shields.io/badge/Download-APK-2ea44f?logo=android&logoColor=white" /></a>
 <a href="https://github.com/Yasinjahantigh/LogaRhythm-Android/releases"><img alt="Downloads" src="https://img.shields.io/github/downloads/Yasinjahantigh/LogaRhythm-Android/total?label=downloads&color=2ea44f" /></a>
+<a href="https://logarhythm-installs.yasinjahantigh.workers.dev/stats"><img alt="Installs" src="https://img.shields.io/endpoint?url=https%3A%2F%2Flogarhythm-installs.yasinjahantigh.workers.dev%2Fbadge" /></a>
 <a href="https://t.me/LogaRhythmApp"><img alt="Telegram" src="https://img.shields.io/badge/Telegram-@LogaRhythmApp-2CA5E0?logo=telegram&logoColor=white" /></a>
-<a href="https://daramet.com/yasinjahantigh"><img alt="Donate" src="https://img.shields.io/badge/Donate-Daramet-f97316?logo=buymeacoffee&logoColor=white" /></a>
 <img alt="Android 8.0+" src="https://img.shields.io/badge/Android-8.0%2B-3DDC84?logo=android&logoColor=white" />
-<img alt="License: Apache 2.0" src="https://img.shields.io/badge/License-Apache%202.0-blue.svg" />
+<img alt="License: GPL-3.0" src="https://img.shields.io/badge/License-GPL--3.0-blue.svg" />
 
-[English](README.md) · [فارسی](README.fa.md)
+English · [فارسی](README.fa.md) · [All Features](docs/FEATURES.md)
 
 </div>
 
@@ -38,127 +38,79 @@ No subscriptions, no accounts, no ads, and no telemetry. Your library belongs en
 
 ---
 
-## Why I Built LogaRhythm
+## About
 
-Most modern streaming apps treat music like disposable feed content—locked behind a monthly paywall, interrupted by promotional banners, and constantly phoning home your habits to advertiser dashboards.
+I built LogaRhythm for listening to local MP3, FLAC, M4A, and OGG files without turning the app into a storefront or a heavy media manager. Everything you do with your local library stays on your device: playlists, queues, listening history, tags, and cached lyrics.
 
-If you have a collection of high-res FLACs, carefully tagged albums, or local MP3s, you know how hard it is to find a modern player that treats them with respect. Many older offline players feel abandoned in the Holo or early Material era, while modern ones often feel sluggish or stripped of practical audio features.
+Online tools like music search, lyrics lookup, lyrics translation, Release Radar, and optional AI playlists only run when you use them.
 
-**LogaRhythm is my answer to that.** I built it to pair the convenience and visual polish of a modern streaming app with the tactile warmth, ownership, and deep audio control of a dedicated physical player.
+## Main Features
 
-Everything happens locally on your device. Your playlists, listening history, custom queues, lyrics, and tag changes stay strictly on your phone.
+### Playback & Queue
+- **Vinyl mode & regular cover view**: Switch between album artwork and a turntable view where swiping slides the next record out of its sleeve, and holding or dragging the outer edge scrubs through the track.
+- **Audio controls**: Crossfade, skip silence, ReplayGain (track/album + preamp), 5-band equalizer, bass boost, virtualizer, left/right balance, mono downmix, per-device Auto-EQ, speed & pitch controls, a **Slowed + Reverb** preset, A-B loop, and sleep timer (by minutes, track count, or end of track).
+- **Queue & Audio Output**: Split queue (**Played**, **Now Playing**, **Up Next**) with drag reordering, swipe-to-remove, saved queues, swipe-right on any track to play next, endless auto-queue from your library, and an in-player audio output device picker.
+- **Extras**: Double-tap cover sides to seek ±10s, long-audio position memory (>20 min), Car Mode (portrait and landscape), and 5 home screen widgets (`2x2`, `4x1`, `4x2`, `4x4` queue, `4x4` cover player).
 
----
+### Home, Playlists & Online Discovery
+- **Home**: Quick Picks 2-column grid, Right Now greeting card, jump-back shelves, daily mixes, mood mixes, and an optional Release Radar section for followed artists.
+- **Playlists & Library**: Search inside any playlist, pin favorite playlists with a heart icon, exclude or whitelist folders, filter short clips/system audio, and enable Private Session to pause history tracking.
+- **Downloads & Release Radar**: Search and download tracks or albums from MusicMan, Radio Javan, Deezer, Saavn, YouTube, SoundCloud, and Bandcamp with automatic latency/VPN source routing, `cookies.txt` support for YouTube, cover detail sheets, and an option to hide tracks already in your library.
 
-## What Makes It Special
+### Lyrics, Translation & Share Cards
+- **Lyrics**: Reads embedded tags and local `.lrc` files, or fetches synced/plain lyrics from LRCLIB, Genius, NetEase, Kugou, lyrics.ovh, or a custom HTTPS endpoint. Includes a line-by-line LRC timestamp editor and timing offset controls.
+- **Free bilingual translation**: Translates lyrics line-by-line and caches them locally without needing an API key, plus a gentle ambient pulse during long instrumental breaks.
+- **Share Card Studio**: Export track info, selected lyric lines, or listening reports as `1:1`, `4:5`, or `9:16` cards with live theme, color, and font-size previews.
 
-### 🎧 The Player & Vinyl Turntable
-- **Realistic Vinyl Mode**: Tap into the turntable view to watch your vinyl rotate on the platter. Hold your finger down to grab the record, scrub backward or forward across the grooves, and swipe to watch a new album slide gracefully out of its cardboard sleeve.
-- **Waveform Timeline**: Scrubber with custom smoothed waveforms seeded from each track's unique identity. Scrubbing feels alive without triggering full-screen recompositions.
-- **Living Play Button**: Springs and morphs between a squircle when playing and a circle when paused, backed by tactile haptics.
-- **Endless Smart Auto-Queue**: When your active queue ends, LogaRhythm automatically picks the next tracks based on audio fingerprint similarity, genre harmony, and tempo so the music never abruptly cuts out.
-- **Swipe-to-Play-Next**: Swipe right on any track in your library to slot it immediately as the next song up.
+### Library Tools & Listening Stats
+- **Tag Editor & Batch Fixer**: Edit tags for MP3, FLAC, M4A, and OGG safely via temporary verified writes, clean noisy filenames in bulk and match metadata/covers from Deezer, iTunes, MusicBrainz, Radio Javan, and MusicMan, find duplicate tracks, or trim audio to make ringtones.
+- **Offline Stats**: Top tracks, artists, and albums for any date range, ranked by play count or listening minutes.
 
----
+### Themes, Fonts & Backups
+- **Appearance**: Dynamic colors extracted from the playing album cover by default, plus 10 built-in presets, Material You, Pure Black OLED, custom accent/background wallpaper, and corner roundness options.
+- **Typography & Languages**: Full English and Persian (RTL) interface, Vazirmatn default font, paired font presets, and custom `.ttf` / `.otf` font import. Adapted for phones, foldables, and tablets.
+- **Backup & AI**: Single-file backup/restore (playlists, favorites, history, lyrics), M3U playlist import/export, and optional AI playlist generation (Gemini or any OpenAI-compatible API, off by default, key stored in Android KeyStore).
 
-### 🎚️ Audio Sculpting Suite
-- **ReplayGain Normalization**: True track and album gain support across MP3, FLAC, M4A, and Ogg formats to eliminate sudden volume jumps.
-- **5-Band Parametric Equalizer**: Smooth Bézier frequency curve, bass booster, and 3D audio virtualizer.
-- **Per-Device Auto-EQ**: Automatically remembers different equalizer curves for each Bluetooth speaker, car audio system, or pair of wired headphones you plug in.
-- **Nighttime Slowed + Reverb**: A one-tap preset that shifts pitch, adds warm decay, and eases playback speed for relaxed late-night sessions.
-- **Precision A–B Looper**: Pinpoint two timestamps to loop a specific guitar solo, vocal run, or difficult lyric.
-- **Gapless & Silence Skipping**: Automatic crossfade and silent-intro trimmer to keep energy seamless between tracks.
-
----
-
-### 🎤 Synchronized Lyrics & Share Studio
-- **Multi-Source Synced Lyrics**: Reads embedded SYLT/USLT metadata, companion `.lrc` files, or fetches time-synced lyrics automatically from LRCLIB, Genius, NetEase, Kugou, and lyrics.ovh.
-- **Built-in LRC Editor**: Tap-to-sync timestamps line-by-line while listening, or use ±100ms nudges to align lines perfectly.
-- **Share Card Studio**: Select favorite lyric lines or album artwork and export them into beautiful, typography-driven story cards (`1:1`, `4:5`, or `9:16`) ready for Instagram Stories, Telegram, or Twitter.
-
----
-
-### 🌐 Unified Artist Search & Multi-Source Deduplication
-- **Single Artist Identity**: Searching for an artist normalizes names and aliases across Deezer, Radio Javan, MusicMan, and Saavn. Instead of seeing three duplicate cards for the same person, you get one unified artist card with subtle source badges.
-- **Progressive Discography Loading**: Tapping an artist pulls albums, singles, and collaborations across all connected sources in parallel without waiting on slow endpoints.
-- **One-Tap Downloads**: Save full albums or singles directly to your device with tags and artwork automatically embedded.
-
----
-
-### 🏷️ Batch Tag Fixer & Audio Trimmer
-- **Smart Filename Cleaner**: Downloaded tracks often come polluted with noise like `Artist_-_Track_Name_(320kbps_Exclusive_Site).mp3`. LogaRhythm cleans the junk and queries Deezer, iTunes, and MusicBrainz to match original tags and high-res album covers.
-- **Safe Tag Writer**: Edits write to an isolated temporary copy and verify checksums before replacing the original audio file.
-- **Audio Trimmer**: Cut lossless tracks or MP3s with millisecond precision to create customized ringtones and notification sounds.
-
----
-
-### 📊 100% Offline Listening Insights
-- **Weekly & Monthly Reports**: See your genuine top songs, artists, and albums for any custom date range.
-- **Minutes vs. Plays**: Toggle between raw play counts and total time listened to see what you actually spent the most time with.
-- **Private Session**: Pause history tracking whenever someone else is borrowing your phone or playing party tunes.
-
----
-
-### 🎨 Craftsmanship, Fonts & Themes
-- **Adaptive Ambient Glow**: The background subtly pulls ambient hues from whatever album cover is currently playing.
-- **Themes for Any Screen**: Pure Pitch Black for OLED battery saving, Ink & Ember, Material You dynamic wallpaper colors, and a Custom Theme Studio.
-- **Bilingual Persian & English Typography**: Built with full native RTL support, default Vazirmatn font paired with modern Latin typefaces, and the ability to import your own `.ttf` / `.otf` files.
-- **5 Glance Home Screen Widgets**: From a compact 2×2 cover pill to a full 4×4 queue manager.
-- **Distraction-Free Car Mode**: Large, high-contrast buttons in both landscape and portrait for safe road control.
-
----
-
-## Performance & Optimization
-
-LogaRhythm is tuned to run smoothly even on older devices with weak CPUs and limited memory:
-- **Zero-Recomposition Playback Ticks**: Playback position updates are piped directly into Canvas draw passes or isolated leaves, preventing whole-screen recomposition loops.
-- **Graphics-Layer Micro-Interactions**: Touch ripples, spring bounces, and scale animations run strictly on the GPU layer.
-- **Lean Release Builds**: Full R8 code and resource shrinking with Compose compiler strong skipping mode enabled for snappy cold starts.
-
----
+> See [docs/FEATURES.md](docs/FEATURES.md) for the complete breakdown.
 
 ## Installation
 
-LogaRhythm runs on **Android 8.0 (Oreo)** and above.
+Requires **Android 8.0 (API 26)** or newer.
 
-| Architecture | Recommended Devices | Download |
+| Build | Best For | Download |
 | :--- | :--- | :--- |
-| **arm64-v8a** | Modern 64-bit phones (95%+ of Android phones) | [Latest Release](https://github.com/Yasinjahantigh/LogaRhythm-Android/releases/latest) |
-| **armeabi-v7a** | Older 32-bit Android phones | [Releases Archive](https://github.com/Yasinjahantigh/LogaRhythm-Android/releases) |
-| **Universal APK** | Compatible with all devices | [GitHub Releases](https://github.com/Yasinjahantigh/LogaRhythm-Android/releases/latest) |
+| **arm64-v8a** | Most modern Android phones | [Latest Release](https://github.com/Yasinjahantigh/LogaRhythm-Android/releases/latest) |
+| **armeabi-v7a** | Older 32-bit Android phones | [All Releases](https://github.com/Yasinjahantigh/LogaRhythm-Android/releases) |
+| **Universal APK** | Any Android ABI (larger file) | [Latest Release](https://github.com/Yasinjahantigh/LogaRhythm-Android/releases/latest) |
 
-You can also download direct APKs from the official [Telegram Channel (@LogaRhythmApp)](https://t.me/LogaRhythmApp).
-
----
+Direct APKs are also posted in the Telegram channel: [@LogaRhythmApp](https://t.me/LogaRhythmApp).
 
 ## Building from Source
 
-LogaRhythm is written in Kotlin using Jetpack Compose, Media3 ExoPlayer, and Room.
+Built with Kotlin, Jetpack Compose, Media3 ExoPlayer, Room, Hilt, and Glance.
+
+Requirements: JDK 17 or 21, Android SDK Platform 35 (`minSdk = 26`, `targetSdk = 35`).
 
 ```bash
-# Clone repository
 git clone https://github.com/Yasinjahantigh/LogaRhythm-Android.git
 cd LogaRhythm-Android
 
-# Build debug APK
+# Debug build
 ./gradlew :app:assembleDebug
+
+# Release build for Myket (strips REQUEST_INSTALL_PACKAGES and routes updates to Myket)
+./gradlew :app:assembleRelease -PdistributionChannel=myket
 ```
 
-Requirements:
-- Android Studio Ladybug / Meerkat or Android SDK command-line tools
-- JDK 17 or JDK 21
-- Android SDK Platform 35+
+## Privacy & Security
 
----
+- **Local library**: Your songs, playlists, tags, and listening history stay on your device.
+- **Transport & credentials**: Network calls enforce HTTPS with standard system TLS verification. Optional YouTube `cookies.txt` files are encrypted with Android KeyStore (AES-256-GCM) and only decrypted to a `0600` temp file that is deleted immediately after use.
+- **Verified self-updates** *(GitHub builds)*: Checks GitHub Releases periodically, and checks host, package ID, and signing certificate before opening the installer. Myket builds remove `REQUEST_INSTALL_PACKAGES` and open Myket instead.
+- **One-time install counter & optional diagnostics**: On first launch, the app records a single random `installId`, version, and channel (`github` or `myket`) with no device/hardware IDs and no recurring pings. Crash reports (sanitized of tokens, cookies, and file paths) and anonymous weekly summaries are controlled via the first-run consent sheet and **Settings → Privacy**. **Shake-to-Report** and **Settings → Suggestions** only send data when you tap Send.
 
-## Privacy & Network Disclosure
+## Support & License
 
-- **Zero Tracking**: No advertising SDKs, no behavioral tracking pixels, and no crash reporters collecting your data.
-- **Local-Only Data**: Your songs, playlists, favorites, listening stats, and tag edits stay on your device.
-- **Network Requests**: The app only connects to the internet when you explicitly ask it to (searching for lyrics, downloading tracks, or looking up cover artwork). Outside of direct user requests, it makes an anonymous one-time installation count on first launch and checks for GitHub releases once daily.
+If you find LogaRhythm useful, starring the repo helps a lot. Optional donations are available in **Settings → About** ([Daramet](https://daramet.com/yasinjahantigh) or TON).
 
----
-
-## License
-
-LogaRhythm is free, open-source software licensed under the **Apache License 2.0**. See the [LICENSE](LICENSE) file for details.
+LogaRhythm is free software licensed under the **GNU General Public License v3.0 (GPL-3.0)**. See [LICENSE](LICENSE), [NOTICE](NOTICE), and [THIRD_PARTY_NOTICES](THIRD_PARTY_NOTICES).

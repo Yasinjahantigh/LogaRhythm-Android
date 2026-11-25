@@ -2,6 +2,7 @@
 import html
 import json
 import os
+import re
 import subprocess
 import urllib.error
 import urllib.request
@@ -20,11 +21,8 @@ APK_ABIS = [
 MAX_APK_BYTES = 49 * 1024 * 1024
 
 FALLBACK_CHANGELOG = (
-    "• منبع دانلود جدید MusicMan با کاتالوگ فارسی آماده\n"
-    "• بازسازی میکس روزانه با هوش مصنوعی و انتخاب هوشمند آهنگ‌ها\n"
-    "• ویجت لیست آهنگ‌ها روی صفحهٔ اصلی با پخش با یک لمس\n"
-    "• کشیدن آهنگ به راست برای پخش به‌عنوان آهنگ بعدی\n"
-    "• ماندن ترتیب مرتب‌سازی کتابخانه پس از بستن و باز کردن اپ"
+    "• بهبود پایداری، سرعت و تجربهٔ کاربری در بخش‌های مختلف برنامه\n"
+    "• رفع چند ایراد گزارش‌شده و بهینه‌سازی پخش و مدیریت کتابخانه"
 )
 
 if not CHANNEL_ID:
@@ -37,12 +35,17 @@ def apk_path(abi):
     return f"LogaRhythm-{TAG}-{abi}.apk"
 
 
+def _tag_sort_key(tag):
+    nums = [int(part) for part in re.findall(r"\d+", tag)]
+    return tuple(nums)
+
+
 def get_commits():
     try:
         tags = subprocess.check_output(
             ["git", "tag", "-l", "v*.*.*"], text=True
         ).strip().split("\n")
-        tags = sorted([t for t in tags if t], key=lambda t: [int(x) for x in t.lstrip("v").split(".")])
+        tags = sorted([t for t in tags if t], key=_tag_sort_key)
         if len(tags) < 2:
             return ""
         prev = tags[-2]
@@ -182,7 +185,7 @@ def send_apk(path, caption):
 
 
 def release_notes_file():
-    """A hand-written caption wins over the generated one: docs/telegram/<tag>.md."""
+    """A hand-written Telegram post wins over generated ones: docs/telegram/<tag>.md."""
     path = os.path.join("docs", "telegram", f"{TAG}.md")
     if os.path.isfile(path):
         with open(path, encoding="utf-8") as f:
@@ -190,9 +193,34 @@ def release_notes_file():
     return None
 
 
+def persian_notes_from_github_release():
+    """Falls back to the Persian section in docs/releases/<tag>.md if present."""
+    path = os.path.join("docs", "releases", f"{TAG}.md")
+    if not os.path.isfile(path):
+        return None
+    with open(path, encoding="utf-8") as f:
+        lines = f.read().splitlines()
+    in_fa = False
+    collected = []
+    for line in lines:
+        stripped = line.strip()
+        if re.match(r"^#{1,3}\s+.*(فارسی|تغییرات)", stripped):
+            in_fa = True
+            continue
+        if in_fa and re.match(r"^#{1,3}\s+", stripped):
+            break
+        if in_fa and stripped and stripped != "---":
+            collected.append(stripped)
+    return "\n".join(collected) if collected else None
+
+
 commits = get_commits()
 notes = release_notes_file()
-message = html.escape(notes) if notes else build_message(ask_gemma(commits))
+if notes:
+    message = html.escape(notes)
+else:
+    changelog = ask_gemma(commits) or persian_notes_from_github_release()
+    message = build_message(changelog)
 print(message)
 send_message(message)
 

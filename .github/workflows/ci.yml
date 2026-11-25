@@ -30,14 +30,27 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      - name: Assemble Debug APK
+      - name: Assemble Debug APK (GitHub)
         run: ./gradlew :app:assembleDebug
+
+      - name: Verify Myket Manifest Strip
+        run: |
+          ./gradlew :app:processDebugManifest -PdistributionChannel=myket
+          MANIFEST="app/build/intermediates/merged_manifest/debug/stripInstallPermissionDebug/AndroidManifest.xml"
+          if [ ! -f "$MANIFEST" ]; then
+            echo "ERROR: Expected Myket merged manifest not found at $MANIFEST"
+            exit 1
+          fi
+          if grep -q "REQUEST_INSTALL_PACKAGES" "$MANIFEST"; then
+            echo "ERROR: REQUEST_INSTALL_PACKAGES present in Myket manifest!"
+            exit 1
+          fi
 
       - name: Run Unit Tests
         run: ./gradlew :app:testDebugUnitTest
 
       - name: Run Lint
-        run: ./gradlew :app:lintDebug --rerun-tasks
+        run: ./gradlew :app:lintDebug
 
       - name: Upload Debug APK
         if: always()

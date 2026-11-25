@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Release version (for example 1.4.0 or v1.4.0). Leave empty to increment the patch version."
+        description: "Release version (for example 2.2.0 or v2.2.0). Leave empty to increment the patch version."
         required: false
         default: ""
 
@@ -41,7 +41,7 @@ jobs:
           else
             LATEST_TAG=$(git tag -l "v*.*.*" | sort -V | tail -n 1)
             if [ -z "$LATEST_TAG" ]; then
-              LATEST_TAG="v1.3.1"
+              LATEST_TAG="v2.2.0"
             fi
             TAG_NO_V=${LATEST_TAG#v}
             IFS='.' read -r MAJOR MINOR PATCH <<< "$TAG_NO_V"
@@ -77,8 +77,8 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      - name: Run unit tests
-        run: ./gradlew :app:testDebugUnitTest
+      - name: Run Unit Tests & Lint
+        run: ./gradlew :app:testDebugUnitTest :app:lintDebug
 
       - name: Decode keystore
         env:
@@ -88,7 +88,7 @@ jobs:
             echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
           fi
 
-      - name: Build release APK
+      - name: Build GitHub Release APKs
         env:
           KEYSTORE_PATH: ${{ runner.temp }}/release.jks
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
@@ -97,48 +97,82 @@ jobs:
           REQUIRE_RELEASE_SIGNING: "true"
           GIT_TAG: ${{ steps.versioning.outputs.TAG_NAME }}
           INSTALL_ENDPOINT: ${{ vars.INSTALL_ENDPOINT }}
-        run: ./gradlew :app:assembleRelease
+        run: ./gradlew :app:assembleRelease -PdistributionChannel=github
 
-      - name: Verify APK signature
+      - name: Verify & Collect GitHub APKs
         run: |
           BUILD_TOOLS_DIR=$(ls -d ${ANDROID_HOME}/build-tools/* | sort -V | tail -n 1)
+          TAG="${{ steps.versioning.outputs.TAG_NAME }}"
+          mkdir -p release-out
           shopt -s nullglob
           for apk in app/build/outputs/apk/release/*.apk; do
             echo "Verifying $apk"
             "$BUILD_TOOLS_DIR/apksigner" verify --verbose "$apk"
-          done
-
-      - name: Rename APKs
-        run: |
-          TAG="${{ steps.versioning.outputs.TAG_NAME }}"
-          shopt -s nullglob
-          for apk in app/build/outputs/apk/release/*.apk; do
-            base=$(basename "$apk" .apk)   # e.g. app-arm64-v8a-release
+            base=$(basename "$apk" .apk)
             abi=${base#app-}
             abi=${abi%-unsigned}
             abi=${abi%-release}
-            cp "$apk" "LogaRhythm-$TAG-$abi.apk"
+            cp "$apk" "release-out/LogaRhythm-$TAG-$abi.apk"
           done
-          ls -1 LogaRhythm-*.apk
+
+      - name: Build Myket Universal Release APK
+        env:
+          KEYSTORE_PATH: ${{ runner.temp }}/release.jks
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+          REQUIRE_RELEASE_SIGNING: "true"
+          GIT_TAG: ${{ steps.versioning.outputs.TAG_NAME }}
+          INSTALL_ENDPOINT: ${{ vars.INSTALL_ENDPOINT }}
+        run: |
+          ./gradlew :app:assembleRelease -PdistributionChannel=myket
+          BUILD_TOOLS_DIR=$(ls -d ${ANDROID_HOME}/build-tools/* | sort -V | tail -n 1)
+          MANIFEST="app/build/intermediates/merged_manifest/release/stripInstallPermissionRelease/AndroidManifest.xml"
+          if [ ! -f "$MANIFEST" ]; then
+            echo "ERROR: Expected Myket merged manifest not found at $MANIFEST"
+            exit 1
+          fi
+          if grep -q "REQUEST_INSTALL_PACKAGES" "$MANIFEST"; then
+            echo "ERROR: REQUEST_INSTALL_PACKAGES leaked into Myket release manifest!"
+            exit 1
+          fi
+          TAG="${{ steps.versioning.outputs.TAG_NAME }}"
+          UNI="app/build/outputs/apk/release/app-universal-release.apk"
+          if [ -f "$UNI" ]; then
+            "$BUILD_TOOLS_DIR/apksigner" verify --verbose "$UNI"
+            cp "$UNI" "release-out/LogaRhythm-$TAG-myket-universal.apk"
+          fi
+
+      - name: Prepare Release Notes
+        run: |
+          TAG="${{ steps.versioning.outputs.TAG_NAME }}"
+          if [ -f "docs/releases/${TAG}.md" ]; then
+            cp "docs/releases/${TAG}.md" "release-out/release-notes.md"
+          else
+            echo "LogaRhythm ${TAG} — See CHANGELOG.md for the full list of changes." > "release-out/release-notes.md"
+          fi
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: release-apk-${{ steps.versioning.outputs.TAG_NAME }}
-          path: LogaRhythm-*.apk
+          path: release-out/*
 
       - name: Publish GitHub release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.versioning.outputs.TAG_NAME }}
-          files: LogaRhythm-*.apk
-          body_path: docs/telegram/${{ steps.versioning.outputs.TAG_NAME }}.md
-          generate_release_notes: false
+          files: release-out/LogaRhythm-*.apk
+          body_path: release-out/release-notes.md
+          generate_release_notes: true
 
       - name: Post to Telegram
+        if: env.TELEGRAM_BOT_TOKEN != '' && env.TELEGRAM_CHANNEL_ID != ''
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHANNEL_ID: ${{ secrets.TELEGRAM_CHANNEL_ID }}
           TAG_NAME: ${{ steps.versioning.outputs.TAG_NAME }}
-        run: python3 .github/scripts/telegram_release.py
+        run: |
+          cp release-out/LogaRhythm-*.apk .
+          python3 .github/scripts/telegram_release.py
