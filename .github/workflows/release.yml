@@ -140,7 +140,8 @@ jobs:
           UNI="app/build/outputs/apk/release/app-universal-release.apk"
           if [ -f "$UNI" ]; then
             "$BUILD_TOOLS_DIR/apksigner" verify --verbose "$UNI"
-            cp "$UNI" "release-out/LogaRhythm-$TAG-myket-universal.apk"
+            mkdir -p release-out/myket
+            cp "$UNI" "release-out/myket/LogaRhythm-$TAG-myket-universal.apk"
           fi
 
       - name: Prepare Release Notes
@@ -156,7 +157,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: release-apk-${{ steps.versioning.outputs.TAG_NAME }}
-          path: release-out/*
+          path: release-out/**
 
       - name: Publish GitHub release
         uses: softprops/action-gh-release@v2
