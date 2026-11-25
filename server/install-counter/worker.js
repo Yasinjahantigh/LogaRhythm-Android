@@ -41,6 +41,9 @@ export default {
     if (url.pathname === "/feedback" && request.method === "POST") return submitFeedback(request, env);
     if (url.pathname === "/listening-weekly" && request.method === "POST") return submitWeeklyListening(request, env);
 
+    if ((url.pathname === "/admin" || url.pathname === "/admin/") && request.method === "GET") {
+      return adminDashboard();
+    }
     if (url.pathname.startsWith("/admin/") && request.method === "GET") {
       return handleAdmin(url, request, env);
     }
@@ -607,6 +610,203 @@ function sanitizeMultiline(value, max) {
   return typeof value === "string"
     ? value.replace(/\r\n/g, "\n").trim().slice(0, max)
     : "";
+}
+
+function adminDashboard() {
+  const html = `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>LogaRhythm Admin</title>
+<style>
+  :root { color-scheme: dark; --bg:#0d1117; --card:#161b22; --border:#30363d; --text:#e6edf3; --muted:#8b949e; --accent:#34d399; --danger:#f87171; --warn:#fbbf24; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif; background:var(--bg); color:var(--text); line-height:1.5; }
+  .wrap { max-width:1040px; margin:0 auto; padding:20px 16px 48px; }
+  header { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:12px; margin-bottom:20px; }
+  h1 { font-size:20px; margin:0; display:flex; align-items:center; gap:8px; }
+  .badge { font-size:12px; padding:2px 8px; border-radius:999px; background:#1f2937; color:var(--accent); border:1px solid var(--border); }
+  .card { background:var(--card); border:1px solid var(--border); border-radius:12px; padding:16px; margin-bottom:14px; }
+  .login { max-width:420px; margin:64px auto; }
+  .row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+  input[type=password], input[type=text] { flex:1; min-width:180px; background:#0b0f14; color:var(--text); border:1px solid var(--border); border-radius:8px; padding:10px 12px; font-size:14px; }
+  button { background:var(--accent); color:#052e16; border:0; border-radius:8px; padding:9px 14px; font-weight:600; cursor:pointer; font-size:13px; }
+  button.sec { background:#21262d; color:var(--text); border:1px solid var(--border); }
+  button:disabled { opacity:.6; cursor:default; }
+  .stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:10px; margin-bottom:16px; }
+  .stat { background:var(--card); border:1px solid var(--border); border-radius:10px; padding:12px; }
+  .stat .k { font-size:12px; color:var(--muted); }
+  .stat .v { font-size:22px; font-weight:700; margin-top:2px; }
+  .tabs { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:14px; }
+  .tab { background:#161b22; color:var(--muted); border:1px solid var(--border); border-radius:999px; padding:7px 14px; font-size:13px; cursor:pointer; }
+  .tab.active { background:var(--accent); color:#052e16; border-color:var(--accent); font-weight:600; }
+  .meta { display:flex; flex-wrap:wrap; gap:8px; align-items:center; font-size:12px; color:var(--muted); margin-bottom:8px; }
+  .pill { padding:2px 8px; border-radius:6px; background:#21262d; color:var(--text); border:1px solid var(--border); }
+  .pill.warn { color:var(--warn); }
+  .pill.danger { color:var(--danger); }
+  pre { background:#0b0f14; border:1px solid var(--border); border-radius:8px; padding:12px; overflow:auto; max-height:360px; font-size:12px; white-space:pre-wrap; word-break:break-word; margin:8px 0 0; }
+  details { margin-top:8px; }
+  summary { cursor:pointer; color:var(--accent); font-size:13px; font-weight:600; }
+  .err { color:var(--danger); font-size:13px; margin-top:8px; }
+  .empty { color:var(--muted); text-align:center; padding:32px 12px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div id="loginView" class="card login">
+    <h1 style="margin-bottom:8px">LogaRhythm Admin</h1>
+    <p style="color:var(--muted);font-size:13px;margin:0 0 14px">Enter your ADMIN_TOKEN to view crash reports, shake bug logs, suggestions, and weekly stats.</p>
+    <form id="loginForm" class="row">
+      <input id="tokenInput" type="password" placeholder="ADMIN_TOKEN" autocomplete="current-password" required>
+      <button type="submit">Sign in</button>
+    </form>
+    <div id="loginErr" class="err"></div>
+  </div>
+
+  <div id="appView" style="display:none">
+    <header>
+      <h1>LogaRhythm Admin <span class="badge" id="statusBadge">Connected</span></h1>
+      <div class="row">
+        <button class="sec" id="refreshBtn">Refresh</button>
+        <button class="sec" id="logoutBtn">Log out</button>
+      </div>
+    </header>
+    <div class="stats" id="statsGrid"></div>
+    <div class="tabs" id="tabs">
+      <button class="tab active" data-tab="reports">Bug Reports</button>
+      <button class="tab" data-tab="crashes">Crashes</button>
+      <button class="tab" data-tab="feedback">Suggestions</button>
+      <button class="tab" data-tab="weekly">Weekly Stats</button>
+    </div>
+    <div id="list"></div>
+  </div>
+</div>
+<script>
+const KEY = "lr_admin_token";
+let activeTab = "reports";
+const el = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;" }[c]));
+
+function getToken() { return sessionStorage.getItem(KEY) || ""; }
+
+async function api(path) {
+  const res = await fetch(path, { headers: { "x-admin-token": getToken() } });
+  if (res.status === 401) throw new Error("unauthorized");
+  if (!res.ok) throw new Error("HTTP " + res.status);
+  return res.json();
+}
+
+function fmtDate(iso) {
+  if (!iso) return "";
+  try { return new Date(iso).toLocaleString(); } catch { return iso; }
+}
+
+function renderStats(s) {
+  const versions = (s.versions || []).slice(0, 4).map(v => v.version + ": " + v.count).join(" · ") || "—";
+  const channels = (s.channels || []).map(c => c.channel + ": " + c.count).join(" · ") || "—";
+  el("statsGrid").innerHTML = [
+    ["Installs", s.installs ?? 0],
+    ["Active 24h", s.active24h ?? 0],
+    ["Active 7d", s.active7d ?? 0],
+    ["Active 30d", s.active30d ?? 0],
+    ["Versions", versions],
+    ["Channels", channels]
+  ].map(([k, v]) => '<div class="stat"><div class="k">' + esc(k) + '</div><div class="v" style="' + (typeof v === "string" ? "font-size:13px;font-weight:600" : "") + '">' + esc(v) + '</div></div>').join("");
+}
+
+function renderItems(items) {
+  if (!items || !items.length) {
+    el("list").innerHTML = '<div class="card empty">No entries yet.</div>';
+    return;
+  }
+  el("list").innerHTML = items.map((item, idx) => {
+    const v = item.value || {};
+    if (activeTab === "weekly") {
+      const tracks = (v.topTracks || []).map(t => "• " + t.title + " — " + t.artist + " (" + t.plays + ")").join("\\n");
+      return '<div class="card">' +
+        '<div class="meta"><span class="pill">' + esc(v.week || item.id) + '</span><span>Reporters: ' + esc(v.reporters) + '</span><span>Plays: ' + esc(v.totalPlays) + '</span><span>Minutes: ' + esc(v.totalMinutes) + '</span></div>' +
+        (tracks ? '<pre>' + esc(tracks) + '</pre>' : '') +
+      '</div>';
+    }
+    const body = v.description || v.text || v.message || "";
+    const logs = v.recentLogs || v.stack || "";
+    const pillClass = activeTab === "crashes" ? "danger" : (activeTab === "reports" ? "warn" : "");
+    return '<div class="card">' +
+      '<div class="meta">' +
+        '<span class="pill ' + pillClass + '">' + esc(v.category || v.exception || activeTab) + '</span>' +
+        '<span class="pill">' + esc((v.channel || "github") + " v" + (v.version || "?")) + '</span>' +
+        (v.device ? '<span>' + esc(v.device) + '</span>' : '') +
+        (v.contact ? '<span>Contact: ' + esc(v.contact) + '</span>' : '') +
+        '<span>' + esc(fmtDate(v.at)) + '</span>' +
+      '</div>' +
+      (body ? '<div style="white-space:pre-wrap;font-size:14px">' + esc(body) + '</div>' : '') +
+      (logs ? '<details><summary>View Logs / Stack Trace</summary><div style="margin-top:8px"><button class="sec" onclick="copyPre(' + idx + ')">Copy</button></div><pre id="pre_' + idx + '">' + esc(logs) + '</pre></details>' : '') +
+    '</div>';
+  }).join("");
+}
+
+window.copyPre = async function(idx) {
+  const node = document.getElementById("pre_" + idx);
+  if (!node) return;
+  await navigator.clipboard.writeText(node.textContent);
+};
+
+async function loadAll() {
+  el("statusBadge").textContent = "Loading...";
+  try {
+    const [summary, listRes] = await Promise.all([
+      api("/admin/summary?limit=10"),
+      api("/admin/" + activeTab + "?limit=50")
+    ]);
+    renderStats(summary.stats || {});
+    renderItems(listRes.items || []);
+    el("loginView").style.display = "none";
+    el("appView").style.display = "block";
+    el("statusBadge").textContent = "Connected";
+  } catch (e) {
+    if (e.message === "unauthorized") {
+      sessionStorage.removeItem(KEY);
+      el("appView").style.display = "none";
+      el("loginView").style.display = "block";
+      el("loginErr").textContent = "Invalid ADMIN_TOKEN.";
+    } else {
+      el("statusBadge").textContent = "Error: " + e.message;
+    }
+  }
+}
+
+el("loginForm").addEventListener("submit", async ev => {
+  ev.preventDefault();
+  el("loginErr").textContent = "";
+  sessionStorage.setItem(KEY, el("tokenInput").value.trim());
+  await loadAll();
+});
+el("logoutBtn").addEventListener("click", () => {
+  sessionStorage.removeItem(KEY);
+  el("tokenInput").value = "";
+  el("appView").style.display = "none";
+  el("loginView").style.display = "block";
+});
+el("refreshBtn").addEventListener("click", loadAll);
+el("tabs").addEventListener("click", async ev => {
+  const btn = ev.target.closest(".tab");
+  if (!btn) return;
+  document.querySelectorAll(".tab").forEach(b => b.classList.remove("active"));
+  btn.classList.add("active");
+  activeTab = btn.dataset.tab;
+  const listRes = await api("/admin/" + activeTab + "?limit=50");
+  renderItems(listRes.items || []);
+});
+
+if (getToken()) loadAll();
+</script>
+</body>
+</html>`;
+  return new Response(html, {
+    status: 200,
+    headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" }
+  });
 }
 
 function json(body, status = 200) {
