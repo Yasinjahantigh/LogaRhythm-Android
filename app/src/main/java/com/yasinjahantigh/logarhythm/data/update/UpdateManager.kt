@@ -2,9 +2,12 @@ package com.yasinjahantigh.logarhythm.data.update
 
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
 import androidx.core.content.FileProvider
 import androidx.core.content.pm.PackageInfoCompat
+import com.yasinjahantigh.logarhythm.BuildConfig
 import com.yasinjahantigh.logarhythm.R
 import com.yasinjahantigh.logarhythm.data.analytics.InstallReporter
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -18,21 +21,23 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 import java.io.IOException
+import java.security.MessageDigest
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Checks the public GitHub release feed and installs the split APK that matches the device ABI.
- * The updater intentionally has no server of its own: the release page is the source of truth,
- * so a tampered app cannot invent versions and Android still enforces the signing key.
+ * Checks the public GitHub release feed and installs the split APK that matches the device ABI
+ * (when [BuildConfig.SELF_UPDATE_ENABLED] is true), or routes store updates to Myket when built
+ * with `-PdistributionChannel=myket`.
  */
 @Singleton
 class UpdateManager @Inject constructor(
@@ -53,6 +58,12 @@ class UpdateManager @Inject constructor(
         const val AUTO_CHECK_INTERVAL_MS = 12 * 60 * 60 * 1000L
         val KNOWN_ABIS = listOf("arm64-v8a", "armeabi-v7a", "x86_64", "x86")
         val VERSION_TAG = Regex("""^v?(\d+)\.(\d+)\.(\d+)(?:[-+].*)?$""")
+        val ALLOWED_APK_HOSTS = setOf(
+            "github.com",
+            "objects.githubusercontent.com",
+            "release-assets.githubusercontent.com",
+            "github-releases.githubusercontent.com"
+        )
     }
 
     private val appContext = context.applicationContext
@@ -69,6 +80,9 @@ class UpdateManager @Inject constructor(
     val installedVersion: String = packageInfo.versionName.orEmpty()
     private val installedVersionCode: Int =
         PackageInfoCompat.getLongVersionCode(packageInfo).toInt()
+
+    val selfUpdateEnabled: Boolean = BuildConfig.SELF_UPDATE_ENABLED
+    val distributionChannel: String = BuildConfig.DISTRIBUTION_CHANNEL
 
     private val _state = MutableStateFlow<UpdateState>(UpdateState.Hidden)
     val state: StateFlow<UpdateState> = _state.asStateFlow()
@@ -87,15 +101,19 @@ class UpdateManager @Inject constructor(
         _autoCheckEnabled.value = enabled
     }
 
-    /** Throttled check that runs when the app opens; errors stay silent. */
+    /** Throttled check that runs when the app opens; disabled cleanly in store builds. */
     fun autoCheck() {
-        if (!_autoCheckEnabled.value) return
+        if (!selfUpdateEnabled || !_autoCheckEnabled.value) return
         val last = prefs.getLong(KEY_LAST_AUTO_CHECK, 0L)
         if (System.currentTimeMillis() - last < AUTO_CHECK_INTERVAL_MS) return
         check(silent = true)
     }
 
     fun check(silent: Boolean = false) {
+        if (!selfUpdateEnabled) {
+            if (!silent) openMyketStore()
+            return
+        }
         if (!checking.compareAndSet(false, true)) return
         if (!silent) _state.value = UpdateState.Checking
         scope.launch {
@@ -125,12 +143,37 @@ class UpdateManager @Inject constructor(
         }
     }
 
+    fun openMyketStore() {
+        val pkg = appContext.packageName
+        val marketIntent = Intent(Intent.ACTION_VIEW, Uri.parse("myket://details?id=$pkg")).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        val openedMarket = runCatching { appContext.startActivity(marketIntent) }.isSuccess
+        if (!openedMarket) {
+            val webIntent = Intent(Intent.ACTION_VIEW, Uri.parse("https://myket.ir/app/$pkg")).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            val openedWeb = runCatching { appContext.startActivity(webIntent) }.isSuccess
+            if (!openedWeb) {
+                scope.launch { _messages.emit(R.string.update_check_failed) }
+            }
+        }
+    }
+
     fun download() {
+        if (!selfUpdateEnabled) {
+            openMyketStore()
+            return
+        }
         val release = when (val current = _state.value) {
             is UpdateState.Available -> current.release
             is UpdateState.Failed -> current.release
             else -> null
         } ?: return
+        if (!isAllowedApkUrl(release.apkUrl)) {
+            _state.value = UpdateState.Failed(release)
+            return
+        }
         if (!downloading.compareAndSet(false, true)) return
         _state.value = UpdateState.Downloading(release, -1f)
         scope.launch {
@@ -138,6 +181,9 @@ class UpdateManager @Inject constructor(
             val target = File(dir, release.apkName)
             try {
                 fetchApk(release, dir, target)
+                if (!verifyDownloadedApk(target)) {
+                    throw SecurityException("APK signature or package mismatch")
+                }
                 _state.value = UpdateState.Hidden
                 install(target)
             } catch (_: Exception) {
@@ -157,10 +203,22 @@ class UpdateManager @Inject constructor(
         _state.value = UpdateState.Hidden
     }
 
+    private fun isAllowedApkUrl(raw: String): Boolean {
+        val httpUrl = raw.toHttpUrlOrNull() ?: return false
+        if (!httpUrl.isHttps) return false
+        val host = httpUrl.host.lowercase()
+        return host in ALLOWED_APK_HOSTS || host.endsWith(".githubusercontent.com")
+    }
+
     private fun fetchApk(release: AppRelease, dir: File, target: File) {
         val response = client.newCall(Request.Builder().url(release.apkUrl).build()).execute()
         response.use {
             if (!it.isSuccessful) throw IOException("HTTP ${it.code}")
+            if (!it.request.url.isHttps) throw SecurityException("Non-HTTPS APK redirect rejected")
+            val finalHost = it.request.url.host.lowercase()
+            if (finalHost !in ALLOWED_APK_HOSTS && !finalHost.endsWith(".githubusercontent.com")) {
+                throw SecurityException("Untrusted APK host: $finalHost")
+            }
             val body = it.body ?: throw IOException("empty body")
             val total = body.contentLength().takeIf { length -> length > 0 } ?: release.apkSizeBytes
             dir.listFiles()?.forEach { old -> if (old != target) old.delete() }
@@ -187,6 +245,38 @@ class UpdateManager @Inject constructor(
             }
             if (total > 0 && target.length() != total) throw IOException("truncated download")
         }
+    }
+
+    @Suppress("DEPRECATION")
+    private fun verifyDownloadedApk(file: File): Boolean {
+        if (!file.isFile || file.length() <= 0L) return false
+        val pm = appContext.packageManager
+        val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            PackageManager.GET_SIGNING_CERTIFICATES
+        } else {
+            PackageManager.GET_SIGNATURES
+        }
+        val archiveInfo = pm.getPackageArchiveInfo(file.absolutePath, flags) ?: return false
+        if (archiveInfo.packageName != appContext.packageName) return false
+
+        val installedInfo = pm.getPackageInfo(appContext.packageName, flags)
+        val installedDigests = certificateSha256Digests(installedInfo)
+        val archiveDigests = certificateSha256Digests(archiveInfo)
+        if (installedDigests.isEmpty() || archiveDigests.isEmpty()) return false
+        return archiveDigests.any { it in installedDigests }
+    }
+
+    @Suppress("DEPRECATION")
+    private fun certificateSha256Digests(info: android.content.pm.PackageInfo): Set<String> {
+        val signatures = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            info.signingInfo?.apkContentsSigners
+        } else {
+            info.signatures
+        } ?: return emptySet()
+        val digest = MessageDigest.getInstance("SHA-256")
+        return signatures.map { sig ->
+            digest.digest(sig.toByteArray()).joinToString("") { "%02x".format(it) }
+        }.toSet()
     }
 
     private fun install(file: File) {
@@ -264,7 +354,7 @@ class UpdateManager @Inject constructor(
             val asset = assets.optJSONObject(i) ?: continue
             val name = asset.optString("name")
             val url = asset.optString("browser_download_url")
-            if (!name.endsWith(".apk", ignoreCase = true) || url.isBlank()) continue
+            if (!name.endsWith(".apk", ignoreCase = true) || url.isBlank() || !isAllowedApkUrl(url)) continue
             apks += ApkAsset(name, url, asset.optLong("size"))
         }
         if (apks.isEmpty()) return null

@@ -5,9 +5,11 @@ import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.yasinjahantigh.logarhythm.data.datastore.PreferencesManager
+import com.yasinjahantigh.logarhythm.data.lyrics.LyricsTranslationService
 import com.yasinjahantigh.logarhythm.domain.model.LyricLine
 import com.yasinjahantigh.logarhythm.domain.model.Lyrics
 import com.yasinjahantigh.logarhythm.domain.lyrics.LrcParser
+import com.yasinjahantigh.logarhythm.domain.lyrics.LyricsInstrumentalDetector
 import com.yasinjahantigh.logarhythm.domain.lyrics.LyricsMismatch
 import com.yasinjahantigh.logarhythm.domain.model.Track
 import com.yasinjahantigh.logarhythm.domain.repository.LyricsRepository
@@ -37,6 +39,7 @@ class LyricsViewModel @Inject constructor(
     private val playerController: PlayerController,
     private val lyricsRepository: LyricsRepository,
     private val preferencesManager: PreferencesManager,
+    private val lyricsTranslationService: LyricsTranslationService,
     @param:ApplicationContext private val context: Context
 ) : ViewModel() {
 
@@ -61,7 +64,17 @@ class LyricsViewModel @Inject constructor(
     private val _saveMessage = MutableStateFlow<String?>(null)
     val saveMessage: StateFlow<String?> = _saveMessage.asStateFlow()
 
+    private val _translatedLines = MutableStateFlow<List<String>?>(null)
+    val translatedLines: StateFlow<List<String>?> = _translatedLines.asStateFlow()
+
+    private val _isTranslating = MutableStateFlow(false)
+    val isTranslating: StateFlow<Boolean> = _isTranslating.asStateFlow()
+
+    private val _translationFailed = MutableStateFlow(false)
+    val translationFailed: StateFlow<Boolean> = _translationFailed.asStateFlow()
+
     private var loadJob: Job? = null
+    private var translateJob: Job? = null
 
     // Reactive flow of lyrics for the currently active track
     val currentLyrics: StateFlow<Lyrics?> = currentTrack.flatMapLatest { track ->
@@ -109,12 +122,69 @@ class LyricsViewModel @Inject constructor(
     }.distinctUntilChanged()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), -1)
 
+    val translateLang: StateFlow<String> = preferencesManager.lyricsTranslateLang
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "")
+
+    fun setTranslateLanguage(lang: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            preferencesManager.setLyricsTranslateLang(lang)
+        }
+    }
+
+    /** True when synced playback is currently inside an instrumental intro, interlude, or outro break. */
+    val isInstrumentalSilence: StateFlow<Boolean> = combine(
+        currentLyrics,
+        activeLineIndex,
+        positionMs,
+        offsetMs,
+        currentTrack,
+        playerController.isPlaying
+    ) { values ->
+        val lyrics = values[0] as Lyrics?
+        val activeIdx = values[1] as Int
+        val pos = values[2] as Long
+        val offset = values[3] as Long
+        val track = values[4] as Track?
+        val playing = values[5] as Boolean
+        if (!playing || lyrics == null || !lyrics.isSynced || lyrics.lines.isEmpty()) {
+            false
+        } else {
+            LyricsInstrumentalDetector.findActiveGap(
+                lines = lyrics.lines,
+                activeIndex = activeIdx,
+                effectivePosMs = pos + offset,
+                trackDurationMs = track?.durationMs ?: 0L
+            ) != null
+        }
+    }.distinctUntilChanged().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+
     init {
         // Automatically attempt to discover/load lyrics when track changes
         viewModelScope.launch {
             currentTrack.collect { track ->
                 if (track != null) {
                     loadLyricsForTrack(track)
+                }
+            }
+        }
+        viewModelScope.launch {
+            combine(currentTrack, currentLyrics, translateLang) { track, lyrics, lang ->
+                Triple(track, lyrics, lang)
+            }.collect { (track, lyrics, lang) ->
+                translateJob?.cancel()
+                if (track == null || lyrics == null || lyrics.isEmpty || lang.isBlank()) {
+                    _translatedLines.value = null
+                    _isTranslating.value = false
+                    _translationFailed.value = false
+                } else {
+                    translateJob = launch {
+                        _isTranslating.value = true
+                        _translationFailed.value = false
+                        val lines = lyricsTranslationService.translateLyrics(track.id, lyrics, lang)
+                        _translatedLines.value = lines
+                        _translationFailed.value = lines == null
+                        _isTranslating.value = false
+                    }
                 }
             }
         }

@@ -34,4 +34,5 @@ interface AiPlaylistRepository {
     ): MagicPlaylistResult
 
     suspend fun savePlaylist(name: String, trackIds: List<String>): Long
+    fun lastErrorDetail(): String? = null
 }

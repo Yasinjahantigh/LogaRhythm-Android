@@ -92,6 +92,7 @@ fun DownloadScreen(
     val qualityPref by viewModel.downloadQualityPref.collectAsStateWithLifecycle()
     val pendingShareText by viewModel.pendingShareText.collectAsStateWithLifecycle()
     val routingStatus by viewModel.routingStatus.collectAsStateWithLifecycle()
+    val showOwned by viewModel.showOwned.collectAsStateWithLifecycle()
     var inspectedTrack by remember { mutableStateOf<DownloadSearchResult?>(null) }
 
     val context = LocalContext.current
@@ -330,6 +331,8 @@ fun DownloadScreen(
                                 onTogglePreview = viewModel::togglePreview,
                                 freshResults = freshResults,
                                 popularResults = popularResults,
+                                showOwned = showOwned,
+                                onToggleShowOwned = viewModel::toggleShowOwned,
                                 onRetry = { viewModel.search() }
                             )
                         } else {
@@ -346,7 +349,8 @@ fun DownloadScreen(
                                 onClearFinished = viewModel::clearFinished,
                                 onEditTags = { item ->
                                     item.mediaStoreId?.let { id -> onNavigateToTagEditor("local:$id") }
-                                }
+                                },
+                                onInspect = { item -> inspectedTrack = viewModel.toSearchResult(item) }
                             )
                         }
                     }
@@ -381,14 +385,25 @@ fun DownloadScreen(
         val activeItem = history.firstOrNull {
             it.sourceUrl == track.url || (it.videoId == track.id && it.source == track.source)
         }
+        val localTrack = viewModel.findLocalTrack(track)
+        val isOnDevice = localTrack != null || (activeItem?.status == com.yasinjahantigh.logarhythm.domain.model.DownloadStatus.SAVED && activeItem.contentUri != null)
+        val playLocalAction: (() -> Unit)? = when {
+            localTrack != null -> { { viewModel.playLocalTrack(localTrack) } }
+            activeItem?.status == com.yasinjahantigh.logarhythm.domain.model.DownloadStatus.SAVED && activeItem.contentUri != null -> {
+                { viewModel.play(activeItem) }
+            }
+            else -> null
+        }
         val pKey = viewModel.isPreviewKey(track)
         OnlineTrackDetailSheet(
             result = track,
             activeItem = activeItem,
+            isOnDevice = isOnDevice,
             isPreviewLoading = previewState.trackKey == pKey && previewState.isLoading,
             isPreviewPlaying = previewState.trackKey == pKey && previewState.isPlaying,
             onTogglePreview = { viewModel.togglePreview(track) },
             onDownload = { startDownload(track) },
+            onPlayLocal = playLocalAction,
             onDownloadAlbum = { viewModel.previewAlbum(track) },
             onDismiss = { inspectedTrack = null }
         )

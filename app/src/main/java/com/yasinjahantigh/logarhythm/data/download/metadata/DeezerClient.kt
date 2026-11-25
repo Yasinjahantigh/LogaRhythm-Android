@@ -57,7 +57,8 @@ class DeezerClient @Inject constructor(
                     durationMs = durationMs,
                     thumbnailUrl = art,
                     album = album?.optString("title").orEmpty(),
-                    albumArtist = artist
+                    albumArtist = artist,
+                    releaseDate = extractReleaseDate(item, album)
                 )
             }
         }
@@ -87,7 +88,8 @@ class DeezerClient @Inject constructor(
                     album = title,
                     albumArtist = artist,
                     trackCount = item.optInt("nb_tracks", 0).coerceAtLeast(0),
-                    collectionId = id
+                    collectionId = id,
+                    releaseDate = extractReleaseDate(item)
                 )
             }
         }
@@ -141,7 +143,8 @@ class DeezerClient @Inject constructor(
                 durationMs = durationMs,
                 thumbnailUrl = art,
                 album = album?.optString("title").orEmpty(),
-                albumArtist = artist
+                albumArtist = artist,
+                releaseDate = extractReleaseDate(item, album)
             )
         }
 
@@ -152,6 +155,7 @@ class DeezerClient @Inject constructor(
             val albumArtist = albumJson.optJSONObject("artist")?.optString("name").orEmpty().trim()
             val cover = listOf("cover_xl", "cover_big", "cover_medium")
                 .map { albumJson.optString(it) }.firstOrNull { it.startsWith("http") }
+            val albumReleaseDate = extractReleaseDate(albumJson)
             val header = if (albumTitle.isNotBlank()) {
                 com.yasinjahantigh.logarhythm.domain.model.DownloadSearchResult(
                     id = albumId,
@@ -165,7 +169,8 @@ class DeezerClient @Inject constructor(
                     album = albumTitle,
                     albumArtist = albumArtist,
                     trackCount = albumJson.optInt("nb_tracks", 0),
-                    collectionId = albumId
+                    collectionId = albumId,
+                    releaseDate = albumReleaseDate
                 )
             } else null
 
@@ -187,7 +192,8 @@ class DeezerClient @Inject constructor(
                     album = albumTitle,
                     albumArtist = albumArtist,
                     trackNumber = item.optInt("track_position", index + 1),
-                    collectionId = albumId
+                    collectionId = albumId,
+                    releaseDate = extractReleaseDate(item).ifBlank { albumReleaseDate }
                 )
             }
             header to tracks
@@ -224,7 +230,8 @@ class DeezerClient @Inject constructor(
                             kind = com.yasinjahantigh.logarhythm.domain.model.DownloadResultKind.ALBUM,
                             album = title,
                             collectionId = id,
-                            artistId = artistId
+                            artistId = artistId,
+                            releaseDate = extractReleaseDate(item)
                         )
                     )
                 }
@@ -266,7 +273,8 @@ class DeezerClient @Inject constructor(
                         kind = com.yasinjahantigh.logarhythm.domain.model.DownloadResultKind.TRACK,
                         album = album?.optString("title").orEmpty(),
                         albumArtist = artist,
-                        artistId = artistId
+                        artistId = artistId,
+                        releaseDate = extractReleaseDate(item, album)
                     )
                 )
             }
@@ -304,7 +312,8 @@ class DeezerClient @Inject constructor(
                                         albumArtist = artist,
                                         trackNumber = item.optInt("track_position", idx + 1),
                                         collectionId = alb.id,
-                                        artistId = artistId
+                                        artistId = artistId,
+                                        releaseDate = extractReleaseDate(item).ifBlank { alb.releaseDate }
                                     )
                                 }
                                 val snapshot: List<com.yasinjahantigh.logarhythm.domain.model.DownloadSearchResult>? =
@@ -390,6 +399,13 @@ class DeezerClient @Inject constructor(
             }
         }
         return best
+    }
+
+    private fun extractReleaseDate(item: JSONObject, album: JSONObject? = null): String {
+        val direct = item.optString("release_date").trim()
+        if (direct.isNotBlank() && direct != "0000-00-00") return direct
+        val nested = album?.optString("release_date")?.trim().orEmpty()
+        return if (nested.isNotBlank() && nested != "0000-00-00") nested else ""
     }
 
     private companion object {

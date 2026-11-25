@@ -112,6 +112,8 @@ fun DownloadSearchTab(
     onTogglePreview: (DownloadSearchResult) -> Unit = {},
     freshResults: List<DownloadSearchResult> = emptyList(),
     popularResults: List<DownloadSearchResult> = emptyList(),
+    showOwned: Boolean = false,
+    onToggleShowOwned: () -> Unit = {},
     onRetry: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -166,7 +168,9 @@ fun DownloadSearchTab(
 
         CategoryFilterRow(
             selected = categoryFilter,
-            onSelect = onCategoryFilterChange
+            onSelect = onCategoryFilterChange,
+            showOwned = showOwned,
+            onToggleShowOwned = onToggleShowOwned
         )
 
         SourceFilterRow(
@@ -308,7 +312,9 @@ fun DownloadSearchTab(
 @Composable
 private fun CategoryFilterRow(
     selected: DownloadSearchCategory,
-    onSelect: (DownloadSearchCategory) -> Unit
+    onSelect: (DownloadSearchCategory) -> Unit,
+    showOwned: Boolean,
+    onToggleShowOwned: () -> Unit
 ) {
     Row(
         modifier = Modifier
@@ -330,6 +336,12 @@ private fun CategoryFilterRow(
                 label = { Text(stringResource(labelRes)) }
             )
         }
+        FilterChip(
+            selected = showOwned,
+            onClick = onToggleShowOwned,
+            label = { Text(stringResource(R.string.download_filter_show_owned)) },
+            modifier = Modifier.testTag("download_filter_show_owned")
+        )
     }
 }
 

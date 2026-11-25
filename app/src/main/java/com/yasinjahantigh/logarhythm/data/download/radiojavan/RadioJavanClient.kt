@@ -143,6 +143,9 @@ class RadioJavanClient @Inject constructor(
                 val durationMs = if (durationSec > 0) (durationSec * 1000).toLong() else 0L
                 val link = item.optString("link").takeIf { it.startsWith("http") }
                     ?: "https://www.radiojavan.com/mp3s/mp3/$artist-$song"
+                val releaseDate = item.optString("release_date").trim()
+                    .ifBlank { item.optString("date").trim() }
+                    .ifBlank { item.optString("created_at").trim().take(10) }
 
                 results.add(
                     DownloadSearchResult(
@@ -153,7 +156,8 @@ class RadioJavanClient @Inject constructor(
                         url = link,
                         durationMs = durationMs,
                         thumbnailUrl = photo,
-                        kind = DownloadResultKind.TRACK
+                        kind = DownloadResultKind.TRACK,
+                        releaseDate = releaseDate
                     )
                 )
             }

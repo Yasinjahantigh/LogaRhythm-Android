@@ -69,14 +69,16 @@ class YtDlpSearchService @Inject constructor(
     private suspend fun searchSource(source: DownloadSource, expression: String): SourceOutcome {
         val processId = "search-${source.raw}-${UUID.randomUUID()}"
         return try {
-            val request = YoutubeDLRequest(expression).apply {
-                DownloadCommand.searchOptions(cookies.path()).forEach { (option, argument) ->
-                    if (argument == null) addOption(option) else addOption(option, argument)
+            val response = cookies.withTempCookieFile { cookiePath ->
+                val request = YoutubeDLRequest(expression).apply {
+                    DownloadCommand.searchOptions(cookiePath).forEach { (option, argument) ->
+                        if (argument == null) addOption(option) else addOption(option, argument)
+                    }
                 }
-            }
-            val response = runtime.engineUse {
-                runtime.executeWithTimeout(SEARCH_TIMEOUT_MS, processId) {
-                    YoutubeDL.getInstance().execute(request, processId)
+                runtime.engineUse {
+                    runtime.executeWithTimeout(SEARCH_TIMEOUT_MS, processId) {
+                        YoutubeDL.getInstance().execute(request, processId)
+                    }
                 }
             }
             SourceOutcome(SearchJsonParser.parse(source, response.out), null)

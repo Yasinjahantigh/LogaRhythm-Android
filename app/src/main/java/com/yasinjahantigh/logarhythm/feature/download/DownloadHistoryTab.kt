@@ -1,6 +1,7 @@
 package com.yasinjahantigh.logarhythm.feature.download
 
 import android.text.format.DateUtils
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -44,6 +45,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -72,7 +74,8 @@ fun DownloadHistoryTab(
     onClearFinished: () -> Unit,
     modifier: Modifier = Modifier,
     onRetryAllFailed: (() -> Unit)? = null,
-    onEditTags: ((DownloadItem) -> Unit)? = null
+    onEditTags: ((DownloadItem) -> Unit)? = null,
+    onInspect: ((DownloadItem) -> Unit)? = null
 ) {
     if (history.isEmpty()) {
         EmptyHistory(bottomPadding = bottomPadding, modifier = modifier)
@@ -126,7 +129,8 @@ fun DownloadHistoryTab(
                 onCancel = onCancel,
                 onRetry = onRetry,
                 onRemove = onRemove,
-                onEditTags = onEditTags
+                onEditTags = onEditTags,
+                onInspect = onInspect
             )
         }
     }
@@ -141,13 +145,15 @@ private fun DownloadHistoryItem(
     onCancel: (DownloadItem) -> Unit,
     onRetry: (DownloadItem) -> Unit,
     onRemove: (DownloadItem) -> Unit,
-    onEditTags: ((DownloadItem) -> Unit)? = null
+    onEditTags: ((DownloadItem) -> Unit)? = null,
+    onInspect: ((DownloadItem) -> Unit)? = null
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
 
     Card(
         modifier = Modifier
             .fillMaxWidth()
+            .then(if (onInspect != null) Modifier.clickable { onInspect(item) } else Modifier)
             .testTag("download_history_${item.id}"),
         shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(
@@ -161,7 +167,10 @@ private fun DownloadHistoryItem(
             ArtworkImage(
                 uri = item.artworkUrl ?: item.contentUri,
                 fallbackKey = item.title,
-                modifier = Modifier.size(52.dp),
+                modifier = Modifier
+                    .size(52.dp)
+                    .clip(RoundedCornerShape(14.dp))
+                    .then(if (onInspect != null) Modifier.clickable { onInspect(item) } else Modifier),
                 shape = RoundedCornerShape(14.dp),
                 contentDescription = stringResource(R.string.cd_artwork, item.title)
             )

@@ -1205,5 +1205,106 @@
     <string name="smart_taste_slot_afternoon">Afternoon vibe</string>
     <string name="smart_taste_slot_evening">Evening vibe</string>
     <string name="smart_taste_slot_night">Late-night vibe</string>
+
+    <!-- Player 3-dot Delete -->
+    <string name="player_menu_delete_device">Delete from device</string>
+
+    <!-- Spotify-style Home Quick Picks -->
+    <string name="home_quick_picks_title">Quick picks</string>
+    <string name="home_quick_pick_favorites">Liked Songs</string>
+    <string name="home_quick_pick_tracks_count">%1$d songs</string>
+
+    <!-- FullPlayer Up Next & About Artist / Audio Quality -->
+    <string name="player_up_next_label">Next: %1$s</string>
+    <string name="player_about_artist">About artist</string>
+    <string name="player_about_artist_title">About the Artist</string>
+    <string name="player_artist_library_tracks">%1$d songs in your library</string>
+    <string name="player_artist_your_plays">Your plays</string>
+    <string name="player_artist_listen_time">Listen time</string>
+    <string name="player_artist_top_tracks">Your favorites from %1$s</string>
+    <string name="player_artist_open_page">Open artist page</string>
+    <string name="player_audio_quality_title">Audio Quality &amp; File</string>
+    <string name="player_audio_quality_unavailable">Audio metadata unavailable</string>
+    <string name="player_spec_format">Format</string>
+    <string name="player_spec_codec">Codec</string>
+    <string name="player_spec_bitrate">Bitrate</string>
+    <string name="player_spec_sample_rate">Sample rate</string>
+    <string name="player_spec_file_size">File size</string>
+
+    <!-- Free Bilingual Lyrics Translation -->
+    <string name="lyrics_translate_action">Translate lyrics</string>
+    <string name="lyrics_translate_off">Off (Original only)</string>
+    <string name="lyrics_translating">Translating…</string>
+    <string name="lyrics_translate_failed">Translation unavailable. Check connection.</string>
+    <string name="lyrics_translate_badge">Translated · %1$s</string>
+    <string name="lyrics_translate_lang_fa">فارسی (Persian)</string>
+    <string name="lyrics_translate_lang_en">English</string>
+    <string name="lyrics_translate_lang_ar">العربية (Arabic)</string>
+    <string name="lyrics_translate_lang_tr">Türkçe (Turkish)</string>
+    <string name="lyrics_translate_lang_es">Español (Spanish)</string>
+    <string name="lyrics_translate_lang_fr">Français (French)</string>
+    <string name="lyrics_translate_lang_de">Deutsch (German)</string>
+    <string name="lyrics_translate_lang_ru">Русский (Russian)</string>
+
+    <!-- Music Silence / Instrumental -->
+    <string name="lyrics_instrumental_label">Instrumental</string>
+    <!-- Downloads & Release Radar Details -->
+    <string name="download_filter_show_owned">Show owned</string>
+    <string name="online_track_release_date_label">Release date</string>
+    <!-- Playlists Search & Favorites -->
+    <string name="cd_favorite_playlist">Favorite playlist</string>
+    <string name="cd_unfavorite_playlist">Unfavorite playlist</string>
+    <string name="playlist_search_action">Search playlists</string>
+    <string name="playlists_search_hint">Search playlists…</string>
+    <string name="playlists_pinned_header">Pinned</string>
+    <!-- Privacy, Telemetry, Bug Report, Suggestions, Licenses & Myket Updates -->
+    <string name="privacy_consent_title">Help Improve LogaRhythm</string>
+    <string name="privacy_consent_subtitle">Choose what anonymous diagnostics you share with the developer.</string>
+    <string name="privacy_consent_shake_tip">Tip: You can shake your phone anytime to send a bug report or feedback.</string>
+    <string name="privacy_consent_crash_title">Crash &amp; error diagnostics</string>
+    <string name="privacy_consent_crash_desc">Sends anonymous stack traces when a crash occurs so bugs can be fixed quickly.</string>
+    <string name="privacy_consent_weekly_title">Anonymous weekly summary</string>
+    <string name="privacy_consent_weekly_desc">Shares a tiny weekly summary (no track names or personal identifiers).</string>
+    <string name="privacy_consent_footnote">You can change these preferences at any time in Settings.</string>
+    <string name="privacy_consent_accept_cta">Continue</string>
+    <string name="settings_category_privacy_feedback">Privacy &amp; Feedback</string>
+    <string name="settings_hub_privacy_feedback_sub">Bug reports, suggestions &amp; telemetry</string>
+    <string name="settings_group_feedback">Feedback &amp; Suggestions</string>
+    <string name="settings_suggestions_title">Suggestions</string>
+    <string name="settings_suggestions_desc">Share ideas or feature requests</string>
+    <string name="settings_bug_report_title">Report a bug</string>
+    <string name="settings_bug_report_desc">Send a bug report with optional logs</string>
+    <string name="settings_group_privacy_telemetry">Diagnostics &amp; Privacy</string>
+    <string name="report_cat_crash">Crash</string>
+    <string name="report_cat_playback">Playback</string>
+    <string name="report_cat_download">Downloads</string>
+    <string name="report_cat_lyrics">Lyrics</string>
+    <string name="report_cat_other">Other</string>
+    <string name="bug_report_title">Report a Bug</string>
+    <string name="bug_report_subtitle">Describe what went wrong and optionally include recent logs.</string>
+    <string name="bug_report_desc_label">What happened?</string>
+    <string name="bug_report_desc_hint">Steps to reproduce or details…</string>
+    <string name="feedback_contact_label">Contact (optional)</string>
+    <string name="feedback_contact_hint">Telegram @username or email</string>
+    <string name="bug_report_attach_logs">Include recent app logs</string>
+    <string name="bug_report_attach_logs_desc">Attaches up to %1$d sanitized log entries</string>
+    <string name="bug_report_sent_toast">Bug report sent. Thank you!</string>
+    <string name="feedback_send_failed_toast">Could not send right now. Check connection and try again.</string>
+    <string name="bug_report_submit_btn">Send report</string>
+    <string name="suggestions_cat_feature">Feature</string>
+    <string name="suggestions_cat_design">Design</string>
+    <string name="suggestions_cat_player">Player</string>
+    <string name="suggestions_cat_download">Downloads</string>
+    <string name="suggestions_dialog_subtitle">Got an idea to make LogaRhythm better? Let us know.</string>
+    <string name="suggestions_input_label">Your suggestion</string>
+    <string name="suggestions_input_hint">Describe your idea…</string>
+    <string name="suggestions_sent_toast">Suggestion sent. Thank you!</string>
+    <string name="suggestions_send_btn">Send</string>
+    <string name="settings_check_update_myket_title">Updates via Myket</string>
+    <string name="settings_check_update_myket_desc">Open Myket to check for the latest release</string>
+    <string name="settings_licenses_title">Open-Source Licenses</string>
+    <string name="settings_licenses_desc">GPL-3.0, third-party notices &amp; fonts</string>
+    <string name="licenses_tab_third_party">Third-Party</string>
+    <string name="licenses_tab_fonts">Fonts</string>
 </resources>
 

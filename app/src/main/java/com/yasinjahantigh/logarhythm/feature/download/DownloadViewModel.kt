@@ -31,6 +31,7 @@ import com.yasinjahantigh.logarhythm.domain.model.DownloadSource
 import com.yasinjahantigh.logarhythm.domain.model.SourceType
 import com.yasinjahantigh.logarhythm.domain.model.Track
 import com.yasinjahantigh.logarhythm.domain.repository.DownloadRepository
+import com.yasinjahantigh.logarhythm.domain.repository.TrackRepository
 import com.yasinjahantigh.logarhythm.playback.PlayerController
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
@@ -43,6 +44,7 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
@@ -71,14 +73,29 @@ class DownloadViewModel @Inject constructor(
     private val streamPreviewPlayer: StreamPreviewPlayer,
     private val shareLinkResolver: ShareLinkResolver,
     private val sourceRouter: com.yasinjahantigh.logarhythm.data.download.DownloadSourceRouter,
+    private val trackRepository: TrackRepository,
     savedStateHandle: androidx.lifecycle.SavedStateHandle
 ) : ViewModel() {
 
     private val _query = MutableStateFlow("")
     val query: StateFlow<String> = _query.asStateFlow()
 
-    private val _searchState = MutableStateFlow(DownloadSearchUiState())
-    val searchState: StateFlow<DownloadSearchUiState> = _searchState.asStateFlow()
+    private val _showOwned = MutableStateFlow(false)
+    val showOwned: StateFlow<Boolean> = _showOwned.asStateFlow()
+
+    private val ownedTrackMap: StateFlow<Map<String, Track>> = trackRepository.getAllTracks()
+        .map { tracks -> buildOwnedTrackMap(tracks) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyMap())
+
+    private val _rawSearchState = MutableStateFlow(DownloadSearchUiState())
+    val searchState: StateFlow<DownloadSearchUiState> = combine(
+        _rawSearchState,
+        ownedTrackMap,
+        _showOwned
+    ) { state, owned, showOwned ->
+        if (showOwned || owned.isEmpty()) state
+        else state.copy(results = filterUnownedResults(state.results, owned.keys))
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), DownloadSearchUiState())
 
     private val _preparing = MutableStateFlow(true)
     val preparing: StateFlow<Boolean> = _preparing.asStateFlow()
@@ -89,8 +106,15 @@ class DownloadViewModel @Inject constructor(
     private val _categoryFilter = MutableStateFlow(DownloadSearchCategory.ALL)
     val categoryFilter: StateFlow<DownloadSearchCategory> = _categoryFilter.asStateFlow()
 
-    private val _collectionDetail = MutableStateFlow<DownloadCollectionUiState?>(null)
-    val collectionDetail: StateFlow<DownloadCollectionUiState?> = _collectionDetail.asStateFlow()
+    private val _rawCollectionDetail = MutableStateFlow<DownloadCollectionUiState?>(null)
+    val collectionDetail: StateFlow<DownloadCollectionUiState?> = combine(
+        _rawCollectionDetail,
+        ownedTrackMap,
+        _showOwned
+    ) { detail, owned, showOwned ->
+        if (detail == null || showOwned || owned.isEmpty()) detail
+        else detail.copy(tracks = filterUnownedResults(detail.tracks, owned.keys))
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     val savedCollections: StateFlow<List<DownloadCatalogCache.SavedCollectionSummary>> =
         catalogCache.observeSavedCollections()
@@ -114,11 +138,23 @@ class DownloadViewModel @Inject constructor(
     val downloadQualityPref: StateFlow<String> = prefs.downloadQualityPref
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), "best")
 
-    private val _freshResults = MutableStateFlow<List<DownloadSearchResult>>(emptyList())
-    val freshResults: StateFlow<List<DownloadSearchResult>> = _freshResults.asStateFlow()
+    private val _rawFreshResults = MutableStateFlow<List<DownloadSearchResult>>(emptyList())
+    val freshResults: StateFlow<List<DownloadSearchResult>> = combine(
+        _rawFreshResults,
+        ownedTrackMap,
+        _showOwned
+    ) { items, owned, showOwned ->
+        if (showOwned || owned.isEmpty()) items else filterUnownedResults(items, owned.keys)
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
-    private val _popularResults = MutableStateFlow<List<DownloadSearchResult>>(emptyList())
-    val popularResults: StateFlow<List<DownloadSearchResult>> = _popularResults.asStateFlow()
+    private val _rawPopularResults = MutableStateFlow<List<DownloadSearchResult>>(emptyList())
+    val popularResults: StateFlow<List<DownloadSearchResult>> = combine(
+        _rawPopularResults,
+        ownedTrackMap,
+        _showOwned
+    ) { items, owned, showOwned ->
+        if (showOwned || owned.isEmpty()) items else filterUnownedResults(items, owned.keys)
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     val followedArtistKeys: StateFlow<Set<String>> = artistFollowRepository.observeFollowed()
         .map { list -> list.map { it.artistKey }.toSet() }
@@ -162,8 +198,8 @@ class DownloadViewModel @Inject constructor(
             sourceRouter.ensureFreshRanking(force = false)
         }
         viewModelScope.launch {
-            runCatching { musicManClient.fetchFresh(16) }.getOrNull()?.let { _freshResults.value = it }
-            runCatching { musicManClient.fetchPopular(16) }.getOrNull()?.let { _popularResults.value = it }
+            runCatching { musicManClient.fetchFresh(16) }.getOrNull()?.let { _rawFreshResults.value = it }
+            runCatching { musicManClient.fetchPopular(16) }.getOrNull()?.let { _rawPopularResults.value = it }
         }
         val initialQuery = savedStateHandle.get<String>("query")?.trim().orEmpty()
         if (initialQuery.isNotBlank()) {
@@ -210,17 +246,21 @@ class DownloadViewModel @Inject constructor(
         _query.value = value
     }
 
+    fun toggleShowOwned() {
+        _showOwned.value = !_showOwned.value
+    }
+
     fun setSourceFilter(source: DownloadSource?) {
         if (_sourceFilter.value == source) return
         _sourceFilter.value = source
         viewModelScope.launch { prefs.setDownloadSourceFilter(source) }
-        if (_searchState.value.hasSearched && _query.value.isNotBlank()) search(_query.value)
+        if (_rawSearchState.value.hasSearched && _query.value.isNotBlank()) search(_query.value)
     }
 
     fun setCategoryFilter(category: DownloadSearchCategory) {
         if (_categoryFilter.value == category) return
         _categoryFilter.value = category
-        if (_searchState.value.hasSearched && _query.value.isNotBlank()) search(_query.value)
+        if (_rawSearchState.value.hasSearched && _query.value.isNotBlank()) search(_query.value)
     }
 
     fun search(term: String = _query.value) {
@@ -233,7 +273,7 @@ class DownloadViewModel @Inject constructor(
         searchJob = viewModelScope.launch {
             prefs.addDownloadRecentSearch(trimmed)
             val cached = runCatching { catalogCache.getSearch(trimmed, category, source) }.getOrNull().orEmpty()
-            _searchState.value = DownloadSearchUiState(
+            _rawSearchState.value = DownloadSearchUiState(
                 searching = true,
                 results = cached,
                 hasSearched = true,
@@ -243,7 +283,7 @@ class DownloadViewModel @Inject constructor(
             try {
                 searchService.searchFlow(trimmed, source, category).collect { outcome ->
                     val merged = if (outcome.results.isNotEmpty()) outcome.results else cached
-                    _searchState.value = DownloadSearchUiState(
+                    _rawSearchState.value = DownloadSearchUiState(
                         searching = !outcome.isFinal,
                         results = merged,
                         error = if (outcome.isFinal && merged.isEmpty()) outcome.failure else null,
@@ -257,7 +297,7 @@ class DownloadViewModel @Inject constructor(
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (_: Exception) {
-                _searchState.value = DownloadSearchUiState(
+                _rawSearchState.value = DownloadSearchUiState(
                     searching = false,
                     results = cached,
                     error = if (cached.isEmpty()) DownloadErrorKind.UNKNOWN else null,
@@ -280,7 +320,7 @@ class DownloadViewModel @Inject constructor(
                 cached.tracks.size <= 50
 
             if (cached != null && !forceRefresh && !cachedLooksTruncated) {
-                _collectionDetail.value = DownloadCollectionUiState(
+                _rawCollectionDetail.value = DownloadCollectionUiState(
                     header = cached.header,
                     albums = cached.albums,
                     tracks = cached.tracks,
@@ -291,7 +331,7 @@ class DownloadViewModel @Inject constructor(
                 return@launch
             }
 
-            _collectionDetail.value = DownloadCollectionUiState(
+            _rawCollectionDetail.value = DownloadCollectionUiState(
                 header = cached?.header ?: item,
                 albums = cached?.albums.orEmpty(),
                 tracks = cached?.tracks.orEmpty(),
@@ -336,7 +376,7 @@ class DownloadViewModel @Inject constructor(
                     suspend fun emitState(loadingMore: Boolean = true) {
                         val albumList = combinedAlbums.values.toList()
                         val trackList = combinedTracks.values.toList()
-                        _collectionDetail.value = DownloadCollectionUiState(
+                        _rawCollectionDetail.value = DownloadCollectionUiState(
                             header = item,
                             albums = albumList,
                             tracks = trackList,
@@ -434,7 +474,7 @@ class DownloadViewModel @Inject constructor(
                     if (finalAlbums.isNotEmpty() || finalTracks.isNotEmpty()) {
                         catalogCache.saveCollection(item, finalAlbums, finalTracks)
                     }
-                    _collectionDetail.value = DownloadCollectionUiState(
+                    _rawCollectionDetail.value = DownloadCollectionUiState(
                         header = item,
                         albums = finalAlbums,
                         tracks = finalTracks,
@@ -455,7 +495,7 @@ class DownloadViewModel @Inject constructor(
                     if (detail.tracks.isNotEmpty() || detail.albums.isNotEmpty()) {
                         catalogCache.saveCollection(finalHeader, detail.albums, detail.tracks)
                     }
-                    _collectionDetail.value = DownloadCollectionUiState(
+                    _rawCollectionDetail.value = DownloadCollectionUiState(
                         header = finalHeader,
                         albums = detail.albums,
                         tracks = detail.tracks,
@@ -468,7 +508,7 @@ class DownloadViewModel @Inject constructor(
                 throw cancelled
             } catch (_: Exception) {
                 if (cached != null) {
-                    _collectionDetail.value = DownloadCollectionUiState(
+                    _rawCollectionDetail.value = DownloadCollectionUiState(
                         header = cached.header,
                         albums = cached.albums,
                         tracks = cached.tracks,
@@ -477,7 +517,7 @@ class DownloadViewModel @Inject constructor(
                         fromCache = true
                     )
                 } else {
-                    _collectionDetail.value = _collectionDetail.value?.copy(
+                    _rawCollectionDetail.value = _rawCollectionDetail.value?.copy(
                         loading = false,
                         loadingMore = false,
                         error = "Could not load tracks."
@@ -490,7 +530,7 @@ class DownloadViewModel @Inject constructor(
     fun openSavedCollection(cacheKey: String) {
         viewModelScope.launch {
             val cached = runCatching { catalogCache.getCollection(cacheKey) }.getOrNull() ?: return@launch
-            _collectionDetail.value = DownloadCollectionUiState(
+            _rawCollectionDetail.value = DownloadCollectionUiState(
                 header = cached.header,
                 albums = cached.albums,
                 tracks = cached.tracks,
@@ -503,7 +543,7 @@ class DownloadViewModel @Inject constructor(
 
     fun closeCollection() {
         collectionJob?.cancel()
-        _collectionDetail.value = null
+        _rawCollectionDetail.value = null
     }
 
     fun downloadAllFromCollection(
@@ -652,5 +692,61 @@ class DownloadViewModel @Inject constructor(
             folder = "LogaRhythm"
         )
         playerController.play(listOf(track), 0)
+    }
+
+    fun playLocalTrack(track: Track) {
+        playerController.play(listOf(track), 0)
+    }
+
+    fun findLocalTrack(result: DownloadSearchResult): Track? {
+        val map = ownedTrackMap.value
+        if (map.isEmpty() || result.title.isBlank()) return null
+        val key = ReleaseRadarService.titleKey(result.artist, result.title)
+        map[key]?.let { return it }
+        val normTitle = ReleaseRadarService.normalizeTrackTitle(result.title)
+        if (normTitle.isNotBlank()) {
+            map.values.firstOrNull { track ->
+                ReleaseRadarService.normalizeTrackTitle(track.title) == normTitle &&
+                    ReleaseRadarService.isArtistMatch(track.artist, result.artist)
+            }?.let { return it }
+        }
+        return null
+    }
+
+    fun toSearchResult(item: DownloadItem): DownloadSearchResult =
+        DownloadSearchResult(
+            id = item.videoId.ifBlank { item.id },
+            title = item.title,
+            artist = item.artist,
+            source = item.source,
+            url = item.sourceUrl,
+            durationMs = item.durationMs,
+            thumbnailUrl = item.artworkUrl ?: item.contentUri,
+            kind = DownloadResultKind.TRACK,
+            album = item.album,
+            albumArtist = item.albumArtist.ifBlank { item.artist },
+            trackNumber = item.trackNumber
+        )
+
+    private fun buildOwnedTrackMap(tracks: List<Track>): Map<String, Track> {
+        val map = LinkedHashMap<String, Track>(tracks.size * 2)
+        for (track in tracks) {
+            if (track.title.isBlank()) continue
+            if (track.artist.isNotBlank()) {
+                map.putIfAbsent(ReleaseRadarService.titleKey(track.artist, track.title), track)
+            }
+            if (track.albumArtist.isNotBlank() && !track.albumArtist.equals(track.artist, ignoreCase = true)) {
+                map.putIfAbsent(ReleaseRadarService.titleKey(track.albumArtist, track.title), track)
+            }
+        }
+        return map
+    }
+
+    private fun filterUnownedResults(
+        results: List<DownloadSearchResult>,
+        ownedKeys: Set<String>
+    ): List<DownloadSearchResult> = results.filterNot { res ->
+        res.kind == DownloadResultKind.TRACK &&
+            ReleaseRadarService.isTrackOwned(res.artist, res.title, ownedKeys)
     }
 }

@@ -11,6 +11,9 @@ import androidx.work.workDataOf
 import com.yasinjahantigh.logarhythm.data.datastore.PreferencesManager
 import com.yasinjahantigh.logarhythm.data.download.DownloadWorker
 import com.yasinjahantigh.logarhythm.data.download.DownloadWorkspace
+import com.yasinjahantigh.logarhythm.data.download.musicman.MusicManDownloader
+import com.yasinjahantigh.logarhythm.data.download.radiojavan.RadioJavanDownloader
+import com.yasinjahantigh.logarhythm.data.download.saavn.SaavnDownloader
 import com.yasinjahantigh.logarhythm.data.room.DownloadDao
 import com.yasinjahantigh.logarhythm.data.room.DownloadEntity
 import com.yasinjahantigh.logarhythm.domain.model.DownloadItem
@@ -37,7 +40,10 @@ class DownloadRepositoryImpl @Inject constructor(
     @ApplicationContext private val context: Context,
     private val dao: DownloadDao,
     private val workspace: DownloadWorkspace,
-    private val preferencesManager: PreferencesManager
+    private val preferencesManager: PreferencesManager,
+    private val musicManDownloader: MusicManDownloader,
+    private val saavnDownloader: SaavnDownloader,
+    private val radioJavanDownloader: RadioJavanDownloader
 ) : DownloadRepository {
 
     init {
@@ -107,6 +113,9 @@ class DownloadRepositoryImpl @Inject constructor(
     override suspend fun cancel(id: String) {
         dao.markCancelled(id, System.currentTimeMillis())
         runCatching { YoutubeDL.getInstance().destroyProcessById(id) }
+        musicManDownloader.cancel(id)
+        saavnDownloader.cancel(id)
+        radioJavanDownloader.cancel(id)
         WorkManager.getInstance(context).cancelUniqueWork(workName(id))
     }
 

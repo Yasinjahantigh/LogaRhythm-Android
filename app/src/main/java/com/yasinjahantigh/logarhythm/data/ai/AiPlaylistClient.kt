@@ -33,8 +33,13 @@ class AiPlaylistClient @Inject constructor(
         .writeTimeout(30, TimeUnit.SECONDS)
         .build()
 
+    @Volatile
+    var lastErrorDetail: String? = null
+        private set
+
     suspend fun testConnection(settings: AiSettings, apiKey: String): AiFailure? =
         withContext(Dispatchers.IO) {
+            lastErrorDetail = null
             val request = when (settings.provider) {
                 AiProvider.OPENAI_COMPATIBLE -> Request.Builder()
                     .url(modelsUrl(settings))
@@ -52,14 +57,59 @@ class AiPlaylistClient @Inject constructor(
             }
             try {
                 client.newCall(request).execute().use { response ->
-                    if (response.isSuccessful) null else failureForCode(response.code)
+                    if (response.isSuccessful) {
+                        null
+                    } else if (response.code == 404 || response.code == 405) {
+                        // Some OpenAI/Gemini compatible proxies do not expose /models; probe generate directly.
+                        probeGeneration(settings, apiKey)
+                    } else {
+                        val errBody = response.body?.string().orEmpty()
+                        lastErrorDetail = formatErrorDetail(response.code, errBody)
+                        failureForCode(response.code)
+                    }
                 }
             } catch (cancelled: CancellationException) {
                 throw cancelled
-            } catch (_: IOException) {
+            } catch (io: IOException) {
+                lastErrorDetail = io.message
                 AiFailure.NETWORK
             }
         }
+
+    private fun probeGeneration(settings: AiSettings, apiKey: String): AiFailure? {
+        val probe = when (settings.provider) {
+            AiProvider.OPENAI_COMPATIBLE -> openAiRequest(
+                settings = settings,
+                apiKey = apiKey,
+                system = "Reply OK.",
+                user = "OK",
+                jsonMode = false,
+                includeTemperature = false
+            )
+            AiProvider.GEMINI -> geminiRequest(
+                settings = settings,
+                apiKey = apiKey,
+                system = "Reply OK.",
+                user = "OK",
+                jsonMode = false
+            )
+        }
+        return try {
+            client.newCall(probe).execute().use { resp ->
+                if (resp.isSuccessful) {
+                    null
+                } else {
+                    lastErrorDetail = formatErrorDetail(resp.code, resp.body?.string().orEmpty())
+                    failureForCode(resp.code)
+                }
+            }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (io: IOException) {
+            lastErrorDetail = io.message
+            AiFailure.NETWORK
+        }
+    }
 
     suspend fun generate(
         settings: AiSettings,
@@ -163,44 +213,70 @@ class AiPlaylistClient @Inject constructor(
                 apiKey = apiKey,
                 system = tagSystem,
                 user = userPrompt,
-                jsonMode = true
+                jsonMode = true,
+                includeTemperature = !isReasoningModel(settings.model)
             )
             AiProvider.GEMINI -> geminiRequest(
                 settings = settings,
                 apiKey = apiKey,
                 system = tagSystem,
-                user = userPrompt
+                user = userPrompt,
+                jsonMode = true
             )
         }
         try {
             client.newCall(request).execute().use { response ->
-                if (!response.isSuccessful) return@withContext emptyMap()
-                val text = extractText(settings.provider, response.body?.string().orEmpty()) ?: return@withContext emptyMap()
-                val jsonStr = extractJsonObject(text) ?: return@withContext emptyMap()
-                val obj = JSONObject(jsonStr)
-                val items = obj.optJSONArray("items") ?: return@withContext emptyMap()
-                val result = mutableMapOf<String, AiTagFix>()
-                for (i in 0 until items.length()) {
-                    val item = items.optJSONObject(i) ?: continue
-                    val id = item.optString("id").takeIf { it.isNotBlank() } ?: continue
-                    val title = MetadataNormalizer.cleanDisplayText(item.optString("title")).takeIf { it.isNotBlank() } ?: continue
-                    val artist = MetadataNormalizer.cleanDisplayText(item.optString("artist")).takeIf { it.isNotBlank() } ?: continue
-                    val album = MetadataNormalizer.cleanDisplayText(item.optString("album"))
-                    val rawGenre = item.optString("genre")
-                    val genre = MetadataNormalizer.canonicalizeGenre(rawGenre, fallback = "")
-                    val year = item.optInt("year", 0).takeIf { it in 1900..2100 }
-                        ?: item.optString("year").trim().take(4).toIntOrNull()?.takeIf { it in 1900..2100 }
-                        ?: 0
-                    result[id] = AiTagFix(title, artist, album, genre, year)
+                val actualResponse = if (!response.isSuccessful && response.code == 400) {
+                    val fallback = when (settings.provider) {
+                        AiProvider.OPENAI_COMPATIBLE -> openAiRequest(
+                            settings = settings,
+                            apiKey = apiKey,
+                            system = tagSystem,
+                            user = userPrompt,
+                            jsonMode = false,
+                            includeTemperature = false
+                        )
+                        AiProvider.GEMINI -> geminiRequest(
+                            settings = settings,
+                            apiKey = apiKey,
+                            system = tagSystem,
+                            user = userPrompt,
+                            jsonMode = false
+                        )
+                    }
+                    client.newCall(fallback).execute()
+                } else {
+                    response
                 }
-                result
+                actualResponse.use { resp ->
+                    if (!resp.isSuccessful) return@withContext emptyMap()
+                    val text = extractText(settings.provider, resp.body?.string().orEmpty()) ?: return@withContext emptyMap()
+                    val jsonStr = extractJsonObject(text) ?: return@withContext emptyMap()
+                    val obj = JSONObject(jsonStr)
+                    val items = obj.optJSONArray("items") ?: return@withContext emptyMap()
+                    val result = mutableMapOf<String, AiTagFix>()
+                    for (i in 0 until items.length()) {
+                        val item = items.optJSONObject(i) ?: continue
+                        val id = item.optString("id").takeIf { it.isNotBlank() } ?: continue
+                        val title = MetadataNormalizer.cleanDisplayText(item.optString("title")).takeIf { it.isNotBlank() } ?: continue
+                        val artist = MetadataNormalizer.cleanDisplayText(item.optString("artist")).takeIf { it.isNotBlank() } ?: continue
+                        val album = MetadataNormalizer.cleanDisplayText(item.optString("album"))
+                        val rawGenre = item.optString("genre")
+                        val genre = MetadataNormalizer.canonicalizeGenre(rawGenre, fallback = "")
+                        val year = item.optInt("year", 0).takeIf { it in 1900..2100 }
+                            ?: item.optString("year").trim().take(4).toIntOrNull()?.takeIf { it in 1900..2100 }
+                            ?: 0
+                        result[id] = AiTagFix(title, artist, album, genre, year)
+                    }
+                    result
+                }
             }
         } catch (_: Exception) {
             emptyMap()
         }
     }
 
-    private suspend fun performGeneration(
+    private fun performGeneration(
         settings: AiSettings,
         apiKey: String,
         system: String,
@@ -208,54 +284,107 @@ class AiPlaylistClient @Inject constructor(
         byId: Map<String, Track>,
         count: Int
     ): MagicPlaylistResult {
+        lastErrorDetail = null
         val first = when (settings.provider) {
-            AiProvider.OPENAI_COMPATIBLE -> openAiRequest(settings, apiKey, system, user, jsonMode = true)
-            AiProvider.GEMINI -> geminiRequest(settings, apiKey, system, user)
+            AiProvider.OPENAI_COMPATIBLE -> openAiRequest(
+                settings = settings,
+                apiKey = apiKey,
+                system = system,
+                user = user,
+                jsonMode = true,
+                includeTemperature = !isReasoningModel(settings.model)
+            )
+            AiProvider.GEMINI -> geminiRequest(
+                settings = settings,
+                apiKey = apiKey,
+                system = system,
+                user = user,
+                jsonMode = true
+            )
         }
 
         return try {
             client.newCall(first).execute().use { response ->
                 if (!response.isSuccessful) {
-                    // Some OpenAI-compatible servers reject response_format; retry once without it.
-                    if (settings.provider == AiProvider.OPENAI_COMPATIBLE && response.code == 400) {
-                        val retry = openAiRequest(settings, apiKey, system, user, jsonMode = false)
-                        return@use executeGeneration(retry, byId, count)
+                    val errBody = response.body?.string().orEmpty()
+                    // Reasoning models (o1/o3/o4/gpt-5), some OpenAI proxies, and some Gemini/Gemma
+                    // endpoints return HTTP 400 for response_format/responseMimeType/temperature; retry cleanly.
+                    if (response.code == 400) {
+                        val retry = when (settings.provider) {
+                            AiProvider.OPENAI_COMPATIBLE -> openAiRequest(
+                                settings = settings,
+                                apiKey = apiKey,
+                                system = system,
+                                user = user,
+                                jsonMode = false,
+                                includeTemperature = false
+                            )
+                            AiProvider.GEMINI -> geminiRequest(
+                                settings = settings,
+                                apiKey = apiKey,
+                                system = system,
+                                user = user,
+                                jsonMode = false,
+                                inlineSystem = true
+                            )
+                        }
+                        return@use executeGeneration(settings.provider, retry, byId, count)
                     }
+                    lastErrorDetail = formatErrorDetail(response.code, errBody)
                     return MagicPlaylistResult.Failure(failureForCode(response.code))
                 }
                 val body = response.body?.string().orEmpty()
                 val text = extractText(settings.provider, body)
-                    ?: return MagicPlaylistResult.Failure(AiFailure.BAD_RESPONSE)
+                    ?: run {
+                        lastErrorDetail = "Empty or filtered response from AI provider"
+                        return MagicPlaylistResult.Failure(AiFailure.BAD_RESPONSE)
+                    }
                 parsePlaylistJson(text, byId, count)
                     ?.let { MagicPlaylistResult.Success(it) }
-                    ?: MagicPlaylistResult.Failure(AiFailure.BAD_RESPONSE)
+                    ?: run {
+                        lastErrorDetail = "AI response did not contain valid track IDs"
+                        MagicPlaylistResult.Failure(AiFailure.BAD_RESPONSE)
+                    }
             }
         } catch (cancelled: CancellationException) {
             throw cancelled
-        } catch (_: IOException) {
+        } catch (io: IOException) {
+            lastErrorDetail = io.message
             MagicPlaylistResult.Failure(AiFailure.NETWORK)
         }
     }
 
     private fun executeGeneration(
+        provider: AiProvider,
         request: Request,
         byId: Map<String, Track>,
         count: Int
     ): MagicPlaylistResult = try {
         client.newCall(request).execute().use { response ->
             if (!response.isSuccessful) {
+                lastErrorDetail = formatErrorDetail(response.code, response.body?.string().orEmpty())
                 MagicPlaylistResult.Failure(failureForCode(response.code))
             } else {
-                val text = extractText(AiProvider.OPENAI_COMPATIBLE, response.body?.string().orEmpty())
+                val text = extractText(provider, response.body?.string().orEmpty())
                 val playlist = text?.let { parsePlaylistJson(it, byId, count) }
-                if (playlist == null) MagicPlaylistResult.Failure(AiFailure.BAD_RESPONSE)
-                else MagicPlaylistResult.Success(playlist)
+                if (playlist == null) {
+                    lastErrorDetail = "AI response did not contain valid track IDs"
+                    MagicPlaylistResult.Failure(AiFailure.BAD_RESPONSE)
+                } else {
+                    MagicPlaylistResult.Success(playlist)
+                }
             }
         }
     } catch (cancelled: CancellationException) {
         throw cancelled
-    } catch (_: IOException) {
+    } catch (io: IOException) {
+        lastErrorDetail = io.message
         MagicPlaylistResult.Failure(AiFailure.NETWORK)
+    }
+
+    private fun isReasoningModel(model: String): Boolean {
+        val m = model.trim().substringAfterLast('/').lowercase()
+        return m.startsWith("o1") || m.startsWith("o3") || m.startsWith("o4") || m.startsWith("gpt-5")
     }
 
     private fun openAiRequest(
@@ -263,15 +392,16 @@ class AiPlaylistClient @Inject constructor(
         apiKey: String,
         system: String,
         user: String,
-        jsonMode: Boolean
+        jsonMode: Boolean,
+        includeTemperature: Boolean = true
     ): Request {
         val messages = JSONArray()
             .put(JSONObject().put("role", "system").put("content", system))
             .put(JSONObject().put("role", "user").put("content", user))
         val body = JSONObject()
             .put("model", settings.model)
-            .put("temperature", 0.7)
             .put("messages", messages)
+        if (includeTemperature) body.put("temperature", 0.7)
         if (jsonMode) body.put("response_format", JSONObject().put("type", "json_object"))
         return Request.Builder()
             .url(chatCompletionsUrl(settings.baseUrl))
@@ -285,30 +415,34 @@ class AiPlaylistClient @Inject constructor(
         settings: AiSettings,
         apiKey: String,
         system: String,
-        user: String
+        user: String,
+        jsonMode: Boolean = true,
+        inlineSystem: Boolean = false
     ): Request {
+        val genConfig = JSONObject().put("temperature", 0.7)
+        if (jsonMode) genConfig.put("responseMimeType", "application/json")
+        val promptText = if (inlineSystem) "$system\n\n$user" else user
         val body = JSONObject()
-            .put(
-                "systemInstruction",
-                JSONObject().put(
-                    "parts",
-                    JSONArray().put(JSONObject().put("text", system))
-                )
-            )
+            .apply {
+                if (!inlineSystem) {
+                    put(
+                        "systemInstruction",
+                        JSONObject().put(
+                            "parts",
+                            JSONArray().put(JSONObject().put("text", system))
+                        )
+                    )
+                }
+            }
             .put(
                 "contents",
                 JSONArray().put(
                     JSONObject()
                         .put("role", "user")
-                        .put("parts", JSONArray().put(JSONObject().put("text", user)))
+                        .put("parts", JSONArray().put(JSONObject().put("text", promptText)))
                 )
             )
-            .put(
-                "generationConfig",
-                JSONObject()
-                    .put("responseMimeType", "application/json")
-                    .put("temperature", 0.7)
-            )
+            .put("generationConfig", genConfig)
         return Request.Builder()
             .url(geminiGenerateUrl(settings.baseUrl, settings.model))
             .header("x-goog-api-key", apiKey)
@@ -377,19 +511,30 @@ class AiPlaylistClient @Inject constructor(
     ): MagicPlaylist? {
         val json = extractJsonObject(raw) ?: return null
         return try {
-            val obj = JSONObject(json)
-            val ids = obj.optJSONArray("trackIds") ?: obj.optJSONArray("tracks") ?: return null
+            val (ids, name, description) = if (json.startsWith("[")) {
+                Triple(JSONArray(json), "", "")
+            } else {
+                val obj = JSONObject(json)
+                val arr = obj.optJSONArray("trackIds")
+                    ?: obj.optJSONArray("tracks")
+                    ?: obj.optJSONArray("track_ids")
+                    ?: obj.optJSONArray("ids")
+                    ?: obj.optJSONArray("songs")
+                    ?: return null
+                Triple(arr, obj.optString("name").trim(), obj.optString("description").trim())
+            }
             val picked = mutableListOf<Track>()
             val seen = mutableSetOf<String>()
             for (index in 0 until ids.length()) {
-                val id = ids.optString(index).takeIf { it.isNotBlank() } ?: continue
+                val elemObj = ids.optJSONObject(index)
+                val id = elemObj?.optString("id")?.takeIf { it.isNotBlank() }
+                    ?: ids.optString(index).takeIf { it.isNotBlank() }
+                    ?: continue
                 val track = tracksById[id] ?: continue
                 if (seen.add(track.id)) picked.add(track)
                 if (picked.size >= requestedCount) break
             }
             if (picked.isEmpty()) return null
-            val name = obj.optString("name").trim()
-            val description = obj.optString("description").trim()
             MagicPlaylist(name = name.take(80), description = description.take(300), tracks = picked)
         } catch (_: Exception) {
             null
@@ -400,10 +545,17 @@ class AiPlaylistClient @Inject constructor(
         val trimmed = raw.trim()
         val fenced = FENCE.find(trimmed)?.groupValues?.getOrNull(1)?.trim()
         val candidate = fenced ?: trimmed
-        val start = candidate.indexOf('{')
-        val end = candidate.lastIndexOf('}')
-        if (start < 0 || end <= start) return null
-        return candidate.substring(start, end + 1)
+        val objStart = candidate.indexOf('{')
+        val objEnd = candidate.lastIndexOf('}')
+        if (objStart >= 0 && objEnd > objStart) {
+            return candidate.substring(objStart, objEnd + 1)
+        }
+        val arrStart = candidate.indexOf('[')
+        val arrEnd = candidate.lastIndexOf(']')
+        if (arrStart >= 0 && arrEnd > arrStart) {
+            return candidate.substring(arrStart, arrEnd + 1)
+        }
+        return null
     }
 
     private fun extractText(provider: AiProvider, body: String): String? = try {
@@ -420,15 +572,36 @@ class AiPlaylistClient @Inject constructor(
                     ?.optJSONObject(0)
                     ?.optJSONObject("content")
                     ?.optJSONArray("parts")
-                buildString {
+                val nonThought = buildString {
                     for (index in 0 until (parts?.length() ?: 0)) {
-                        append(parts?.optJSONObject(index)?.optString("text").orEmpty())
+                        val part = parts?.optJSONObject(index) ?: continue
+                        if (part.optBoolean("thought", false)) continue
+                        append(part.optString("text"))
                     }
-                }.takeIf { it.isNotBlank() }
+                }.trim()
+                if (nonThought.isNotBlank()) {
+                    nonThought
+                } else {
+                    buildString {
+                        for (index in 0 until (parts?.length() ?: 0)) {
+                            append(parts?.optJSONObject(index)?.optString("text").orEmpty())
+                        }
+                    }.trim().takeIf { it.isNotBlank() }
+                }
             }
         }
     } catch (_: Exception) {
         null
+    }
+
+    private fun formatErrorDetail(code: Int, rawBody: String): String {
+        val msg = runCatching {
+            val obj = JSONObject(rawBody)
+            obj.optJSONObject("error")?.optString("message")
+                ?.takeIf { it.isNotBlank() }
+                ?: obj.optString("message").takeIf { it.isNotBlank() }
+        }.getOrNull()
+        return if (!msg.isNullOrBlank()) "HTTP $code: ${msg.take(180)}" else "HTTP $code"
     }
 
     private fun failureForCode(code: Int): AiFailure = when {

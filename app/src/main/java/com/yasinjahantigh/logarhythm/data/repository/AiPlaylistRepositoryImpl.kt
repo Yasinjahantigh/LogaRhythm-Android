@@ -204,4 +204,5 @@ class AiPlaylistRepositoryImpl @Inject constructor(
             playlistId
         }
 
+    override fun lastErrorDetail(): String? = client.lastErrorDetail
 }

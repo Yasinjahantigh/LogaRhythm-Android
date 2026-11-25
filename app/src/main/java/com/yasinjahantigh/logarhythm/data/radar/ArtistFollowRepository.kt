@@ -9,6 +9,7 @@ import com.yasinjahantigh.logarhythm.domain.model.DownloadResultKind
 import com.yasinjahantigh.logarhythm.domain.model.DownloadSearchResult
 import com.yasinjahantigh.logarhythm.domain.model.DownloadSource
 import com.yasinjahantigh.logarhythm.domain.repository.DownloadRepository
+import com.yasinjahantigh.logarhythm.domain.repository.TrackRepository
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -20,6 +21,10 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import java.util.TimeZone
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -36,7 +41,8 @@ class ArtistFollowRepository @Inject constructor(
     private val radarService: ReleaseRadarService,
     private val downloadRepository: DownloadRepository,
     private val downloadSearchService: DownloadSearchService,
-    private val preferencesManager: PreferencesManager
+    private val preferencesManager: PreferencesManager,
+    private val trackRepository: TrackRepository
 ) {
 
     private val backgroundScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -48,6 +54,17 @@ class ArtistFollowRepository @Inject constructor(
             ReleaseRadarService.titleKey(release.artistName, release.title) in dismissed
     }
 
+    private fun isHiddenRelease(
+        release: ArtistReleaseEntity,
+        dismissed: Set<String>,
+        ownedKeys: Set<String>
+    ): Boolean {
+        if (release.source.equals(DownloadSource.MUSICMAN.raw, ignoreCase = true)) return true
+        if (release.discoveredAt <= 0L) return true
+        if (isDismissed(release, dismissed)) return true
+        return ReleaseRadarService.isTrackOwned(release.artistName, release.title, ownedKeys)
+    }
+
     fun observeFollowed(): Flow<List<FollowedArtistEntity>> = dao.observeFollowed()
 
     fun observeIsFollowed(artistName: String): Flow<Boolean> {
@@ -57,13 +74,23 @@ class ArtistFollowRepository @Inject constructor(
     }
 
     fun observeReleases(): Flow<List<ArtistReleaseEntity>> =
-        combine(dao.observeReleases(), preferencesManager.dismissedRadarIds) { list, dismissed ->
-            if (dismissed.isEmpty()) list else list.filterNot { isDismissed(it, dismissed) }
+        combine(
+            dao.observeReleases(),
+            preferencesManager.dismissedRadarIds,
+            trackRepository.getAllTracks()
+        ) { list, dismissed, tracks ->
+            val ownedKeys = ReleaseRadarService.ownedTrackKeys(tracks)
+            list.filterNot { isHiddenRelease(it, dismissed, ownedKeys) }
         }
 
     fun observeUnseenCount(): Flow<Int> =
-        combine(dao.observeReleases(), preferencesManager.dismissedRadarIds) { list, dismissed ->
-            list.count { !it.isSeen && !isDismissed(it, dismissed) }
+        combine(
+            dao.observeReleases(),
+            preferencesManager.dismissedRadarIds,
+            trackRepository.getAllTracks()
+        ) { list, dismissed, tracks ->
+            val ownedKeys = ReleaseRadarService.ownedTrackKeys(tracks)
+            list.count { !it.isSeen && !isHiddenRelease(it, dismissed, ownedKeys) }
         }
 
     suspend fun dismissRelease(release: ArtistReleaseEntity) {
@@ -109,7 +136,10 @@ class ArtistFollowRepository @Inject constructor(
                         val result = radarService.checkArtist(current)
                         dao.upsertArtist(result.updatedArtist)
                         val dismissed = preferencesManager.dismissedRadarIds.first()
-                        val visibleCatalog = result.recentCatalog.filterNot { isDismissed(it, dismissed) }
+                        val ownedKeys = ReleaseRadarService.ownedTrackKeys(trackRepository.getAllTracks().first())
+                        val visibleCatalog = result.recentCatalog.filterNot {
+                            isHiddenRelease(it, dismissed, ownedKeys)
+                        }
                         if (visibleCatalog.isNotEmpty()) {
                             dao.insertReleases(visibleCatalog)
                         }
@@ -147,16 +177,24 @@ class ArtistFollowRepository @Inject constructor(
             preferencesManager.dismissedRadarIds.first()
         }.getOrDefault(emptySet())
 
-        val existingReleasesByArtist = runCatching {
-            dao.observeReleases().first()
-        }.getOrDefault(emptyList()).groupBy { it.artistKey }
+        val ownedKeys = runCatching {
+            ReleaseRadarService.ownedTrackKeys(trackRepository.getAllTracks().first())
+        }.getOrDefault(emptySet())
+
+        val allExisting = runCatching { dao.observeReleases().first() }.getOrDefault(emptyList())
+        allExisting.filter { it.source.equals(DownloadSource.MUSICMAN.raw, ignoreCase = true) }
+            .forEach { runCatching { dao.deleteRelease(it.releaseId) } }
+
+        val existingReleasesByArtist = allExisting
+            .filterNot { it.source.equals(DownloadSource.MUSICMAN.raw, ignoreCase = true) }
+            .groupBy { it.artistKey }
 
         for (artist in followed) {
             try {
                 val res = radarService.checkArtist(artist)
                 dao.upsertArtist(res.updatedArtist)
-                val freshNew = res.newReleases.filterNot { isDismissed(it, dismissed) }
-                val freshCatalog = res.recentCatalog.filterNot { isDismissed(it, dismissed) }
+                val freshNew = res.newReleases.filterNot { isHiddenRelease(it, dismissed, ownedKeys) }
+                val freshCatalog = res.recentCatalog.filterNot { isHiddenRelease(it, dismissed, ownedKeys) }
                 if (freshNew.isNotEmpty()) {
                     dao.insertReleases(freshNew)
                     discovered += freshNew
@@ -227,5 +265,35 @@ class ArtistFollowRepository @Inject constructor(
             )
         )
         return true
+    }
+
+    fun releaseToSearchResult(release: ArtistReleaseEntity): DownloadSearchResult {
+        val formattedDate = if (release.discoveredAt > 0L) {
+            runCatching {
+                SimpleDateFormat("yyyy-MM-dd", Locale.US).apply {
+                    timeZone = TimeZone.getTimeZone("UTC")
+                }.format(Date(release.discoveredAt))
+            }.getOrDefault("")
+        } else {
+            ""
+        }
+        val kind = if (release.releaseId.contains("_alb:")) {
+            DownloadResultKind.ALBUM
+        } else {
+            DownloadResultKind.TRACK
+        }
+        return DownloadSearchResult(
+            id = release.releaseId,
+            title = release.title,
+            artist = release.artistName,
+            source = DownloadSource.fromRaw(release.source),
+            url = release.sourceUrl,
+            durationMs = release.durationMs,
+            thumbnailUrl = release.artworkUrl,
+            kind = kind,
+            album = release.album,
+            albumArtist = release.artistName,
+            releaseDate = formattedDate
+        )
     }
 }

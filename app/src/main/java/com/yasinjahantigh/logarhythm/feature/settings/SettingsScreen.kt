@@ -52,6 +52,7 @@ import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.AutoFixHigh
 import androidx.compose.material.icons.filled.Backup
 import androidx.compose.material.icons.filled.BarChart
+import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.ColorLens
@@ -60,7 +61,9 @@ import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.Feedback
 import androidx.compose.material.icons.filled.FolderOff
+import androidx.compose.material.icons.filled.Gavel
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Headset
 import androidx.compose.material.icons.filled.Info
@@ -69,6 +72,7 @@ import androidx.compose.material.icons.filled.LibraryMusic
 import androidx.compose.material.icons.filled.Lyrics
 import androidx.compose.material.icons.filled.Restore
 import androidx.compose.material.icons.filled.RoundedCorner
+import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material.icons.filled.Timer
@@ -123,6 +127,7 @@ private enum class SettingsCategory(
     LIBRARY(R.string.settings_category_library, Icons.Filled.LibraryMusic),
     LYRICS(R.string.settings_category_lyrics, Icons.Filled.Lyrics),
     AI_DATA(R.string.settings_page_ai_data, Icons.Filled.Backup),
+    PRIVACY_FEEDBACK(R.string.settings_category_privacy_feedback, Icons.Filled.Shield),
     ABOUT(R.string.settings_category_about, Icons.Filled.Info)
 }
 
@@ -174,6 +179,8 @@ fun SettingsScreen(
     val updateState by viewModel.updateState.collectAsStateWithLifecycle()
     val latestRelease by viewModel.latestRelease.collectAsStateWithLifecycle()
     val autoCheckEnabled by viewModel.autoCheckEnabled.collectAsStateWithLifecycle()
+    val crashReportsEnabled by viewModel.crashReportsEnabled.collectAsStateWithLifecycle()
+    val weeklyStatsEnabled by viewModel.weeklyStatsEnabled.collectAsStateWithLifecycle()
     val totalDeviceInstalls by viewModel.totalDeviceInstalls.collectAsStateWithLifecycle()
     val message by viewModel.message.collectAsStateWithLifecycle()
     val context = LocalContext.current
@@ -219,6 +226,9 @@ fun SettingsScreen(
     var showLyricsTestDialog by remember { mutableStateOf(false) }
     var showAiDialog by remember { mutableStateOf(false) }
     var showFeatureGuide by remember { mutableStateOf(false) }
+    var showSuggestionsDialog by remember { mutableStateOf(false) }
+    var showBugReportSheet by remember { mutableStateOf(false) }
+    var showLicensesSheet by remember { mutableStateOf(false) }
 
     if (showAiDialog) {
         AiSettingsDialog(
@@ -230,8 +240,15 @@ fun SettingsScreen(
                     showAiDialog = false
                 }
             },
-            onClearKey = viewModel::clearAiKey,
-            onDismiss = { showAiDialog = false }
+            onClearKey = {
+                viewModel.clearAiKey()
+                viewModel.resetAiTestState()
+            },
+            onDismiss = {
+                viewModel.resetAiTestState()
+                showAiDialog = false
+            },
+            onClearTestState = viewModel::resetAiTestState
         )
     }
 
@@ -426,6 +443,25 @@ fun SettingsScreen(
         FeatureGuideSheet(onDismiss = { showFeatureGuide = false })
     }
 
+    if (showSuggestionsDialog) {
+        SuggestionsDialog(
+            onSubmit = viewModel::sendSuggestion,
+            onDismiss = { showSuggestionsDialog = false }
+        )
+    }
+
+    if (showBugReportSheet) {
+        ShakeBugReportSheet(
+            recentLogsCount = viewModel.recentLogLineCount(),
+            onSubmit = viewModel::sendBugReport,
+            onDismiss = { showBugReportSheet = false }
+        )
+    }
+
+    if (showLicensesSheet) {
+        OpenSourceLicensesSheet(onDismiss = { showLicensesSheet = false })
+    }
+
     val languageLabel = when (appLanguage) {
         "en" -> stringResource(R.string.settings_language_english)
         "fa" -> stringResource(R.string.settings_language_persian)
@@ -464,6 +500,7 @@ fun SettingsScreen(
         SettingsCategory.LYRICS to "${formatCount(enabledLyricsCount)}/${formatCount(6)} · " +
             stringResource(R.string.settings_lyrics_sources_desc),
         SettingsCategory.AI_DATA to stringResource(R.string.settings_hub_ai_data_sub),
+        SettingsCategory.PRIVACY_FEEDBACK to stringResource(R.string.settings_hub_privacy_feedback_sub),
         SettingsCategory.ABOUT to "v${viewModel.installedVersion} · " + stringResource(R.string.settings_hub_about_sub)
     )
 
@@ -897,6 +934,49 @@ fun SettingsScreen(
                     }
                 }
 
+                SettingsCategory.PRIVACY_FEEDBACK -> {
+                    item {
+                        SettingsGroup(title = stringResource(R.string.settings_group_feedback)) {
+                            SettingsActionItem(
+                                title = stringResource(R.string.settings_suggestions_title),
+                                subtitle = stringResource(R.string.settings_suggestions_desc),
+                                icon = Icons.Filled.Feedback,
+                                onClick = { showSuggestionsDialog = true },
+                                testTag = "settings_suggestions_item"
+                            )
+                            SettingsActionItem(
+                                title = stringResource(R.string.settings_bug_report_title),
+                                subtitle = stringResource(R.string.settings_bug_report_desc),
+                                icon = Icons.Filled.BugReport,
+                                onClick = { showBugReportSheet = true },
+                                testTag = "settings_bug_report_item"
+                            )
+                        }
+                    }
+                    item {
+                        SettingsGroup(title = stringResource(R.string.settings_group_privacy_telemetry)) {
+                            SettingsSwitchItem(
+                                title = stringResource(R.string.privacy_consent_crash_title),
+                                subtitle = stringResource(R.string.privacy_consent_crash_desc),
+                                icon = Icons.Filled.BugReport,
+                                checked = crashReportsEnabled,
+                                onCheckedChange = viewModel::setCrashReportsEnabled,
+                                rowTag = "settings_crash_reports_item",
+                                switchTag = "settings_crash_reports_switch"
+                            )
+                            SettingsSwitchItem(
+                                title = stringResource(R.string.privacy_consent_weekly_title),
+                                subtitle = stringResource(R.string.privacy_consent_weekly_desc),
+                                icon = Icons.Filled.BarChart,
+                                checked = weeklyStatsEnabled,
+                                onCheckedChange = viewModel::setWeeklyStatsEnabled,
+                                rowTag = "settings_weekly_stats_item",
+                                switchTag = "settings_weekly_stats_switch"
+                            )
+                        }
+                    }
+                }
+
                 SettingsCategory.ABOUT -> {
                     item {
                         SettingsGroup(title = stringResource(R.string.settings_category_about)) {
@@ -906,40 +986,57 @@ fun SettingsScreen(
                                 icon = Icons.Filled.Info,
                                 testTag = "settings_version_item"
                             )
-                            val updateSubtitle = when (val state = updateState) {
-                                UpdateState.Checking -> stringResource(R.string.update_checking)
-                                is UpdateState.Available ->
-                                    stringResource(R.string.update_available_short, state.release.versionName)
-                                is UpdateState.Downloading -> if (state.fraction >= 0f) {
-                                    stringResource(R.string.update_downloading_percent, (state.fraction * 100).toInt())
-                                } else {
-                                    stringResource(R.string.update_downloading_wait)
+                            val updateSubtitle = if (!viewModel.isSelfUpdateEnabled) {
+                                stringResource(R.string.settings_check_update_myket_desc)
+                            } else {
+                                when (val state = updateState) {
+                                    UpdateState.Checking -> stringResource(R.string.update_checking)
+                                    is UpdateState.Available ->
+                                        stringResource(R.string.update_available_short, state.release.versionName)
+                                    is UpdateState.Downloading -> if (state.fraction >= 0f) {
+                                        stringResource(R.string.update_downloading_percent, (state.fraction * 100).toInt())
+                                    } else {
+                                        stringResource(R.string.update_downloading_wait)
+                                    }
+                                    is UpdateState.Failed -> stringResource(R.string.update_failed_title)
+                                    UpdateState.Hidden -> latestRelease?.let {
+                                        val count = maxOf(it.downloads, totalDeviceInstalls ?: 0L)
+                                        stringResource(
+                                            R.string.update_latest_short,
+                                            it.versionName,
+                                            formatCount(count.toInt())
+                                        )
+                                    } ?: stringResource(R.string.settings_check_update_desc)
                                 }
-                                is UpdateState.Failed -> stringResource(R.string.update_failed_title)
-                                UpdateState.Hidden -> latestRelease?.let {
-                                    val count = maxOf(it.downloads, totalDeviceInstalls ?: 0L)
-                                    stringResource(
-                                        R.string.update_latest_short,
-                                        it.versionName,
-                                        formatCount(count.toInt())
-                                    )
-                                } ?: stringResource(R.string.settings_check_update_desc)
                             }
                             SettingsActionItem(
-                                title = stringResource(R.string.settings_check_update_title),
+                                title = if (viewModel.isSelfUpdateEnabled) {
+                                    stringResource(R.string.settings_check_update_title)
+                                } else {
+                                    stringResource(R.string.settings_check_update_myket_title)
+                                },
                                 subtitle = updateSubtitle,
                                 icon = Icons.Filled.SystemUpdate,
                                 onClick = viewModel::checkForUpdates,
                                 testTag = "settings_check_update_item"
                             )
-                            SettingsSwitchItem(
-                                title = stringResource(R.string.settings_auto_update_title),
-                                subtitle = stringResource(R.string.settings_auto_update_desc),
-                                icon = Icons.Filled.SystemUpdate,
-                                checked = autoCheckEnabled,
-                                onCheckedChange = viewModel::setAutoCheckEnabled,
-                                rowTag = "settings_auto_update_item",
-                                switchTag = "settings_auto_update_switch"
+                            if (viewModel.isSelfUpdateEnabled) {
+                                SettingsSwitchItem(
+                                    title = stringResource(R.string.settings_auto_update_title),
+                                    subtitle = stringResource(R.string.settings_auto_update_desc),
+                                    icon = Icons.Filled.SystemUpdate,
+                                    checked = autoCheckEnabled,
+                                    onCheckedChange = viewModel::setAutoCheckEnabled,
+                                    rowTag = "settings_auto_update_item",
+                                    switchTag = "settings_auto_update_switch"
+                                )
+                            }
+                            SettingsActionItem(
+                                title = stringResource(R.string.settings_licenses_title),
+                                subtitle = stringResource(R.string.settings_licenses_desc),
+                                icon = Icons.Filled.Gavel,
+                                onClick = { showLicensesSheet = true },
+                                testTag = "settings_licenses_item"
                             )
                             SettingsActionItem(
                                 title = stringResource(R.string.settings_github_title),

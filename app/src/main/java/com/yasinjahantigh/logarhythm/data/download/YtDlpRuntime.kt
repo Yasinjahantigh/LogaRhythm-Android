@@ -54,15 +54,15 @@ class YtDlpRuntime @Inject constructor(
 ) {
     private val initMutex = Mutex()
     private val updateMutex = Mutex()
-    private val activeProcesses = AtomicInteger(0)
+    private val stateMutex = Mutex()
+    private val activeProcesses = MutableStateFlow(0)
     private val backgroundScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val firstUpdateRequested = AtomicBoolean(false)
 
     @Volatile
     private var initialized = false
 
-    @Volatile
-    private var updating = false
+    private val isUpdatingFlow = MutableStateFlow(false)
 
     private val _updateState = MutableStateFlow<YtdlpUpdateState>(YtdlpUpdateState.Idle)
     val updateState: StateFlow<YtdlpUpdateState> = _updateState.asStateFlow()
@@ -107,15 +107,27 @@ class YtDlpRuntime @Inject constructor(
         }
     }
 
-    /** Runs [block] with the engine, waiting for any in-flight update to finish first. */
+    /** Runs [block] with the engine, waiting atomically for any in-flight update to finish first. */
     suspend fun <T> engineUse(block: suspend () -> T): T {
         initialize()
-        while (updating) delay(200)
-        activeProcesses.incrementAndGet()
+        while (true) {
+            isUpdatingFlow.first { !it }
+            val acquired = stateMutex.withLock {
+                if (isUpdatingFlow.value) {
+                    false
+                } else {
+                    activeProcesses.value = activeProcesses.value + 1
+                    true
+                }
+            }
+            if (acquired) break
+        }
         try {
             return block()
         } finally {
-            activeProcesses.decrementAndGet()
+            stateMutex.withLock {
+                activeProcesses.value = (activeProcesses.value - 1).coerceAtLeast(0)
+            }
         }
     }
 
@@ -164,8 +176,10 @@ class YtDlpRuntime @Inject constructor(
     suspend fun updateAndVerify(): YtdlpUpdateState {
         initialize()
         return updateMutex.withLock {
-            while (activeProcesses.get() > 0) delay(250)
-            updating = true
+            stateMutex.withLock {
+                isUpdatingFlow.value = true
+            }
+            activeProcesses.first { it == 0 }
             _updateState.value = YtdlpUpdateState.Updating
 
             val baseDir = File(context.noBackupFilesDir, "youtubedl-android")
@@ -211,7 +225,9 @@ class YtDlpRuntime @Inject constructor(
                 }
                 _updateState.value
             } finally {
-                updating = false
+                stateMutex.withLock {
+                    isUpdatingFlow.value = false
+                }
                 runCatching { backup.deleteRecursively() }
             }
         }

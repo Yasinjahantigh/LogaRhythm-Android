@@ -34,6 +34,10 @@ KEYSTORE_INFO.txt
 Thumbs.db
 
 # Extra scratch
+.claude/
 .freebuff/
 .shots/
+settings.local.json
+project-id
+*.html
 *.zip

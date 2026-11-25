@@ -67,4 +67,7 @@ interface PlayerController {
     fun setDeviceAutoEqEnabled(enabled: Boolean)
     fun resetEqualizer()
     fun updateTrackInPlayback(updatedTrack: Track)
+    fun removeTrackFromPlayback(trackId: String) {}
+    fun reconnectIfNeeded() {}
+    fun setPreferredAudioDevice(deviceId: Int?) {}
 }

@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Album
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.GraphicEq
@@ -66,7 +67,8 @@ fun FullPlayerHeader(
     abLoopLabel: String? = null,
     onToggleAbLoop: () -> Unit = {},
     onOpenCarMode: () -> Unit = {},
-    onHideSong: (() -> Unit)? = null
+    onHideSong: (() -> Unit)? = null,
+    onDeleteSong: (() -> Unit)? = null
 ) {
     var showMoreMenu by remember { mutableStateOf(false) }
     val scheme = MaterialTheme.colorScheme
@@ -198,7 +200,27 @@ fun FullPlayerHeader(
                     DropdownMenuItem(
                         text = { Text(stringResource(R.string.action_hide_track)) },
                         leadingIcon = { Icon(Icons.Default.VisibilityOff, contentDescription = null) },
-                        onClick = { showMoreMenu = false; onHideSong() }
+                        onClick = { showMoreMenu = false; onHideSong() },
+                        modifier = Modifier.testTag("player_menu_hide_song")
+                    )
+                }
+                if (onDeleteSong != null) {
+                    DropdownMenuItem(
+                        text = {
+                            Text(
+                                text = stringResource(R.string.player_menu_delete_device),
+                                color = scheme.error
+                            )
+                        },
+                        leadingIcon = {
+                            Icon(
+                                imageVector = Icons.Default.DeleteOutline,
+                                contentDescription = null,
+                                tint = scheme.error
+                            )
+                        },
+                        onClick = { showMoreMenu = false; onDeleteSong() },
+                        modifier = Modifier.testTag("player_menu_delete_song")
                     )
                 }
             }

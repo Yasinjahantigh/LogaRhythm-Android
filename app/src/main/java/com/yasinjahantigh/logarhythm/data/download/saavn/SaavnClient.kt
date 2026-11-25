@@ -69,6 +69,9 @@ class SaavnClient @Inject constructor(
 
             // Extract direct CDN audio download link (prefer 320kbps)
             val audioUrl = extractBestDownloadUrl(item) ?: continue
+            val releaseDate = item.optString("releaseDate").trim()
+                .ifBlank { item.optString("release_date").trim() }
+                .ifBlank { item.optString("year").trim() }
 
             list.add(
                 DownloadSearchResult(
@@ -78,7 +81,8 @@ class SaavnClient @Inject constructor(
                     source = DownloadSource.SAAVN,
                     url = audioUrl,
                     durationMs = durationMs,
-                    thumbnailUrl = imageUrl
+                    thumbnailUrl = imageUrl,
+                    releaseDate = releaseDate
                 )
             )
         }

@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -25,15 +26,23 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import com.yasinjahantigh.logarhythm.core.library.LibrarySync
 import com.yasinjahantigh.logarhythm.core.utils.ArtworkColorExtractor
+import com.yasinjahantigh.logarhythm.core.utils.ShakeDetector
+import com.yasinjahantigh.logarhythm.data.analytics.AppLogBuffer
+import com.yasinjahantigh.logarhythm.data.analytics.InstallReporter
 import com.yasinjahantigh.logarhythm.data.datastore.PreferencesManager
 import com.yasinjahantigh.logarhythm.data.datastore.ThemePreferences
 import com.yasinjahantigh.logarhythm.data.download.ShareLinkResolver
 import com.yasinjahantigh.logarhythm.data.update.UpdateManager
 import com.yasinjahantigh.logarhythm.feature.onboarding.OnboardingScreen
+import com.yasinjahantigh.logarhythm.feature.settings.PrivacyConsentSheet
+import com.yasinjahantigh.logarhythm.feature.settings.ShakeBugReportSheet
 import com.yasinjahantigh.logarhythm.feature.update.UpdateDialogHost
 import com.yasinjahantigh.logarhythm.playback.PlayerController
 import com.yasinjahantigh.logarhythm.ui.MainScreen
@@ -62,6 +71,12 @@ class MainActivity : ComponentActivity() {
     @Inject
     lateinit var shareLinkResolver: ShareLinkResolver
 
+    @Inject
+    lateinit var installReporter: InstallReporter
+
+    @Inject
+    lateinit var appLogBuffer: AppLogBuffer
+
     private var shareEventSeq by mutableStateOf(0)
 
     override fun onNewIntent(intent: Intent) {
@@ -83,6 +98,7 @@ class MainActivity : ComponentActivity() {
     override fun onStart() {
         super.onStart()
         librarySync.onForeground()
+        playerController.reconnectIfNeeded()
     }
 
     override fun onStop() {
@@ -146,10 +162,40 @@ class MainActivity : ComponentActivity() {
             val isOnboardingCompleted by preferencesManager.isOnboardingCompleted.collectAsStateWithLifecycle(
                 initialValue = onboardingBootstrap
             )
+            val privacyConsentAnswered by preferencesManager.privacyConsentAnswered.collectAsStateWithLifecycle(
+                initialValue = true
+            )
             val currentTrack by playerController.currentTrack.collectAsStateWithLifecycle()
             val updateState by updateManager.state.collectAsStateWithLifecycle()
             val scope = rememberCoroutineScope()
             val context = LocalContext.current
+            val lifecycleOwner = LocalLifecycleOwner.current
+            var showShakeReportSheet by remember { mutableStateOf(false) }
+
+            DisposableEffect(lifecycleOwner, isOnboardingCompleted) {
+                if (!isOnboardingCompleted) return@DisposableEffect onDispose {}
+                val detector = ShakeDetector(context) {
+                    if (!showShakeReportSheet) {
+                        appLogBuffer.log("UI", "Shake bug report triggered")
+                        showShakeReportSheet = true
+                    }
+                }
+                val observer = LifecycleEventObserver { _, event ->
+                    when (event) {
+                        Lifecycle.Event.ON_RESUME -> detector.start()
+                        Lifecycle.Event.ON_PAUSE -> detector.stop()
+                        else -> Unit
+                    }
+                }
+                lifecycleOwner.lifecycle.addObserver(observer)
+                if (lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) {
+                    detector.start()
+                }
+                onDispose {
+                    detector.stop()
+                    lifecycleOwner.lifecycle.removeObserver(observer)
+                }
+            }
 
             LaunchedEffect(isOnboardingCompleted) {
                 if (isOnboardingCompleted) {
@@ -248,6 +294,29 @@ class MainActivity : ComponentActivity() {
                         onDownload = updateManager::download,
                         onDismiss = updateManager::dismiss
                     )
+                    if (!privacyConsentAnswered) {
+                        PrivacyConsentSheet(
+                            onConfirm = { crashEnabled, weeklyEnabled ->
+                                scope.launch {
+                                    preferencesManager.setPrivacyConsent(crashEnabled, weeklyEnabled)
+                                }
+                            }
+                        )
+                    }
+                    if (showShakeReportSheet) {
+                        ShakeBugReportSheet(
+                            recentLogsCount = appLogBuffer.lineCount(),
+                            onSubmit = { category, description, contact, includeLogs ->
+                                installReporter.sendUserReport(
+                                    category = category,
+                                    description = description,
+                                    contact = contact,
+                                    recentLogs = if (includeLogs) appLogBuffer.snapshot() else ""
+                                )
+                            },
+                            onDismiss = { showShakeReportSheet = false }
+                        )
+                    }
                 }
             }
         }

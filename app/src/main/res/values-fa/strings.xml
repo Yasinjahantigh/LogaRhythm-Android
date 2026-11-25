@@ -1206,5 +1206,106 @@
     <string name="smart_taste_slot_afternoon">حال‌وهوای ظهر و عصر</string>
     <string name="smart_taste_slot_evening">حال‌وهوای غروب و شب</string>
     <string name="smart_taste_slot_night">حال‌وهوای آخر شب</string>
+
+    <!-- Player 3-dot Delete -->
+    <string name="player_menu_delete_device">حذف آهنگ از دستگاه</string>
+
+    <!-- Spotify-style Home Quick Picks -->
+    <string name="home_quick_picks_title">دسترسی سریع</string>
+    <string name="home_quick_pick_favorites">علاقه‌مندی‌ها</string>
+    <string name="home_quick_pick_tracks_count">%1$d آهنگ</string>
+
+    <!-- FullPlayer Up Next & About Artist / Audio Quality -->
+    <string name="player_up_next_label">بعدی: %1$s</string>
+    <string name="player_about_artist">درباره هنرمند</string>
+    <string name="player_about_artist_title">درباره هنرمند</string>
+    <string name="player_artist_library_tracks">%1$d آهنگ در کتابخانه شما</string>
+    <string name="player_artist_your_plays">تعداد پخش شما</string>
+    <string name="player_artist_listen_time">زمان گوش‌دادن</string>
+    <string name="player_artist_top_tracks">محبوب‌ترین‌های %1$s برای شما</string>
+    <string name="player_artist_open_page">باز کردن صفحه هنرمند</string>
+    <string name="player_audio_quality_title">کیفیت صدا و مشخصات فایل</string>
+    <string name="player_audio_quality_unavailable">اطلاعات فنی فایل در دسترس نیست</string>
+    <string name="player_spec_format">فرمت</string>
+    <string name="player_spec_codec">کدک</string>
+    <string name="player_spec_bitrate">بیت‌ریت</string>
+    <string name="player_spec_sample_rate">نرخ نمونه‌برداری</string>
+    <string name="player_spec_file_size">حجم فایل</string>
+
+    <!-- Free Bilingual Lyrics Translation -->
+    <string name="lyrics_translate_action">ترجمه متن آهنگ</string>
+    <string name="lyrics_translate_off">خاموش (فقط متن اصلی)</string>
+    <string name="lyrics_translating">در حال ترجمه…</string>
+    <string name="lyrics_translate_failed">ترجمه ناموفق بود. اتصال اینترنت را بررسی کنید.</string>
+    <string name="lyrics_translate_badge">ترجمه · %1$s</string>
+    <string name="lyrics_translate_lang_fa">فارسی</string>
+    <string name="lyrics_translate_lang_en">انگلیسی (English)</string>
+    <string name="lyrics_translate_lang_ar">عربی (العربية)</string>
+    <string name="lyrics_translate_lang_tr">ترکی (Türkçe)</string>
+    <string name="lyrics_translate_lang_es">اسپانیایی (Español)</string>
+    <string name="lyrics_translate_lang_fr">فرانسوی (Français)</string>
+    <string name="lyrics_translate_lang_de">آلمانی (Deutsch)</string>
+    <string name="lyrics_translate_lang_ru">روسی (Русский)</string>
+
+    <!-- Music Silence / Instrumental -->
+    <string name="lyrics_instrumental_label">بخش بی‌کلام</string>
+    <!-- Downloads & Release Radar Details -->
+    <string name="download_filter_show_owned">نمایش آهنگ‌های موجود</string>
+    <string name="online_track_release_date_label">تاریخ انتشار</string>
+    <!-- Playlists Search & Favorites -->
+    <string name="cd_favorite_playlist">افزودن به پلی‌لیست‌های محبوب</string>
+    <string name="cd_unfavorite_playlist">حذف از پلی‌لیست‌های محبوب</string>
+    <string name="playlist_search_action">جستجو در پلی‌لیست‌ها</string>
+    <string name="playlists_search_hint">جستجوی پلی‌لیست…</string>
+    <string name="playlists_pinned_header">سنجاق‌شده</string>
+    <!-- Privacy, Telemetry, Bug Report, Suggestions, Licenses & Myket Updates -->
+    <string name="privacy_consent_title">کمک به بهبود لوگاریتم</string>
+    <string name="privacy_consent_subtitle">انتخاب کنید چه گزارش‌های ناشناسی برای بهبود برنامه ارسال شود.</string>
+    <string name="privacy_consent_shake_tip">نکته: هر زمان گوشی را تکان دهید می‌توانید باگ یا پیشنهاد خود را ارسال کنید.</string>
+    <string name="privacy_consent_crash_title">گزارش خطا و کرش</string>
+    <string name="privacy_consent_crash_desc">ارسال ناشناس جزئیات فنی هنگام بروز خطا برای رفع سریع‌تر باگ‌ها.</string>
+    <string name="privacy_consent_weekly_title">آمار هفتگی ناشناس</string>
+    <string name="privacy_consent_weekly_desc">ارسال خلاصه آماری بسیار کوچک بدون نام آهنگ‌ها یا اطلاعات هویتی.</string>
+    <string name="privacy_consent_footnote">هر زمان خواستید می‌توانید این موارد را در تنظیمات تغییر دهید.</string>
+    <string name="privacy_consent_accept_cta">ادامه</string>
+    <string name="settings_category_privacy_feedback">حریم خصوصی و بازخورد</string>
+    <string name="settings_hub_privacy_feedback_sub">گزارش خطا، پیشنهادات و حریم خصوصی</string>
+    <string name="settings_group_feedback">بازخورد و پیشنهادات</string>
+    <string name="settings_suggestions_title">پیشنهادات</string>
+    <string name="settings_suggestions_desc">ایده یا درخواست قابلیت جدید را بفرستید</string>
+    <string name="settings_bug_report_title">گزارش خطا</string>
+    <string name="settings_bug_report_desc">ارسال گزارش مشکل به همراه لاگ‌های اختیاری</string>
+    <string name="settings_group_privacy_telemetry">گزارش‌ها و حریم خصوصی</string>
+    <string name="report_cat_crash">کرش</string>
+    <string name="report_cat_playback">پخش</string>
+    <string name="report_cat_download">دانلود</string>
+    <string name="report_cat_lyrics">متن آهنگ</string>
+    <string name="report_cat_other">سایر</string>
+    <string name="bug_report_title">گزارش خطا</string>
+    <string name="bug_report_subtitle">توضیح دهید چه مشکلی پیش آمده و در صورت نیاز لاگ‌ها را پیوست کنید.</string>
+    <string name="bug_report_desc_label">چه اتفاقی افتاد؟</string>
+    <string name="bug_report_desc_hint">مراحل بروز خطا یا توضیحات بیشتر…</string>
+    <string name="feedback_contact_label">راه ارتباطی (اختیاری)</string>
+    <string name="feedback_contact_hint">آیدی تلگرام یا ایمیل</string>
+    <string name="bug_report_attach_logs">پیوست لاگ‌های اخیر برنامه</string>
+    <string name="bug_report_attach_logs_desc">حداکثر %1$d خط لاگ پاکسازی‌شده ضمیمه می‌شود</string>
+    <string name="bug_report_sent_toast">گزارش خطا ارسال شد. ممنون از شما!</string>
+    <string name="feedback_send_failed_toast">ارسال انجام نشد. اتصال اینترنت را بررسی کنید.</string>
+    <string name="bug_report_submit_btn">ارسال گزارش</string>
+    <string name="suggestions_cat_feature">قابلیت جدید</string>
+    <string name="suggestions_cat_design">طراحی</string>
+    <string name="suggestions_cat_player">پخش‌کننده</string>
+    <string name="suggestions_cat_download">دانلود</string>
+    <string name="suggestions_dialog_subtitle">ایده‌ای برای بهتر شدن لوگاریتم دارید؟ برای ما بنویسید.</string>
+    <string name="suggestions_input_label">پیشنهاد شما</string>
+    <string name="suggestions_input_hint">ایده خود را بنویسید…</string>
+    <string name="suggestions_sent_toast">پیشنهاد شما ارسال شد. سپاس!</string>
+    <string name="suggestions_send_btn">ارسال</string>
+    <string name="settings_check_update_myket_title">به‌روزرسانی از طریق مایکت</string>
+    <string name="settings_check_update_myket_desc">بررسی آخرین نسخه در صفحه مایکت برنامه</string>
+    <string name="settings_licenses_title">مجوزهای متن‌باز</string>
+    <string name="settings_licenses_desc">مجوز GPL-3.0، اعلان‌های کتابخانه‌ها و فونت‌ها</string>
+    <string name="licenses_tab_third_party">کتابخانه‌ها</string>
+    <string name="licenses_tab_fonts">فونت‌ها</string>
 </resources>
 

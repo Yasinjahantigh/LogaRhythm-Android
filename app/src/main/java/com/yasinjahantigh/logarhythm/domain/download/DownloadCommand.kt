@@ -11,7 +11,6 @@ object DownloadCommand {
         add("--no-warnings" to null)
         add("--ignore-errors" to null)
         add("--no-playlist" to null)
-        add("--no-check-certificates" to null)
         add("--geo-bypass" to null)
         add("--no-cache-dir" to null)
         add("--socket-timeout" to "10")

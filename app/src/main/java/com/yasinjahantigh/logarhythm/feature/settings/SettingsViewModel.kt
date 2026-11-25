@@ -5,9 +5,11 @@ import androidx.annotation.StringRes
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.yasinjahantigh.logarhythm.data.datastore.PreferencesManager
+import com.yasinjahantigh.logarhythm.BuildConfig
 import com.yasinjahantigh.logarhythm.R
 import com.yasinjahantigh.logarhythm.data.ai.AiProvider
 import com.yasinjahantigh.logarhythm.data.ai.AiSettings
+import com.yasinjahantigh.logarhythm.data.analytics.AppLogBuffer
 import com.yasinjahantigh.logarhythm.data.analytics.InstallReporter
 import com.yasinjahantigh.logarhythm.data.backup.BackupManager
 import com.yasinjahantigh.logarhythm.data.backup.PlaylistFileService
@@ -37,7 +39,8 @@ import javax.inject.Inject
 data class AiTestState(
     val testing: Boolean = false,
     val success: Boolean = false,
-    val failure: AiFailure? = null
+    val failure: AiFailure? = null,
+    val detail: String? = null
 )
 
 @HiltViewModel
@@ -49,7 +52,8 @@ class SettingsViewModel @Inject constructor(
     private val backupManager: BackupManager,
     private val playlistFileService: PlaylistFileService,
     private val updateManager: UpdateManager,
-    private val installReporter: InstallReporter
+    private val installReporter: InstallReporter,
+    private val appLogBuffer: AppLogBuffer
 ) : ViewModel() {
 
     /** One-shot result text for a toast; the screen calls [consumeMessage] after showing it. */
@@ -96,11 +100,16 @@ class SettingsViewModel @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), AiSettings())
 
     val installedVersion: String = updateManager.installedVersion
+    val isSelfUpdateEnabled: Boolean = BuildConfig.SELF_UPDATE_ENABLED
     val updateState: StateFlow<UpdateState> = updateManager.state
     val latestRelease: StateFlow<AppRelease?> = updateManager.lastRelease
     val autoCheckEnabled: StateFlow<Boolean> = updateManager.autoCheckEnabled
     val installStatsAvailable: Boolean = installReporter.isConfigured
     val totalDeviceInstalls: StateFlow<Long?> = installReporter.totalInstalls
+    val crashReportsEnabled: StateFlow<Boolean> = preferencesManager.crashReportsEnabled
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
+    val weeklyStatsEnabled: StateFlow<Boolean> = preferencesManager.weeklyStatsEnabled
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
 
     init {
         viewModelScope.launch {
@@ -110,6 +119,29 @@ class SettingsViewModel @Inject constructor(
 
     fun checkForUpdates() = updateManager.check(silent = false)
     fun setAutoCheckEnabled(enabled: Boolean) = updateManager.setAutoCheckEnabled(enabled)
+    fun setCrashReportsEnabled(enabled: Boolean) {
+        viewModelScope.launch { preferencesManager.setCrashReportsEnabled(enabled) }
+    }
+    fun setWeeklyStatsEnabled(enabled: Boolean) {
+        viewModelScope.launch { preferencesManager.setWeeklyStatsEnabled(enabled) }
+    }
+    fun recentLogLineCount(): Int = appLogBuffer.lineCount()
+    suspend fun sendBugReport(
+        category: String,
+        description: String,
+        contact: String?,
+        includeLogs: Boolean
+    ): Result<Unit> = installReporter.sendUserReport(
+        category = category,
+        description = description,
+        contact = contact,
+        recentLogs = if (includeLogs) appLogBuffer.snapshot() else ""
+    )
+    suspend fun sendSuggestion(
+        category: String,
+        text: String,
+        contact: String?
+    ): Result<Unit> = installReporter.sendSuggestion(category, text, contact)
 
     private val _aiTestState = MutableStateFlow(AiTestState())
     val aiTestState: StateFlow<AiTestState> = _aiTestState.asStateFlow()
@@ -137,7 +169,8 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch {
             _aiTestState.value = AiTestState(testing = true)
             val failure = aiPlaylistRepository.testConnection(provider, baseUrl, model, apiKey)
-            _aiTestState.value = AiTestState(success = failure == null, failure = failure)
+            val detail = if (failure != null) aiPlaylistRepository.lastErrorDetail() else null
+            _aiTestState.value = AiTestState(success = failure == null, failure = failure, detail = detail)
         }
     }
 

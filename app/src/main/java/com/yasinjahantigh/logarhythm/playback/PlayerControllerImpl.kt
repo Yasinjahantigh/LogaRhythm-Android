@@ -2,11 +2,13 @@ package com.yasinjahantigh.logarhythm.playback
 
 import android.content.ComponentName
 import android.content.Context
+import android.os.Bundle
 import androidx.core.content.ContextCompat
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
 import androidx.media3.session.MediaController
+import androidx.media3.session.SessionCommand
 import androidx.media3.session.SessionToken
 import com.yasinjahantigh.logarhythm.data.datastore.PreferencesManager
 import com.yasinjahantigh.logarhythm.domain.curation.TrackCuration
@@ -48,6 +50,7 @@ class PlayerControllerImpl @Inject constructor(
 
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
     private var mediaController: MediaController? = null
+    private var isConnecting = false
     private var reconnectAttempts = 0
     private val pendingActions = mutableListOf<(MediaController) -> Unit>()
     private val trackMap = mutableMapOf<String, Track>()
@@ -55,6 +58,7 @@ class PlayerControllerImpl @Inject constructor(
     private var endlessAppendJob: Job? = null
     private var saveQueueJob: Job? = null
     private var playPrepJob: Job? = null
+    private var hydrateJob: Job? = null
 
     private companion object {
         const val MAX_RECONNECT_ATTEMPTS = 5
@@ -113,6 +117,8 @@ class PlayerControllerImpl @Inject constructor(
     }
 
     private fun connect() {
+        if (isConnecting) return
+        isConnecting = true
         val token = SessionToken(context, ComponentName(context, PlaybackService::class.java))
         val future = MediaController.Builder(context, token)
             .setListener(object : MediaController.Listener {
@@ -123,6 +129,7 @@ class PlayerControllerImpl @Inject constructor(
             })
             .buildAsync()
         future.addListener({
+            isConnecting = false
             try {
                 val controller = future.get()
                 mediaController = controller
@@ -153,6 +160,9 @@ class PlayerControllerImpl @Inject constructor(
             }
             override fun onTimelineChanged(timeline: androidx.media3.common.Timeline, reason: Int) {
                 _queueIndex.value = controller.currentMediaItemIndex
+                if (controller.mediaItemCount > 0 && (_queue.value.isEmpty() || _currentTrack.value == null)) {
+                    hydrateFromController(controller)
+                }
             }
             override fun onMediaItemTransition(item: MediaItem?, reason: Int) {
                 val index = controller.currentMediaItemIndex
@@ -227,6 +237,8 @@ class PlayerControllerImpl @Inject constructor(
 
         if (controller.mediaItemCount == 0) {
             restoreSavedQueue(controller)
+        } else {
+            hydrateFromController(controller)
         }
         scope.launch {
             val savedPitch = preferencesManager.playbackPitch.first().coerceIn(0.5f, 2.0f)
@@ -264,6 +276,99 @@ class PlayerControllerImpl @Inject constructor(
         }
     }
 
+    /**
+     * When PlaybackService was started in the background (e.g. from the widget after process death)
+     * and already populated ExoPlayer, hydrate _queue/_currentTrack/trackMap from the live
+     * MediaController immediately and asynchronously enrich with full Room/MediaStore track records.
+     */
+    private fun hydrateFromController(controller: MediaController) {
+        val count = controller.mediaItemCount
+        if (count <= 0) return
+
+        val hydrated = ArrayList<Track>(count)
+        for (i in 0 until count) {
+            val item = controller.getMediaItemAt(i)
+            val resolved = trackMap[item.mediaId] ?: MediaItemMapper.fallbackTrack(item)
+            if (resolved != null) {
+                trackMap[resolved.id] = resolved
+                hydrated.add(resolved)
+            }
+        }
+        if (hydrated.isEmpty()) return
+
+        _queue.value = hydrated
+        if (originalQueue.isEmpty()) {
+            originalQueue = hydrated
+        }
+        val curIdx = controller.currentMediaItemIndex.takeIf { it in hydrated.indices } ?: 0
+        _queueIndex.value = curIdx
+        val current = hydrated.getOrNull(curIdx)
+            ?: controller.currentMediaItem?.let { MediaItemMapper.fallbackTrack(it) }
+        _currentTrack.value = current
+        _position.value = controller.currentPosition.coerceAtLeast(0L)
+        val ctrlDuration = controller.duration.takeIf { it > 0L } ?: current?.durationMs ?: 0L
+        if (ctrlDuration > 0L) _duration.value = ctrlDuration
+        _isPlaying.value = controller.isPlaying
+
+        hydrateJob?.cancel()
+        hydrateJob = scope.launch {
+            val allById = withContext(Dispatchers.IO) {
+                runCatching { trackRepositoryLazy.get().getAllTracks().first() }
+                    .getOrNull()?.associateBy { it.id }.orEmpty()
+            }
+            if (allById.isEmpty()) return@launch
+            val enrichedQueue = _queue.value.map { t -> allById[t.id] ?: t }
+            enrichedQueue.forEach { trackMap[it.id] = it }
+            _queue.value = enrichedQueue
+            if (originalQueue.isNotEmpty()) {
+                originalQueue = originalQueue.map { t -> allById[t.id] ?: t }
+            }
+            val activeId = _currentTrack.value?.id ?: controller.currentMediaItem?.mediaId
+            if (activeId != null) {
+                allById[activeId]?.let { fullTrack ->
+                    _currentTrack.value = fullTrack
+                    if (_duration.value <= 0L && fullTrack.durationMs > 0L) {
+                        _duration.value = fullTrack.durationMs
+                    }
+                }
+            }
+        }
+    }
+
+    override fun reconnectIfNeeded() {
+        val controller = mediaController
+        if (controller == null) {
+            reconnectAttempts = 0
+            if (!isConnecting) connect()
+        } else {
+            val activeMediaId = controller.currentMediaItem?.mediaId
+            if (controller.mediaItemCount > 0 && (
+                    _queue.value.isEmpty() ||
+                        _currentTrack.value == null ||
+                        _queue.value.size != controller.mediaItemCount ||
+                        (activeMediaId != null && _currentTrack.value?.id != activeMediaId)
+                    )
+            ) {
+                hydrateFromController(controller)
+            }
+            _isPlaying.value = controller.isPlaying
+            _position.value = controller.currentPosition.coerceAtLeast(0L)
+            if (controller.duration > 0L) _duration.value = controller.duration
+        }
+    }
+
+    override fun setPreferredAudioDevice(deviceId: Int?) {
+        execute { controller ->
+            val args = Bundle().apply {
+                putInt(PlaybackService.EXTRA_AUDIO_DEVICE_ID, deviceId ?: -1)
+            }
+            controller.sendCustomCommand(
+                SessionCommand(PlaybackService.ACTION_SET_PREFERRED_AUDIO_DEVICE, Bundle.EMPTY),
+                args
+            )
+        }
+    }
+
     private fun startPositionTracker() {
         scope.launch {
             while (isActive) {
@@ -290,7 +395,23 @@ class PlayerControllerImpl @Inject constructor(
     }
 
     private fun onTrackChanged(mediaItem: MediaItem?, isRepeat: Boolean = false) {
-        val track = mediaItem?.mediaId?.let { trackMap[it] }
+        val trackId = mediaItem?.mediaId
+        val track = trackId?.let { trackMap[it] } ?: mediaItem?.let { MediaItemMapper.fallbackTrack(it) }
+        if (track != null && trackId != null && !trackMap.containsKey(trackId)) {
+            trackMap[trackId] = track
+            scope.launch {
+                val full = withContext(Dispatchers.IO) {
+                    runCatching { trackRepositoryLazy.get().getTrackById(trackId).first() }.getOrNull()
+                }
+                if (full != null) {
+                    trackMap[full.id] = full
+                    if (_currentTrack.value?.id == full.id) {
+                        _currentTrack.value = full
+                        if (_duration.value <= 0L && full.durationMs > 0L) _duration.value = full.durationMs
+                    }
+                }
+            }
+        }
         val isDifferentTrack = _currentTrack.value?.id != track?.id
         _currentTrack.value = track
         if (track != null && track.durationMs > 0L) _duration.value = track.durationMs
@@ -843,5 +964,62 @@ class PlayerControllerImpl @Inject constructor(
             }
         }
         _queue.value = _queue.value.map { if (it.id == updatedTrack.id) updatedTrack else it }
+    }
+
+    override fun removeTrackFromPlayback(trackId: String) {
+        trackMap.remove(trackId)
+        originalQueue = originalQueue.filterNot { it.id == trackId }
+        val currentQueue = _queue.value
+        if (currentQueue.none { it.id == trackId }) return
+
+        val wasCurrent = _currentTrack.value?.id == trackId
+        val oldIndex = currentQueueIndex().takeIf { it in currentQueue.indices }
+            ?: _queueIndex.value.takeIf { it in currentQueue.indices }
+            ?: currentQueue.indexOfFirst { it.id == trackId }
+
+        val updatedQueue = currentQueue.filterNot { it.id == trackId }
+        if (updatedQueue.isEmpty()) {
+            clearQueue()
+            return
+        }
+
+        val removedBefore = currentQueue.take(oldIndex.coerceAtLeast(0)).count { it.id == trackId }
+        val targetIndex = (oldIndex - removedBefore).coerceIn(0, updatedQueue.lastIndex)
+        _queue.value = updatedQueue
+        _queueIndex.value = targetIndex
+
+        if (wasCurrent) {
+            val nextTrack = updatedQueue[targetIndex]
+            _currentTrack.value = nextTrack
+            _position.value = 0L
+            _duration.value = nextTrack.durationMs.coerceAtLeast(0L)
+            clearAbLoop()
+            playScrobbler.onTrackChanged(nextTrack.id, force = true)
+        }
+
+        execute { controller ->
+            val removeIndices = mutableListOf<Int>()
+            for (i in 0 until controller.mediaItemCount) {
+                if (controller.getMediaItemAt(i).mediaId == trackId) {
+                    removeIndices.add(i)
+                }
+            }
+            val wasPlaying = controller.isPlaying || controller.playWhenReady
+            for (idx in removeIndices.asReversed()) {
+                if (idx < controller.mediaItemCount) {
+                    controller.removeMediaItem(idx)
+                }
+            }
+            if (wasCurrent && controller.mediaItemCount > 0) {
+                val safeIdx = targetIndex.coerceIn(0, controller.mediaItemCount - 1)
+                if (controller.currentMediaItemIndex != safeIdx) {
+                    controller.seekToDefaultPosition(safeIdx)
+                }
+                if (wasPlaying) {
+                    controller.play()
+                }
+            }
+            saveQueueState(immediate = true)
+        }
     }
 }

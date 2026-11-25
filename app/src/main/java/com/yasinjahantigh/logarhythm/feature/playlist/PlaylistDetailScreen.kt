@@ -26,6 +26,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Search
@@ -84,6 +85,7 @@ fun PlaylistDetailScreen(
     val playlist by viewModel.playlist.collectAsStateWithLifecycle()
     val tracks by viewModel.tracks.collectAsStateWithLifecycle()
     val allPlaylists by viewModel.allPlaylists.collectAsStateWithLifecycle()
+    val isFavorite by viewModel.isFavorite.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     val context = androidx.compose.ui.platform.LocalContext.current
@@ -314,32 +316,52 @@ fun PlaylistDetailScreen(
                             backTag = "playlist_back_button",
                             playTag = "btn_playlist_play",
                             shuffleTag = "btn_playlist_shuffle",
-                            topEndAction = if (!isBuiltIn) {
-                                {
-                                    Box {
-                                        IconButton(onClick = { showMenu = true }) {
-                                            Icon(Icons.Default.MoreVert, contentDescription = stringResource(R.string.cd_playlist_menu))
-                                        }
-                                        DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
-                                            DropdownMenuItem(
-                                                text = { Text(stringResource(R.string.list_filter_action)) },
-                                                onClick = { showMenu = false; showFilterBar = !showFilterBar; if (!showFilterBar) filterQuery = "" }
-                                            )
-                                            DropdownMenuItem(
-                                                text = { Text(stringResource(R.string.btn_rename)) },
-                                                onClick = { showMenu = false; showRenameDialog = true }
-                                            )
-                                            DropdownMenuItem(
-                                                text = { Text(stringResource(R.string.btn_delete)) },
-                                                onClick = { showMenu = false; showDeleteDialog = true }
-                                            )
-                                        }
+                            topEndAction = {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    IconButton(
+                                        onClick = {
+                                            showFilterBar = !showFilterBar
+                                            if (!showFilterBar) filterQuery = ""
+                                        },
+                                        modifier = Modifier.testTag("playlist_search_button")
+                                    ) {
+                                        Icon(
+                                            imageVector = if (showFilterBar) Icons.Default.Close else Icons.Default.Search,
+                                            contentDescription = stringResource(R.string.list_filter_action)
+                                        )
                                     }
-                                }
-                            } else {
-                                {
-                                    IconButton(onClick = { showFilterBar = !showFilterBar; if (!showFilterBar) filterQuery = "" }) {
-                                        Icon(androidx.compose.material.icons.Icons.Default.Search, contentDescription = stringResource(R.string.list_filter_action))
+                                    if (!isBuiltIn) {
+                                        IconButton(
+                                            onClick = viewModel::toggleFavorite,
+                                            modifier = Modifier.testTag("playlist_favorite_button")
+                                        ) {
+                                            Icon(
+                                                imageVector = if (isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                                                contentDescription = stringResource(
+                                                    if (isFavorite) R.string.cd_unfavorite_playlist else R.string.cd_favorite_playlist
+                                                ),
+                                                tint = if (isFavorite) {
+                                                    MaterialTheme.colorScheme.primary
+                                                } else {
+                                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                                }
+                                            )
+                                        }
+                                        Box {
+                                            IconButton(onClick = { showMenu = true }) {
+                                                Icon(Icons.Default.MoreVert, contentDescription = stringResource(R.string.cd_playlist_menu))
+                                            }
+                                            DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
+                                                DropdownMenuItem(
+                                                    text = { Text(stringResource(R.string.btn_rename)) },
+                                                    onClick = { showMenu = false; showRenameDialog = true }
+                                                )
+                                                DropdownMenuItem(
+                                                    text = { Text(stringResource(R.string.btn_delete)) },
+                                                    onClick = { showMenu = false; showDeleteDialog = true }
+                                                )
+                                            }
+                                        }
                                     }
                                 }
                             }
@@ -351,17 +373,20 @@ fun PlaylistDetailScreen(
                                 value = filterQuery,
                                 onValueChange = { filterQuery = it },
                                 placeholder = { Text(stringResource(R.string.list_filter_hint)) },
+                                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
                                 singleLine = true,
+                                shape = RoundedCornerShape(16.dp),
                                 trailingIcon = if (filterQuery.isNotEmpty()) {
                                     {
                                         IconButton(onClick = { filterQuery = "" }) {
-                                            Icon(androidx.compose.material.icons.Icons.Default.Close, contentDescription = null)
+                                            Icon(Icons.Default.Close, contentDescription = stringResource(R.string.cd_clear_search))
                                         }
                                     }
                                 } else null,
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .padding(horizontal = 16.dp, vertical = 6.dp)
+                                    .testTag("playlist_search_field")
                             )
                         }
                     }

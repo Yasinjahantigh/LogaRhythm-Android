@@ -112,6 +112,7 @@ fun HomeScreen(
     val radarUnseenCount by viewModel.radarUnseenCount.collectAsStateWithLifecycle()
     val radarRefreshing by viewModel.radarRefreshing.collectAsStateWithLifecycle()
     val releaseRadarEnabled by viewModel.releaseRadarEnabled.collectAsStateWithLifecycle()
+    val quickPicks by viewModel.quickPicks.collectAsStateWithLifecycle()
 
     var selectedTrackForMenu by remember { mutableStateOf<Track?>(null) }
     var trackForAddToPlaylist by remember { mutableStateOf<Track?>(null) }
@@ -119,6 +120,7 @@ fun HomeScreen(
     var selectedMixForDetail by remember { mutableStateOf<DailyMix?>(null) }
     var showMagicPlaylist by remember { mutableStateOf(false) }
     var aiMixBase by remember { mutableStateOf<DailyMix?>(null) }
+    var inspectedRadarRelease by remember { mutableStateOf<com.yasinjahantigh.logarhythm.data.room.ArtistReleaseEntity?>(null) }
     val snackbarHostState = remember { SnackbarHostState() }
     val coroutineScope = rememberCoroutineScope()
     val context = androidx.compose.ui.platform.LocalContext.current
@@ -256,6 +258,16 @@ fun HomeScreen(
                             onStatsClick = if (totalTimeMs > 0L) onNavigateToStats else null,
                             modifier = Modifier.staggeredEntrance(0)
                         )
+                    }
+
+                    if (quickPicks.isNotEmpty()) {
+                        item(key = "quick_picks") {
+                            QuickPicksGrid(
+                                items = quickPicks,
+                                onItemClick = viewModel::playQuickPick,
+                                modifier = Modifier.staggeredEntrance(1)
+                            )
+                        }
                     }
 
                     rightNow?.takeIf { it.tracks.isNotEmpty() }?.let { now ->
@@ -397,7 +409,8 @@ fun HomeScreen(
                                 onDismissRelease = viewModel::dismissRadarRelease,
                                 onMarkSeen = viewModel::markRadarSeen,
                                 onUnfollowArtist = viewModel::unfollowArtist,
-                                onSetRadarEnabled = viewModel::setReleaseRadarEnabled
+                                onSetRadarEnabled = viewModel::setReleaseRadarEnabled,
+                                onInspectRelease = { release -> inspectedRadarRelease = release }
                             )
                         }
                     }
@@ -540,6 +553,34 @@ fun HomeScreen(
                 aiMixBase = null
                 onNavigateToSettings()
             }
+        )
+    }
+
+    inspectedRadarRelease?.let { release ->
+        val detailResult = remember(release) { viewModel.releaseToSearchResult(release) }
+        val localTrack = remember(release, allTracks) {
+            viewModel.findLocalTrack(release.artistName, release.title)
+        }
+        val sourceOverride = if (release.source.equals("itunes", ignoreCase = true)) "iTunes" else null
+        com.yasinjahantigh.logarhythm.feature.download.OnlineTrackDetailSheet(
+            result = detailResult,
+            activeItem = null,
+            isOnDevice = localTrack != null,
+            onDownload = {
+                viewModel.downloadRadarRelease(release) { queued ->
+                    coroutineScope.launch {
+                        snackbarHostState.showSnackbar(
+                            context.getString(
+                                if (queued) R.string.download_added_to_queue
+                                else R.string.radar_download_not_found
+                            )
+                        )
+                    }
+                }
+            },
+            onPlayLocal = localTrack?.let { lt -> { viewModel.playTracks(listOf(lt), 0) } },
+            sourceLabelOverride = sourceOverride,
+            onDismiss = { inspectedRadarRelease = null }
         )
     }
 }

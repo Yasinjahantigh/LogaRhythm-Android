@@ -16,6 +16,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Album
+import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.MusicNote
@@ -39,6 +40,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -55,6 +57,10 @@ import com.yasinjahantigh.logarhythm.domain.model.DownloadSearchResult
 import com.yasinjahantigh.logarhythm.domain.model.DownloadSource
 import com.yasinjahantigh.logarhythm.domain.model.DownloadStatus
 import com.yasinjahantigh.logarhythm.ui.components.ArtworkImage
+import java.text.DateFormat
+import java.text.SimpleDateFormat
+import java.util.Locale
+import java.util.TimeZone
 
 /**
  * Shows full track metadata, cover art, live preview playback, and an explicit Download action
@@ -72,11 +78,16 @@ fun OnlineTrackDetailSheet(
     onDownload: () -> Unit,
     onPlayLocal: (() -> Unit)? = null,
     onDownloadAlbum: (() -> Unit)? = null,
+    sourceLabelOverride: String? = null,
     onDismiss: () -> Unit
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val isSaved = isOnDevice || activeItem?.status == DownloadStatus.SAVED
     val isDownloading = activeItem?.isActive == true
+    val sourceLabel = sourceLabelOverride ?: stringResource(downloadSourceLabelRes(result.source))
+    val formattedReleaseDate = remember(result.releaseDate, Locale.getDefault()) {
+        formatReleaseDateLabel(result.releaseDate)
+    }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -136,7 +147,7 @@ fun OnlineTrackDetailSheet(
                     contentColor = MaterialTheme.colorScheme.onSecondaryContainer
                 ) {
                     Text(
-                        text = stringResource(downloadSourceLabelRes(result.source)),
+                        text = sourceLabel,
                         style = MaterialTheme.typography.labelMedium,
                         fontWeight = FontWeight.SemiBold,
                         modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
@@ -363,16 +374,45 @@ fun OnlineTrackDetailSheet(
                         )
                     }
 
+                    if (!formattedReleaseDate.isNullOrBlank()) {
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+                        DetailInfoRow(
+                            icon = Icons.Filled.CalendarToday,
+                            label = stringResource(R.string.online_track_release_date_label),
+                            value = formattedReleaseDate
+                        )
+                    }
+
                     HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
                     DetailInfoRow(
                         icon = Icons.Filled.Public,
                         label = stringResource(R.string.online_track_source_label),
-                        value = stringResource(downloadSourceLabelRes(result.source))
+                        value = sourceLabel
                     )
                 }
             }
         }
     }
+}
+
+private fun formatReleaseDateLabel(raw: String): String? {
+    val clean = raw.trim()
+    if (clean.isBlank()) return null
+    val formats = arrayOf("yyyy-MM-dd'T'HH:mm:ss'Z'", "yyyy-MM-dd'T'HH:mm:ssXXX", "yyyy-MM-dd")
+    for (pattern in formats) {
+        try {
+            val sdf = SimpleDateFormat(pattern, Locale.US).apply {
+                timeZone = TimeZone.getTimeZone("UTC")
+                isLenient = false
+            }
+            val parsed = sdf.parse(clean)
+            if (parsed != null) {
+                return DateFormat.getDateInstance(DateFormat.MEDIUM, Locale.getDefault()).format(parsed)
+            }
+        } catch (_: Exception) {
+        }
+    }
+    return clean
 }
 
 @Composable

@@ -27,16 +27,18 @@ class YtDlpDownloader @Inject constructor(
         onProgress: (Float, Long, String) -> Unit
     ): File {
         val safeId = DownloadTitleParser.sanitizeFileName(videoId)
-        val request = YoutubeDLRequest(url).apply {
-            DownloadCommand.downloadOptions(workspace, safeId, cookies.path(), qualityAbrKbps)
-                .forEach { (option, argument) ->
-                    if (argument == null) addOption(option) else addOption(option, argument)
-                }
-        }
-        runtime.engineUse {
-            runtime.executeWithTimeout(DOWNLOAD_TIMEOUT_MS, downloadId) {
-                YoutubeDL.getInstance().execute(request, downloadId) { progress, eta, line ->
-                    onProgress(progress, eta, line)
+        cookies.withTempCookieFile { cookiePath ->
+            val request = YoutubeDLRequest(url).apply {
+                DownloadCommand.downloadOptions(workspace, safeId, cookiePath, qualityAbrKbps)
+                    .forEach { (option, argument) ->
+                        if (argument == null) addOption(option) else addOption(option, argument)
+                    }
+            }
+            runtime.engineUse {
+                runtime.executeWithTimeout(DOWNLOAD_TIMEOUT_MS, downloadId) {
+                    YoutubeDL.getInstance().execute(request, downloadId) { progress, eta, line ->
+                        onProgress(progress, eta, line)
+                    }
                 }
             }
         }

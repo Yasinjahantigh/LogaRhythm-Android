@@ -50,11 +50,16 @@
     <init>(...);
 }
 
-# Media3 Session
+# Media3 Session & AudioSink / ExoPlayer custom components
 -keep class * extends androidx.media3.session.MediaSessionService
 -keep class * extends androidx.media3.session.MediaLibraryService
+-keep class com.yasinjahantigh.logarhythm.playback.StereoBalanceAudioProcessor { *; }
 
+# Keep OkHttp / JSON / Parcelize / Coroutine reflection targets cleanly
+-dontwarn okhttp3.**
+-dontwarn okio.**
 -dontwarn org.slf4j.**
+-dontwarn javax.annotation.**
 
 # youtubedl-android launches its Python/yt-dlp payload and deserializes GitHub JSON with Jackson.
 -keep class com.yausername.** { *; }

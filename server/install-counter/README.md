@@ -1,63 +1,42 @@
-# Install counter
+# LogaRhythm Cloudflare Worker (`install-counter`)
 
-A tiny Cloudflare Worker that counts installs no matter where the APK came from: GitHub, Telegram,
-or a friend's file manager. The app sends one anonymous record on first launch; the worker keeps
-the totals and a per-device-model breakdown in Workers KV.
+A lightweight Cloudflare Worker + Workers KV backend (`INSTALLS`) that handles:
+- **One-time anonymous install counting** (`POST /hit`, `GET /stats`, `GET /badge`, `GET /`)
+- **Release Radar lookup relay** (`GET /releases?artist=...`, aggregating iTunes Artist Lookup + Deezer Artist Albums sorted descending by verified release date)
+- **Crash, shake bug report, Suggestions, and weekly stats alerts** (`POST /crash`, `POST /report`, `POST /feedback`, `POST /listening-weekly`) stored in KV (30-day TTL for reports, 90-day TTL for weekly aggregates) with instant Telegram Bot notifications
+- **Protected admin inspection** (`GET /admin/summary`, `/admin/crashes`, `/admin/reports`, `/admin/feedback`, `/admin/weekly`) authenticated via `ADMIN_TOKEN`
 
-- `POST /hit` — one record per install, deduplicated by the random install id. Body:
-  `{"installId":"…","version":"1.8.0","code":10800,"manufacturer":"Xiaomi","model":"M2007J3SG","android":"15","sdk":35,"abi":"arm64-v8a"}`
-- `GET /stats` — `{"installs": 123, "devices": [{"model":"Xiaomi M2007J3SG","count": 40}], "days": []}`.
-  Add `?days=1` to include the per-day series.
-- `GET /badge` — shields.io endpoint JSON for the README.
+## Data Minimality & Privacy
 
-Only a random install id, the app version, the device make/model, the Android version and the CPU
-ABI are received. No account, file names, library data or advertising id. The record is sent once
-per install: app updates keep the same install id and never send it again, so the count only grows
-when someone actually installs the app. Nothing is sent when the build has no endpoint.
+- `POST /hit` receives only `installId` (random UUID), `version`, `code`, and `channel` (`github` or `myket`). No hardware/device model IDs, no accounts, and no 24-hour heartbeat pings.
+- `POST /crash` and `POST /report` store sanitized stack traces / user-submitted descriptions and redacted logs (`30d` TTL) and forward a summary to your Telegram bot.
+- `POST /feedback` stores in-app **Settings → Suggestions** submissions (`30d` TTL) and notifies your Telegram bot.
+- `POST /listening-weekly` updates an anonymous per-ISO-week aggregate (`weekly:<YYYY-Www>`) only if the user enabled weekly stats in the consent sheet / Privacy settings and is not in Private Session.
 
-## One-time setup
+## Setup & Secrets
 
-1. `cd server/install-counter`
-2. `npx wrangler login`
-3. `npx wrangler kv namespace create INSTALLS`
-   Copy the printed `id` into `wrangler.toml` (replace `PUT_THE_KV_NAMESPACE_ID_HERE`).
-4. `npx wrangler deploy`
-   It prints the worker URL, for example `https://logarhythm-installs.<subdomain>.workers.dev`.
-5. Smoke test:
-
+1. Create KV namespace (or verify `id` in `wrangler.toml`):
+   ```bash
+   cd server/install-counter
+   npx wrangler login
+   npx wrangler kv namespace create INSTALLS
+   ```
+2. Configure the 3 Cloudflare Worker secrets:
+   ```bash
+   npx wrangler secret put TELEGRAM_BOT_TOKEN
+   npx wrangler secret put TELEGRAM_CHAT_ID
+   npx wrangler secret put ADMIN_TOKEN
+   ```
+3. Deploy:
+   ```bash
+   npx wrangler deploy
+   ```
+4. Smoke test:
    ```bash
    curl -X POST https://logarhythm-installs.<subdomain>.workers.dev/hit \
      -H "content-type: application/json" \
-     -d '{"installId":"11111111-2222-3333-4444-555555555555","version":"test","manufacturer":"Xiaomi","model":"M2007J3SG","android":"15","abi":"arm64-v8a"}'
+     -d '{"installId":"11111111-2222-3333-4444-555555555555","version":"2.2.0","code":20200,"channel":"github"}'
 
    curl https://logarhythm-installs.<subdomain>.workers.dev/stats
    ```
-
-6. In the repository: **Settings → Secrets and variables → Actions → Variables → New variable**
-   - Name: `INSTALL_ENDPOINT`
-   - Value: the full `…/hit` URL from step 4
-
-   The release workflow passes it to Gradle, so every tagged release after that counts installs.
-   For a local build use `INSTALL_ENDPOINT=https://…/hit ./gradlew :app:assembleRelease`, or add
-   `INSTALL_ENDPOINT=…` to `local.properties` and pass it as an environment variable.
-
-7. Optional README badge:
-
-   ```markdown
-   ![Installs](https://img.shields.io/endpoint?url=https://logarhythm-installs.<subdomain>.workers.dev/badge)
-   ```
-
-## Updating the worker later
-
-`npx wrangler deploy` from this folder, or run the **Deploy install counter** workflow
-(workflow_dispatch) after adding the `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` secrets.
-
-## Notes
-
-- `workers.dev` is reachable for most users, but some networks (including inside Iran) may block
-  it. The app retries on later launches, so a user who opens the app again through a working
-  connection is still counted once.
-- KV counters are read-modify-write, so simultaneous first launches can very slightly undercount.
-  That is acceptable for a rough install number and keeps the worker free of a database.
-- `/stats` is public on purpose: it only exposes totals and device models, and it makes the numbers
-  easy to show in the repository.
+5. Optionally set repository Actions variable `INSTALL_ENDPOINT` to your deployed `https://.../hit` URL (otherwise the app defaults to the production worker URL in `app/build.gradle.kts`).

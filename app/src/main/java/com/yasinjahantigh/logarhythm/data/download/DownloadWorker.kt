@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.hilt.work.HiltWorker
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
+import com.yasinjahantigh.logarhythm.BuildConfig
 import com.yasinjahantigh.logarhythm.R
 import com.yasinjahantigh.logarhythm.core.library.LibrarySync
 import com.yasinjahantigh.logarhythm.data.download.metadata.DeezerClient
@@ -90,6 +91,11 @@ class DownloadWorker @AssistedInject constructor(
             return Result.success()
         }
         val item = entity.toDomain()
+        if (!BuildConfig.ENABLE_DOWNLOADER ||
+            (item.source == DownloadSource.YOUTUBE && !BuildConfig.ENABLE_YOUTUBE_DOWNLOADER)
+        ) {
+            return fail(item, DownloadErrorKind.CONTENT, "Downloader source is disabled in this build.")
+        }
 
         return try {
             executePipeline(item)
@@ -135,6 +141,7 @@ class DownloadWorker @AssistedInject constructor(
             }
         }
 
+        workspace.prune()
         if (!workspace.hasRoom()) {
             return fail(item, DownloadErrorKind.STORAGE, null)
         }
@@ -144,12 +151,12 @@ class DownloadWorker @AssistedInject constructor(
         val initialArtist = item.artist.ifBlank { parsed.first }
 
         val progressChannel = Channel<ProgressEvent>(Channel.CONFLATED)
-        val progressJob = CoroutineScope(SupervisorJob() + Dispatchers.Default).launch {
-            pumpProgress(id, initialTitle, progressChannel)
-        }
 
         // Resolve metadata concurrently so audio streaming starts immediately without waiting.
         val (outcome, resolved) = coroutineScope {
+            val progressJob = launch(Dispatchers.Default) {
+                pumpProgress(id, initialTitle, progressChannel)
+            }
             val metadataJob = async(Dispatchers.IO) {
                 runCatching {
                     withTimeoutOrNull(8_000L) {
@@ -164,6 +171,9 @@ class DownloadWorker @AssistedInject constructor(
                 metadataJob.cancel()
                 stopProgressNow(progressChannel, progressJob)
                 downloader.cancel(id)
+                musicManDownloader.cancel(id)
+                saavnDownloader.cancel(id)
+                radioJavanDownloader.cancel(id)
                 throw cancelled
             } catch (pipeline: DownloadPipelineException) {
                 metadataJob.cancel()
@@ -187,12 +197,11 @@ class DownloadWorker @AssistedInject constructor(
                 throw throwable
             }
 
+            stopProgressAndJoin(progressChannel, progressJob)
             dlOutcome to metadataJob.await()
         }
 
         if (outcome == null) return Result.retry()
-
-        stopProgressAndJoin(progressChannel, progressJob)
 
         val finalTitle = resolved?.title ?: outcome.title
         val finalArtist = resolved?.artist ?: outcome.artist

@@ -1,37 +1,39 @@
 Third-party components bundled in LogaRhythm release builds
 ===========================================================
 
-LogaRhythm itself is licensed under the Apache License 2.0 (see LICENSE).
-The release APK also bundles the following components. When you distribute
-such a build, the combined work must comply with their licenses; LogaRhythm's
-source is published at https://github.com/Yasinjahantigh/LogaRhythm-Android.
+LogaRhythm is licensed under the GNU General Public License v3.0 (GPL-3.0, see LICENSE).
+Earlier project revisions under the Apache License 2.0 are compatible with and
+redistributed under GPL-3.0 for the combined application distribution.
+Source code is published at:
+  https://github.com/Yasinjahantigh/LogaRhythm-Android
 
 1. youtubedl-android (library module)
    Project: https://github.com/junkfood02/youtubedl-android
    Upstream: https://github.com/yausername/youtubedl-android
-   License: GNU General Public License v3.0
-   Source: see the project links above
+   License: GNU General Public License v3.0 (GPL-3.0)
 
 2. yt-dlp
    Project: https://github.com/yt-dlp/yt-dlp
-   License: Unlicense (public domain) for yt-dlp itself; its Python runtime
-   ships with its own license as bundled by youtubedl-android.
+   License: Unlicense (public domain) for yt-dlp itself.
 
-3. Python runtime bundled by youtubedl-android
-   Project: https://www.python.org
-   License: PSF License.
+3. Python runtime & FFmpeg payload bundled by youtubedl-android
+   Project: https://www.python.org / https://ffmpeg.org
+   License: PSF License (Python) and LGPL/GPL (FFmpeg components as built by upstream).
 
-4. AndroidX ExifInterface
-   Project: https://developer.android.com/jetpack/androidx/releases/exifinterface
-   License: Apache License 2.0 (same license as LogaRhythm).
-   Used for cover-photo rotation when a new album artwork is picked.
+4. AndroidX, Jetpack Compose, Media3, Room, WorkManager, Glance, Hilt, ExifInterface
+   Project: https://developer.android.com/jetpack
+   License: Apache License 2.0
 
-5. Bundled Typography (SIL Open Font License 1.1 — see app/src/main/assets/OFL.txt)
+5. OkHttp, Coil, Kotlinx Coroutines
+   License: Apache License 2.0
+
+6. Bundled Typography (SIL Open Font License 1.1 — see app/src/main/assets/OFL.txt)
    - Vazirmatn (https://github.com/rastikerdar/vazirmatn)
    - Plus Jakarta Sans, Space Grotesk, Playfair Display, JetBrains Mono
    - Lalezar, Noto Kufi Arabic, Noto Naskh Arabic (Google Fonts)
 
-The GPL-3.0 text is available at https://www.gnu.org/licenses/gpl-3.0.txt.
+The full GPL-3.0 text is available at https://www.gnu.org/licenses/gpl-3.0.txt
+and bundled inside the application package under assets/licenses/.
 
-Music downloads are intended for content you are allowed to download. Respect
-the terms of service of the source sites and local copyright law.
+Music downloads are intended solely for content you have the right to download.
+Please respect source site terms of service and applicable copyright laws.

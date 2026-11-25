@@ -151,7 +151,7 @@ class RadioJavanDownloader @Inject constructor(
                                     val elapsed = (SystemClock.elapsedRealtime() - startedAt).coerceAtLeast(1L)
                                     val remaining = (expected - written).coerceAtLeast(0L)
                                     val eta = (remaining * elapsed / written.coerceAtLeast(1L)) / 1000
-                                    onProgress(percent / 100f, eta, "[download] Radio Javan $percent%")
+                                    onProgress(percent.toFloat(), eta, "[download] Radio Javan $percent%")
                                 }
                             }
                         }

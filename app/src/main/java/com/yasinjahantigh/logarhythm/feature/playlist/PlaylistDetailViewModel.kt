@@ -3,6 +3,7 @@ package com.yasinjahantigh.logarhythm.feature.playlist
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.yasinjahantigh.logarhythm.data.datastore.PreferencesManager
 import com.yasinjahantigh.logarhythm.domain.model.Playlist
 import com.yasinjahantigh.logarhythm.domain.model.Track
 import com.yasinjahantigh.logarhythm.domain.repository.PlaylistRepository
@@ -10,6 +11,7 @@ import com.yasinjahantigh.logarhythm.playback.PlayerController
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -19,7 +21,8 @@ class PlaylistDetailViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val playlistRepository: PlaylistRepository,
     private val trackRepository: com.yasinjahantigh.logarhythm.domain.repository.TrackRepository,
-    private val playerController: PlayerController
+    private val playerController: PlayerController,
+    private val preferencesManager: PreferencesManager
 ) : ViewModel() {
 
     val playlistId: Long = savedStateHandle.get<Long>("playlistId") ?: 1L
@@ -44,6 +47,20 @@ class PlaylistDetailViewModel @Inject constructor(
             started = SharingStarted.WhileSubscribed(5000),
             initialValue = emptyList()
         )
+
+    val isFavorite: StateFlow<Boolean> = preferencesManager.favoritePlaylistIds
+        .map { playlistId in it }
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = false
+        )
+
+    fun toggleFavorite() {
+        viewModelScope.launch {
+            preferencesManager.toggleFavoritePlaylist(playlistId)
+        }
+    }
 
     fun playAll() {
         val list = tracks.value
@@ -172,6 +189,9 @@ class PlaylistDetailViewModel @Inject constructor(
 
     fun deletePlaylist(onDeleted: () -> Unit) {
         viewModelScope.launch {
+            if (isFavorite.value) {
+                preferencesManager.toggleFavoritePlaylist(playlistId)
+            }
             playlistRepository.deletePlaylist(playlistId)
             onDeleted()
         }

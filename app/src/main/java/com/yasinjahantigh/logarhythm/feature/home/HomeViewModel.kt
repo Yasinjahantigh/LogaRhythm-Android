@@ -7,8 +7,12 @@ import com.yasinjahantigh.logarhythm.data.datastore.PreferencesManager
 import com.yasinjahantigh.logarhythm.data.radar.ArtistFollowRepository
 import com.yasinjahantigh.logarhythm.data.radar.RadarRefreshSummary
 import com.yasinjahantigh.logarhythm.data.radar.ReleaseRadarNotifications
+import com.yasinjahantigh.logarhythm.data.radar.ReleaseRadarService
+import com.yasinjahantigh.logarhythm.data.repository.ArtistPhotoRepository
 import com.yasinjahantigh.logarhythm.data.room.ArtistReleaseEntity
 import com.yasinjahantigh.logarhythm.data.room.FollowedArtistEntity
+import com.yasinjahantigh.logarhythm.domain.library.ArtistSplitter
+import com.yasinjahantigh.logarhythm.domain.model.DownloadSearchResult
 import com.yasinjahantigh.logarhythm.domain.curation.TrackCuration
 import com.yasinjahantigh.logarhythm.domain.discovery.Discovery
 import com.yasinjahantigh.logarhythm.domain.mix.DailyMixGenerator
@@ -50,7 +54,8 @@ class HomeViewModel @Inject constructor(
     private val librarySync: LibrarySync,
     private val preferencesManager: PreferencesManager,
     private val artistFollowRepository: ArtistFollowRepository,
-    private val releaseRadarNotifications: ReleaseRadarNotifications
+    private val releaseRadarNotifications: ReleaseRadarNotifications,
+    private val artistPhotoRepository: ArtistPhotoRepository
 ) : ViewModel() {
 
     val followedArtists: StateFlow<List<FollowedArtistEntity>> = artistFollowRepository.observeFollowed()
@@ -106,6 +111,21 @@ class HomeViewModel @Inject constructor(
     fun dismissRadarRelease(release: ArtistReleaseEntity) {
         viewModelScope.launch {
             artistFollowRepository.dismissRelease(release)
+        }
+    }
+
+    fun releaseToSearchResult(release: ArtistReleaseEntity): DownloadSearchResult =
+        artistFollowRepository.releaseToSearchResult(release)
+
+    fun findLocalTrack(artistName: String, title: String): Track? {
+        val tracks = allTracks.value
+        if (tracks.isEmpty() || title.isBlank()) return null
+        val targetKey = ReleaseRadarService.titleKey(artistName, title)
+        tracks.firstOrNull { ReleaseRadarService.titleKey(it.artist, it.title) == targetKey }?.let { return it }
+        val normTitle = ReleaseRadarService.normalizeTrackTitle(title)
+        return tracks.firstOrNull {
+            ReleaseRadarService.normalizeTrackTitle(it.title) == normTitle &&
+                ReleaseRadarService.isArtistMatch(it.artist, artistName)
         }
     }
 
@@ -256,6 +276,176 @@ class HomeViewModel @Inject constructor(
             initialValue = null
         )
 
+    val quickPicks: StateFlow<List<QuickPickItem>> = combine(
+        allTracks,
+        playlists,
+        preferencesManager.favoritePlaylistIds,
+        dailyMixes,
+        mostPlayed,
+        favoritesTrackIds,
+        artistPhotoRepository.photos
+    ) { values ->
+        @Suppress("UNCHECKED_CAST")
+        val tracks = values[0] as List<Track>
+        @Suppress("UNCHECKED_CAST")
+        val allPlaylists = values[1] as List<Playlist>
+        @Suppress("UNCHECKED_CAST")
+        val favPlaylistIds = values[2] as Set<Long>
+        @Suppress("UNCHECKED_CAST")
+        val mixes = values[3] as List<DailyMix>
+        @Suppress("UNCHECKED_CAST")
+        val topPlayed = values[4] as List<Track>
+        @Suppress("UNCHECKED_CAST")
+        val favIds = values[5] as Set<String>
+        @Suppress("UNCHECKED_CAST")
+        val photos = values[6] as Map<String, String>
+
+        if (tracks.isEmpty()) return@combine emptyList()
+
+        val items = mutableListOf<QuickPickItem>()
+        val usedIds = HashSet<String>()
+
+        // 1. Liked Songs (Favorites)
+        val favTracks = tracks.filter { it.id in favIds }
+        if (favTracks.isNotEmpty()) {
+            val favArt = favTracks.firstOrNull { !it.artworkUri.isNullOrBlank() }?.artworkUri
+            items += QuickPickItem(
+                id = "favorites",
+                kind = QuickPickKind.FAVORITES,
+                title = "",
+                artworkUri = favArt,
+                trackCount = favTracks.size,
+                playlistId = Playlist.FAVORITES_ID,
+                tracks = favTracks
+            )
+            usedIds.add("favorites")
+        }
+
+        // 2. Pinned favorite playlists
+        allPlaylists
+            .filter { it.id != Playlist.FAVORITES_ID && it.id in favPlaylistIds && it.trackCount > 0 }
+            .take(3)
+            .forEach { pl ->
+                val id = "pl_${pl.id}"
+                if (usedIds.add(id)) {
+                    items += QuickPickItem(
+                        id = id,
+                        kind = QuickPickKind.PLAYLIST,
+                        title = pl.name,
+                        artworkUri = null,
+                        trackCount = pl.trackCount,
+                        playlistId = pl.id
+                    )
+                }
+            }
+
+        // 3. Top Daily Mix
+        mixes.firstOrNull()?.takeIf { it.tracks.isNotEmpty() }?.let { mix ->
+            if (usedIds.add(mix.id)) {
+                items += QuickPickItem(
+                    id = mix.id,
+                    kind = QuickPickKind.DAILY_MIX,
+                    title = mix.id,
+                    artworkUri = mix.tracks.firstOrNull { !it.artworkUri.isNullOrBlank() }?.artworkUri,
+                    trackCount = mix.tracks.size,
+                    tracks = mix.tracks
+                )
+            }
+        }
+
+        // 4. Top Artist
+        val candidateSource = topPlayed.ifEmpty { tracks }
+        val topArtistName = candidateSource
+            .asSequence()
+            .mapNotNull { t -> ArtistSplitter.split(t.artist).firstOrNull()?.trim() }
+            .firstOrNull { name ->
+                name.isNotBlank() &&
+                    !name.equals("<unknown>", ignoreCase = true) &&
+                    !name.equals("unknown", ignoreCase = true) &&
+                    !name.equals("unknown artist", ignoreCase = true)
+            }
+        if (!topArtistName.isNullOrBlank()) {
+            val artistKey = artistPhotoRepository.normalizeKey(topArtistName)
+            val artistTracks = tracks.filter { candidate ->
+                ArtistSplitter.split(candidate.artist).any {
+                    artistPhotoRepository.normalizeKey(it) == artistKey
+                } || artistPhotoRepository.normalizeKey(candidate.artist) == artistKey
+            }
+            if (artistTracks.isNotEmpty()) {
+                val id = "artist_$artistKey"
+                if (usedIds.add(id)) {
+                    val photoUri = photos[artistKey]
+                        ?: artistTracks.firstNotNullOfOrNull { it.artworkUri?.takeIf(String::isNotBlank) }
+                    items += QuickPickItem(
+                        id = id,
+                        kind = QuickPickKind.ARTIST,
+                        title = topArtistName,
+                        artworkUri = photoUri,
+                        trackCount = artistTracks.size,
+                        tracks = artistTracks
+                    )
+                }
+            }
+        }
+
+        // 5. Fill remaining slots up to 6 with other playlists and Daily Mixes
+        if (items.size < 6) {
+            for (pl in allPlaylists) {
+                if (items.size >= 6) break
+                if (pl.id == Playlist.FAVORITES_ID || pl.trackCount <= 0) continue
+                val id = "pl_${pl.id}"
+                if (usedIds.add(id)) {
+                    items += QuickPickItem(
+                        id = id,
+                        kind = QuickPickKind.PLAYLIST,
+                        title = pl.name,
+                        artworkUri = null,
+                        trackCount = pl.trackCount,
+                        playlistId = pl.id
+                    )
+                }
+            }
+        }
+        if (items.size < 6) {
+            for (mix in mixes.drop(1)) {
+                if (items.size >= 6) break
+                if (mix.tracks.isEmpty()) continue
+                if (usedIds.add(mix.id)) {
+                    items += QuickPickItem(
+                        id = mix.id,
+                        kind = QuickPickKind.DAILY_MIX,
+                        title = mix.id,
+                        artworkUri = mix.tracks.firstOrNull { !it.artworkUri.isNullOrBlank() }?.artworkUri,
+                        trackCount = mix.tracks.size,
+                        tracks = mix.tracks
+                    )
+                }
+            }
+        }
+
+        items.take(6)
+    }
+        .flowOn(Dispatchers.Default)
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = emptyList()
+        )
+
+    fun playQuickPick(item: QuickPickItem) {
+        if (item.tracks.isNotEmpty()) {
+            playerController.play(item.tracks, 0)
+            return
+        }
+        val playlistId = item.playlistId ?: return
+        viewModelScope.launch {
+            val tracks = playlistRepository.getPlaylistTracks(playlistId).first()
+            if (tracks.isNotEmpty()) {
+                playerController.play(tracks, 0)
+            }
+        }
+    }
+
     /** Plays the current "right now" queue exactly as the card shows it. */
     fun playRightNow() {
         val queue = rightNow.value?.tracks.orEmpty()
@@ -374,3 +564,15 @@ class HomeViewModel @Inject constructor(
         }
     }
 }
+
+enum class QuickPickKind { FAVORITES, PLAYLIST, DAILY_MIX, ARTIST }
+
+data class QuickPickItem(
+    val id: String,
+    val kind: QuickPickKind,
+    val title: String,
+    val artworkUri: String?,
+    val trackCount: Int,
+    val playlistId: Long? = null,
+    val tracks: List<Track> = emptyList()
+)

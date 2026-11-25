@@ -1,7 +1,10 @@
 package com.yasinjahantigh.logarhythm.playback
 
+import android.bluetooth.BluetoothA2dp
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.media.AudioDeviceCallback
 import android.media.AudioDeviceInfo
 import android.media.AudioManager
@@ -10,6 +13,7 @@ import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
+import androidx.core.content.ContextCompat
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -41,8 +45,7 @@ data class AudioOutputState(
 
 /**
  * Observes real connected Android audio outputs (speaker, wired headset, USB DAC, Bluetooth A2DP/BLE)
- * and provides direct route switching via MediaRouter/AudioManager plus a one-tap launcher for
- * Android's native Media Output Switcher dialog.
+ * and provides direct per-player AudioDeviceInfo routing plus MediaRouter & system switcher fallback.
  */
 @Singleton
 @Suppress("DEPRECATION")
@@ -53,20 +56,63 @@ class AudioOutputManager @Inject constructor(
     private val mediaRouter = runCatching {
         context.getSystemService(Context.MEDIA_ROUTER_SERVICE) as? MediaRouter
     }.getOrNull()
+    private val mainHandler = Handler(Looper.getMainLooper())
 
     private val _state = MutableStateFlow(AudioOutputState())
     val state: StateFlow<AudioOutputState> = _state.asStateFlow()
+
+    @Volatile
+    var preferredDeviceId: Int? = null
+        private set
 
     private val deviceCallback = object : AudioDeviceCallback() {
         override fun onAudioDevicesAdded(addedDevices: Array<out AudioDeviceInfo>?) = refresh()
         override fun onAudioDevicesRemoved(removedDevices: Array<out AudioDeviceInfo>?) = refresh()
     }
 
+    private val routerCallback = object : MediaRouter.SimpleCallback() {
+        override fun onRouteSelected(router: MediaRouter?, type: Int, info: MediaRouter.RouteInfo?) = refresh()
+        override fun onRouteUnselected(router: MediaRouter?, type: Int, info: MediaRouter.RouteInfo?) = refresh()
+        override fun onRouteAdded(router: MediaRouter?, info: MediaRouter.RouteInfo?) = refresh()
+        override fun onRouteRemoved(router: MediaRouter?, info: MediaRouter.RouteInfo?) = refresh()
+        override fun onRouteChanged(router: MediaRouter?, info: MediaRouter.RouteInfo?) = refresh()
+    }
+
+    private val systemReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            refresh()
+        }
+    }
+
     init {
         runCatching {
-            audioManager?.registerAudioDeviceCallback(deviceCallback, Handler(Looper.getMainLooper()))
+            audioManager?.registerAudioDeviceCallback(deviceCallback, mainHandler)
+        }
+        mainHandler.post {
+            runCatching {
+                mediaRouter?.addCallback(
+                    MediaRouter.ROUTE_TYPE_LIVE_AUDIO,
+                    routerCallback
+                )
+            }
+        }
+        runCatching {
+            val filter = IntentFilter().apply {
+                addAction(BluetoothA2dp.ACTION_CONNECTION_STATE_CHANGED)
+                addAction(AudioManager.ACTION_HEADSET_PLUG)
+                addAction("android.media.VOLUME_CHANGED_ACTION")
+            }
+            ContextCompat.registerReceiver(context, systemReceiver, filter, ContextCompat.RECEIVER_EXPORTED)
         }
         refresh()
+    }
+
+    fun findOutputDeviceInfo(deviceId: Int): AudioDeviceInfo? {
+        if (deviceId <= 0) return null
+        val am = audioManager ?: return null
+        return runCatching {
+            am.getDevices(AudioManager.GET_DEVICES_OUTPUTS).firstOrNull { it.id == deviceId }
+        }.getOrNull()
     }
 
     fun refresh() {
@@ -141,7 +187,16 @@ class AudioOutputManager @Inject constructor(
             isActive = false
         )
 
-        // Determine currently active media route from MediaRouter + AudioManager state.
+        val candidates = btDevices + wiredDevices + usbDevices + speaker
+        val currentPreferred = preferredDeviceId
+        val validPreferred = currentPreferred?.takeIf { pref ->
+            pref > 0 && candidates.any { it.id == pref }
+        }
+        if (currentPreferred != null && validPreferred == null) {
+            preferredDeviceId = null
+        }
+
+        // Determine currently active media route from explicit player preference or MediaRouter + AudioManager state.
         val selectedRouteName = runCatching {
             mediaRouter?.getSelectedRoute(MediaRouter.ROUTE_TYPE_LIVE_AUDIO)?.name?.toString()?.trim()
         }.getOrNull().orEmpty()
@@ -151,7 +206,7 @@ class AudioOutputManager @Inject constructor(
             selected != null && def != null && selected == def && !am.isWiredHeadsetOn && !am.isBluetoothA2dpOn
         }.getOrDefault(false)
 
-        val activeDeviceId: Int = when {
+        val activeDeviceId: Int = validPreferred ?: when {
             isSelectedDefaultSpeaker -> speaker.id
             btDevices.isNotEmpty() && (am.isBluetoothA2dpOn || selectedRouteName.isNotBlank()) -> {
                 btDevices.firstOrNull { d ->
@@ -164,7 +219,7 @@ class AudioOutputManager @Inject constructor(
             else -> speaker.id
         }
 
-        val ordered = (btDevices + wiredDevices + usbDevices + speaker).map { dev ->
+        val ordered = candidates.map { dev ->
             dev.copy(isActive = dev.id == activeDeviceId)
         }
         val active = ordered.firstOrNull { it.isActive } ?: speaker
@@ -189,13 +244,16 @@ class AudioOutputManager @Inject constructor(
     }
 
     /**
-     * Attempts to switch the live audio route directly via MediaRouter / AudioManager.
-     * Returns true if a direct route selection succeeded, or false if the system media output
-     * dialog should be shown to complete the switch (required on Android 11+ for A2DP switching).
+     * Selects an output device for ExoPlayer (AudioDeviceInfo routing) and attempts MediaRouter sync.
+     * Returns true when direct per-player routing is supported for this device, or false when the
+     * system media output dialog should be opened instead.
      */
     fun selectDevice(device: AudioOutputDevice): Boolean {
+        val deviceInfo = findOutputDeviceInfo(device.id)
+        preferredDeviceId = deviceInfo?.id
+
         val router = mediaRouter
-        var switchedDirectly = false
+        var routerSwitched = false
         if (router != null) {
             runCatching {
                 when (device.kind) {
@@ -203,7 +261,7 @@ class AudioOutputManager @Inject constructor(
                         val def = router.defaultRoute
                         if (def != null) {
                             router.selectRoute(MediaRouter.ROUTE_TYPE_LIVE_AUDIO, def)
-                            switchedDirectly = true
+                            routerSwitched = true
                         }
                     }
                     AudioOutputKind.BLUETOOTH -> {
@@ -213,7 +271,7 @@ class AudioOutputManager @Inject constructor(
                             val rName = route.name?.toString()?.trim().orEmpty()
                             if (device.name.isNotBlank() && rName.equals(device.name, ignoreCase = true)) {
                                 router.selectRoute(MediaRouter.ROUTE_TYPE_LIVE_AUDIO, route)
-                                switchedDirectly = true
+                                routerSwitched = true
                                 break
                             }
                         }
@@ -223,10 +281,7 @@ class AudioOutputManager @Inject constructor(
             }
         }
         refresh()
-        // On Android 11+, switching between Bluetooth A2DP and Phone Speaker is governed by SystemUI.
-        // If our direct call did not move the active device to the requested one, let the UI open the native switcher.
-        val nowActive = _state.value.devices.firstOrNull { it.isActive }
-        return switchedDirectly && nowActive?.id == device.id
+        return deviceInfo != null || routerSwitched
     }
 
     /**

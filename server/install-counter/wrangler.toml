@@ -6,3 +6,8 @@ compatibility_date = "2026-10-29"
 [[kv_namespaces]]
 binding = "INSTALLS"
 id = "bbf04246b5594f45a771f9c02e8da4b9"
+
+# Required Cloudflare Secrets (configure via `wrangler secret put <NAME>`):
+#   TELEGRAM_BOT_TOKEN  - Bot token from @BotFather for crash, shake, feedback & weekly alerts
+#   TELEGRAM_CHAT_ID    - Target chat/user/channel ID for receiving notifications
+#   ADMIN_TOKEN         - Bearer / X-Admin-Token secret for GET /admin/* endpoints

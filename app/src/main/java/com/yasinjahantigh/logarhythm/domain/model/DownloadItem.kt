@@ -121,7 +121,8 @@ data class DownloadSearchResult(
     val artistId: String? = null,
     val hasReadyAudio: Boolean = true,
     val matchedSources: Set<DownloadSource> = setOf(source),
-    val sourceArtistIds: Map<DownloadSource, String> = emptyMap()
+    val sourceArtistIds: Map<DownloadSource, String> = emptyMap(),
+    val releaseDate: String = ""
 )
 
 /** UI/worker view of a persisted download. */

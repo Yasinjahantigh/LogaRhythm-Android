@@ -219,14 +219,15 @@ class ArtistPhotoRepository @Inject constructor(
 
     suspend fun setCustomPhotoUrl(artistName: String, url: String) = withContext(Dispatchers.IO) {
         val key = normalizeKey(artistName)
-        if (key.isBlank() || !isUsableImageUrl(url)) return@withContext
+        val normalized = normalizeHttpsUrl(url)
+        if (key.isBlank() || !isUsableImageUrl(normalized)) return@withContext
         val hash = sha1Short(key)
         runCatching {
             customDir.listFiles { f -> f.name.startsWith("artist_${hash}_") }?.forEach { it.delete() }
         }
         storeMutex.withLock {
             if (entries.isEmpty()) loadFromDiskLocked()
-            entries[key] = StoredArtistPhoto(uri = url, isCustom = true)
+            entries[key] = StoredArtistPhoto(uri = normalized, isCustom = true)
             saveToDiskLocked()
             publishStateLocked()
         }
@@ -253,9 +254,10 @@ class ArtistPhotoRepository @Inject constructor(
         val deezerMatch = runCatching { deezerClient.searchArtists(artistName, limit = 8) }
             .getOrDefault(emptyList())
             .firstOrNull {
-                isUsableImageUrl(it.thumbnailUrl) &&
+                val url = it.thumbnailUrl?.let(::normalizeHttpsUrl)
+                isUsableImageUrl(url) &&
                     ReleaseRadarService.isArtistMatch(it.title, artistName)
-            }?.thumbnailUrl
+            }?.thumbnailUrl?.let(::normalizeHttpsUrl)
         if (!deezerMatch.isNullOrBlank()) return@withContext deezerMatch
 
         // 2. MusicMan artist portrait search (works without VPN for Persian & international artists)
@@ -263,10 +265,11 @@ class ArtistPhotoRepository @Inject constructor(
             musicManClient.search(term = artistName, category = DownloadSearchCategory.ALL, limit = 10)
         }.getOrDefault(emptyList())
             .firstOrNull {
+                val url = it.thumbnailUrl?.let(::normalizeHttpsUrl)
                 it.kind == DownloadResultKind.ARTIST &&
-                    isUsableImageUrl(it.thumbnailUrl) &&
+                    isUsableImageUrl(url) &&
                     ReleaseRadarService.isArtistMatch(it.title, artistName)
-            }?.thumbnailUrl
+            }?.thumbnailUrl?.let(::normalizeHttpsUrl)
         if (!mmMatch.isNullOrBlank()) return@withContext mmMatch
 
         null
@@ -333,9 +336,12 @@ class ArtistPhotoRepository @Inject constructor(
             lower != "null"
     }
 
+    private fun normalizeHttpsUrl(url: String): String =
+        if (url.startsWith("http://", ignoreCase = true)) "https://" + url.substring(7) else url
+
     private fun isUsableImageUrl(url: String?): Boolean {
         if (url.isNullOrBlank()) return false
-        if (!url.startsWith("http://") && !url.startsWith("https://")) return false
+        if (!url.startsWith("https://", ignoreCase = true)) return false
         // Skip Deezer's blank placeholder avatar (empty MD5 hash or double slash)
         if (url.contains("/images/artist//") || url.contains("d41d8cd98f00b204e9800998ecf8427e")) {
             return false

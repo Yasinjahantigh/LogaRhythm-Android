@@ -599,6 +599,7 @@ class PreferencesManager @Inject constructor(
     companion object {
         const val BOOTSTRAP_PREFS = "music_settings"
         const val BOOTSTRAP_ONBOARDING_KEY = "onboarding_completed_bootstrap"
+        const val BOOTSTRAP_CRASH_REPORTS_KEY = "crash_reports_enabled_bootstrap"
         private const val MIX_EXPOSURE_RETENTION_DAYS = 14L
         private const val MAX_MIX_EXPOSURE_ENTRIES = 400
     }
@@ -1112,6 +1113,117 @@ class PreferencesManager @Inject constructor(
                     prefs[keySeenFeatureHints] = current.joinToString("\n")
                 }
             }
+        }
+    }
+
+    // ---- Privacy, crash logs & anonymous weekly listening stats -----------------------------
+
+    private val keyPrivacyConsentAnswered = booleanPreferencesKey("key_privacy_consent_answered")
+    private val keyCrashReportsEnabled = booleanPreferencesKey("key_crash_reports_enabled")
+    private val keyWeeklyStatsEnabled = booleanPreferencesKey("key_weekly_stats_enabled")
+    private val keyLastWeeklyStatsWeek = stringPreferencesKey("key_last_weekly_stats_week")
+
+    val privacyConsentAnswered: Flow<Boolean> = dataStore.data
+        .map { it[keyPrivacyConsentAnswered] ?: false }
+        .distinctUntilChanged()
+
+    val crashReportsEnabled: Flow<Boolean> = dataStore.data
+        .map { it[keyCrashReportsEnabled] ?: readCrashReportsBootstrap() }
+        .distinctUntilChanged()
+
+    val weeklyStatsEnabled: Flow<Boolean> = dataStore.data
+        .map { it[keyWeeklyStatsEnabled] ?: true }
+        .distinctUntilChanged()
+
+    val lastWeeklyStatsWeek: Flow<String> = dataStore.data
+        .map { it[keyLastWeeklyStatsWeek].orEmpty() }
+        .distinctUntilChanged()
+
+    private fun readCrashReportsBootstrap(): Boolean = runCatching {
+        context.getSharedPreferences(BOOTSTRAP_PREFS, Context.MODE_PRIVATE)
+            .getBoolean(BOOTSTRAP_CRASH_REPORTS_KEY, true)
+    }.getOrDefault(true)
+
+    @android.annotation.SuppressLint("ApplySharedPref")
+    private fun writeCrashReportsBootstrap(enabled: Boolean) {
+        runCatching {
+            context.getSharedPreferences(BOOTSTRAP_PREFS, Context.MODE_PRIVATE)
+                .edit()
+                .putBoolean(BOOTSTRAP_CRASH_REPORTS_KEY, enabled)
+                .commit()
+        }
+    }
+
+    suspend fun setPrivacyConsent(crashEnabled: Boolean, weeklyEnabled: Boolean) {
+        withContext(NonCancellable + Dispatchers.IO) {
+            writeCrashReportsBootstrap(crashEnabled)
+            dataStore.edit { prefs ->
+                prefs[keyPrivacyConsentAnswered] = true
+                prefs[keyCrashReportsEnabled] = crashEnabled
+                prefs[keyWeeklyStatsEnabled] = weeklyEnabled
+            }
+        }
+    }
+
+    suspend fun setCrashReportsEnabled(enabled: Boolean) {
+        withContext(NonCancellable + Dispatchers.IO) {
+            writeCrashReportsBootstrap(enabled)
+            dataStore.edit { it[keyCrashReportsEnabled] = enabled }
+        }
+    }
+
+    suspend fun setWeeklyStatsEnabled(enabled: Boolean) {
+        dataStore.edit { it[keyWeeklyStatsEnabled] = enabled }
+    }
+
+    suspend fun setLastWeeklyStatsWeek(week: String) {
+        dataStore.edit { it[keyLastWeeklyStatsWeek] = week }
+    }
+
+    // ---- Favorite playlists (pinned at top of Playlists tab) --------------------------------
+
+    private val keyFavoritePlaylistIds = stringPreferencesKey("key_favorite_playlist_ids")
+
+    val favoritePlaylistIds: Flow<Set<Long>> = dataStore.data
+        .map { prefs ->
+            prefs[keyFavoritePlaylistIds].orEmpty()
+                .split(",")
+                .mapNotNull { it.trim().toLongOrNull() }
+                .toSet()
+        }
+        .distinctUntilChanged()
+
+    suspend fun toggleFavoritePlaylist(playlistId: Long) {
+        dataStore.edit { prefs ->
+            val current = prefs[keyFavoritePlaylistIds].orEmpty()
+                .split(",")
+                .mapNotNull { it.trim().toLongOrNull() }
+                .toMutableSet()
+            if (!current.add(playlistId)) {
+                current.remove(playlistId)
+            }
+            if (current.isEmpty()) {
+                prefs.remove(keyFavoritePlaylistIds)
+            } else {
+                prefs[keyFavoritePlaylistIds] = current.sorted().joinToString(",")
+            }
+        }
+    }
+
+    // ---- Bilingual lyrics translation target language ---------------------------------------
+
+    private val keyLyricsTranslateLang = stringPreferencesKey("key_lyrics_translate_lang")
+
+    /** Empty string = off, otherwise ISO code like "fa", "en", "ar", "tr", "es", "fr". */
+    val lyricsTranslateLang: Flow<String> = dataStore.data
+        .map { it[keyLyricsTranslateLang].orEmpty() }
+        .distinctUntilChanged()
+
+    suspend fun setLyricsTranslateLang(lang: String) {
+        val clean = lang.trim().lowercase().take(12)
+        dataStore.edit { prefs ->
+            if (clean.isEmpty()) prefs.remove(keyLyricsTranslateLang)
+            else prefs[keyLyricsTranslateLang] = clean
         }
     }
 }

@@ -243,8 +243,10 @@ fun MagicPlaylistSheet(
 
             state.failure?.let { failure ->
                 Spacer(modifier = Modifier.height(12.dp))
+                val summary = stringResource(failure.messageRes())
+                val detail = state.failureDetail?.takeIf { it.isNotBlank() }
                 Text(
-                    text = stringResource(failure.messageRes()),
+                    text = if (detail != null) "$summary\n$detail" else summary,
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.error,
                     modifier = Modifier.testTag("magic_playlist_error")

@@ -123,6 +123,24 @@ class NewFeaturesUnitTest {
 
         // Short gap between line 2 (22s) and line 3 (25s): never triggers
         assertNull(LyricsInstrumentalDetector.findActiveGap(lines, activeIndex = 2, effectivePosMs = 24_000L))
+
+        // Outro instrumental after final line (25s) when track duration is 45s
+        assertNull(
+            LyricsInstrumentalDetector.findActiveGap(
+                lines,
+                activeIndex = 3,
+                effectivePosMs = 26_000L,
+                trackDurationMs = 45_000L
+            )
+        )
+        val outroGap = LyricsInstrumentalDetector.findActiveGap(
+            lines,
+            activeIndex = 3,
+            effectivePosMs = 38_000L,
+            trackDurationMs = 45_000L
+        )
+        assertNotNull(outroGap)
+        assertEquals(-2, outroGap!!.slotIndex)
     }
 
     @Test

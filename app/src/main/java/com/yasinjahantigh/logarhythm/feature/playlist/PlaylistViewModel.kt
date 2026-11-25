@@ -2,6 +2,7 @@ package com.yasinjahantigh.logarhythm.feature.playlist
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.yasinjahantigh.logarhythm.data.datastore.PreferencesManager
 import com.yasinjahantigh.logarhythm.domain.model.Playlist
 import com.yasinjahantigh.logarhythm.domain.repository.PlaylistRepository
 import com.yasinjahantigh.logarhythm.domain.repository.SmartMixRepository
@@ -16,7 +17,8 @@ import javax.inject.Inject
 @HiltViewModel
 class PlaylistViewModel @Inject constructor(
     private val playlistRepository: PlaylistRepository,
-    smartMixRepository: SmartMixRepository
+    smartMixRepository: SmartMixRepository,
+    private val preferencesManager: PreferencesManager
 ) : ViewModel() {
 
     val playlists: StateFlow<List<Playlist>> = playlistRepository.getAllPlaylists()
@@ -26,12 +28,25 @@ class PlaylistViewModel @Inject constructor(
             initialValue = emptyList()
         )
 
+    val favoritePlaylistIds: StateFlow<Set<Long>> = preferencesManager.favoritePlaylistIds
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = emptySet()
+        )
+
     val smartMixes: StateFlow<List<SmartMix>> = smartMixRepository.getSmartMixes()
         .stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5000),
             initialValue = emptyList()
         )
+
+    fun toggleFavoritePlaylist(playlistId: Long) {
+        viewModelScope.launch {
+            preferencesManager.toggleFavoritePlaylist(playlistId)
+        }
+    }
 
     fun createPlaylist(name: String) {
         viewModelScope.launch {
@@ -47,6 +62,9 @@ class PlaylistViewModel @Inject constructor(
 
     fun deletePlaylist(id: Long) {
         viewModelScope.launch {
+            if (id in favoritePlaylistIds.value) {
+                preferencesManager.toggleFavoritePlaylist(id)
+            }
             playlistRepository.deletePlaylist(id)
         }
     }

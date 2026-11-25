@@ -65,6 +65,7 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material.icons.filled.TouchApp
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.FileUpload
 import androidx.compose.material.icons.filled.FormatLineSpacing
 import androidx.compose.material.icons.filled.MusicNote
@@ -72,6 +73,7 @@ import androidx.compose.material.icons.filled.OpenInBrowser
 import androidx.compose.material.icons.filled.RestartAlt
 import androidx.compose.material.icons.filled.SaveAlt
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Translate
 import java.util.Locale
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -258,6 +260,10 @@ fun LyricsView(
     val lyricsCandidates by viewModel.lyricsCandidates.collectAsStateWithLifecycle()
     val isSearchingCandidates by viewModel.isSearchingCandidates.collectAsStateWithLifecycle()
     val saveMessage by viewModel.saveMessage.collectAsStateWithLifecycle()
+    val translateLang by viewModel.translateLang.collectAsStateWithLifecycle()
+    val translatedLines by viewModel.translatedLines.collectAsStateWithLifecycle()
+    val isTranslating by viewModel.isTranslating.collectAsStateWithLifecycle()
+    val translationFailed by viewModel.translationFailed.collectAsStateWithLifecycle()
 
     var showDeleteConfirmDialog by remember { mutableStateOf(false) }
     var showLineSpacingDialog by remember { mutableStateOf(false) }
@@ -272,6 +278,11 @@ fun LyricsView(
     }
 
     val context = LocalContext.current
+    LaunchedEffect(translationFailed) {
+        if (translationFailed) {
+            Toast.makeText(context, context.getString(R.string.lyrics_translate_failed), Toast.LENGTH_SHORT).show()
+        }
+    }
     val mediaStoreConsent = rememberMediaStoreConsent()
     val requestLyricsWrite: ((com.yasinjahantigh.logarhythm.domain.model.Track) -> Unit) -> Unit = { action ->
         val targetTrack = currentTrack
@@ -509,6 +520,7 @@ fun LyricsView(
                     modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
                 )
                 var showLyricsMenu by remember { mutableStateOf(false) }
+                var showTranslateMenu by remember { mutableStateOf(false) }
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -567,6 +579,59 @@ fun LyricsView(
                         horizontalArrangement = Arrangement.spacedBy(0.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
+                        Box {
+                            IconButton(
+                                onClick = { showTranslateMenu = true },
+                                modifier = Modifier.size(48.dp).testTag("lyrics_translate_button")
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Translate,
+                                    contentDescription = stringResource(R.string.lyrics_translate_action),
+                                    tint = if (translateLang.isNotBlank()) MaterialTheme.colorScheme.primary
+                                    else MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            DropdownMenu(
+                                expanded = showTranslateMenu,
+                                onDismissRequest = { showTranslateMenu = false }
+                            ) {
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(R.string.lyrics_translate_off)) },
+                                    trailingIcon = if (translateLang.isBlank()) {
+                                        { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(18.dp)) }
+                                    } else null,
+                                    onClick = {
+                                        showTranslateMenu = false
+                                        viewModel.setTranslateLanguage("")
+                                    },
+                                    modifier = Modifier.testTag("lyrics_translate_option_off")
+                                )
+                                val translateOptions = listOf(
+                                    "fa" to R.string.lyrics_translate_lang_fa,
+                                    "en" to R.string.lyrics_translate_lang_en,
+                                    "ar" to R.string.lyrics_translate_lang_ar,
+                                    "tr" to R.string.lyrics_translate_lang_tr,
+                                    "es" to R.string.lyrics_translate_lang_es,
+                                    "fr" to R.string.lyrics_translate_lang_fr,
+                                    "de" to R.string.lyrics_translate_lang_de,
+                                    "ru" to R.string.lyrics_translate_lang_ru
+                                )
+                                translateOptions.forEach { (code, labelRes) ->
+                                    DropdownMenuItem(
+                                        text = { Text(stringResource(labelRes)) },
+                                        trailingIcon = if (translateLang == code) {
+                                            { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(18.dp)) }
+                                        } else null,
+                                        onClick = {
+                                            showTranslateMenu = false
+                                            viewModel.setTranslateLanguage(code)
+                                        },
+                                        modifier = Modifier.testTag("lyrics_translate_option_$code")
+                                    )
+                                }
+                            }
+                        }
+
                         IconButton(
                             onClick = { showLyricCardDialog = true },
                             modifier = Modifier.size(48.dp).testTag("lyrics_top_share_button")
@@ -705,6 +770,57 @@ fun LyricsView(
                         }
                     }
                 }
+                if (isTranslating || translateLang.isNotBlank()) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 10.dp, vertical = 2.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Surface(
+                            shape = CircleShape,
+                            color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.85f),
+                            onClick = { viewModel.setTranslateLanguage("") },
+                            modifier = Modifier.testTag("lyrics_translate_status_chip")
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                if (isTranslating) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(12.dp),
+                                        strokeWidth = 1.8.dp,
+                                        color = MaterialTheme.colorScheme.onSecondaryContainer
+                                    )
+                                    Text(
+                                        text = stringResource(R.string.lyrics_translating),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSecondaryContainer
+                                    )
+                                } else {
+                                    Text(
+                                        text = stringResource(
+                                            R.string.lyrics_translate_badge,
+                                            translateLang.uppercase(Locale.US)
+                                        ),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.Medium,
+                                        color = MaterialTheme.colorScheme.onSecondaryContainer
+                                    )
+                                    Icon(
+                                        imageVector = Icons.Default.Close,
+                                        contentDescription = stringResource(R.string.lyrics_translate_off),
+                                        modifier = Modifier.size(14.dp),
+                                        tint = MaterialTheme.colorScheme.onSecondaryContainer
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
             }
 
             Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
@@ -788,6 +904,8 @@ fun LyricsView(
                             activeIndex = activeIndex,
                             offsetMs = offsetMs,
                             positionFlow = viewModel.livePositionMs,
+                            trackDurationMs = currentTrack?.durationMs ?: 0L,
+                            translatedLines = translatedLines,
                             lineSpacingDp = lyricsLineSpacingDp,
                             isTapToSyncMode = isTapToSyncMode,
                             onLineClick = { line ->
@@ -813,6 +931,7 @@ fun LyricsView(
                 else -> {
                     PlainLyricsContent(
                         plainText = lyrics?.plainText.orEmpty(),
+                        translatedLines = translatedLines,
                         lineSpacingDp = lyricsLineSpacingDp
                     )
                 }
@@ -871,6 +990,8 @@ private fun SyncedLyricsContent(
     activeIndex: Int,
     offsetMs: Long,
     positionFlow: kotlinx.coroutines.flow.StateFlow<Long>,
+    trackDurationMs: Long = 0L,
+    translatedLines: List<String>? = null,
     lineSpacingDp: Float = 12f,
     isTapToSyncMode: Boolean = false,
     onLineClick: (com.yasinjahantigh.logarhythm.domain.model.LyricLine) -> Unit
@@ -881,12 +1002,13 @@ private fun SyncedLyricsContent(
 
     // Collect live position only to compute whether we are currently inside an instrumental break.
     val livePosMs by positionFlow.collectAsStateWithLifecycle()
-    val activeGap = remember(lyrics.lines, activeIndex, livePosMs / 250L, offsetMs, isTapToSyncMode) {
+    val activeGap = remember(lyrics.lines, activeIndex, livePosMs / 250L, offsetMs, trackDurationMs, isTapToSyncMode) {
         if (isTapToSyncMode) null
         else com.yasinjahantigh.logarhythm.domain.lyrics.LyricsInstrumentalDetector.findActiveGap(
             lines = lyrics.lines,
             activeIndex = activeIndex,
-            effectivePosMs = livePosMs + offsetMs
+            effectivePosMs = livePosMs + offsetMs,
+            trackDurationMs = trackDurationMs
         )
     }
 
@@ -903,7 +1025,14 @@ private fun SyncedLyricsContent(
         lineHeight = if (isLandscape) 34.sp else 42.sp,
         textDirection = TextDirection.Content
     )
+    val translatedStyle = MaterialTheme.typography.bodyLarge.copy(
+        fontWeight = FontWeight.Medium,
+        fontSize = if (isLandscape) 15.sp else 17.sp,
+        lineHeight = if (isLandscape) 22.sp else 25.sp,
+        textDirection = TextDirection.Content
+    )
     val onSurface = MaterialTheme.colorScheme.onSurface
+    val primaryColor = MaterialTheme.colorScheme.primary
     val verticalItemPadding = (lineSpacingDp * (if (isLandscape) 0.45f else 0.55f)).coerceIn(3f, 20f).dp
 
     LazyColumn(
@@ -961,13 +1090,14 @@ private fun SyncedLyricsContent(
                     animationSpec = tween(durationMillis = 320, easing = FastOutSlowInEasing),
                     label = "lyric_scale_$index"
                 )
+                val translatedText = translatedLines?.getOrNull(index)?.takeIf { it.isNotBlank() }
 
                 Column(modifier = Modifier.fillMaxWidth()) {
                     val lineModifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(18.dp))
                         .background(
-                            if (isTapToSyncMode) MaterialTheme.colorScheme.primary.copy(alpha = 0.08f)
+                            if (isTapToSyncMode) primaryColor.copy(alpha = 0.08f)
                             else Color.Transparent
                         )
                         .clickable { onLineClick(line) }
@@ -978,24 +1108,38 @@ private fun SyncedLyricsContent(
                         }
                         .padding(horizontal = 14.dp, vertical = verticalItemPadding)
                         .testTag("lyric_line_$index")
-                    if (isCurrent && line.words.isNotEmpty() && !isTapToSyncMode) {
-                        KaraokeLine(
-                            line = line,
-                            offsetMs = offsetMs,
-                            positionFlow = positionFlow,
-                            style = lineStyle,
-                            color = onSurface,
-                            modifier = lineModifier
-                        )
-                    } else {
-                        Text(
-                            text = line.text,
-                            style = lineStyle,
-                            color = if (isTapToSyncMode) MaterialTheme.colorScheme.primary else onSurface,
-                            textAlign = TextAlign.Start,
-                            modifier = lineModifier
-                        )
+
+                    Column(modifier = lineModifier) {
+                        if (isCurrent && line.words.isNotEmpty() && !isTapToSyncMode) {
+                            KaraokeLine(
+                                line = line,
+                                offsetMs = offsetMs,
+                                positionFlow = positionFlow,
+                                style = lineStyle,
+                                color = onSurface,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        } else {
+                            Text(
+                                text = line.text,
+                                style = lineStyle,
+                                color = if (isTapToSyncMode) primaryColor else onSurface,
+                                textAlign = TextAlign.Start,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+                        if (translatedText != null) {
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = translatedText,
+                                style = translatedStyle,
+                                color = if (isCurrent) primaryColor.copy(alpha = 0.92f) else onSurface.copy(alpha = 0.72f),
+                                textAlign = TextAlign.Start,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
                     }
+
                     // Natural instrumental interlude slot right between line[index] and line[index+1]:
                     // expands ONLY during that exact moment and collapses to 0dp before/after!
                     InstrumentalInterludeSlot(
@@ -1004,6 +1148,14 @@ private fun SyncedLyricsContent(
                     )
                 }
             }
+        }
+
+        // Outro instrumental slot after the final vocal line when trackDurationMs is known
+        item(key = "instrumental_outro") {
+            InstrumentalInterludeSlot(
+                visible = activeGap?.slotIndex == -2,
+                progress = if (activeGap?.slotIndex == -2) activeGap.progress else 0f
+            )
         }
     }
 }
@@ -1268,10 +1420,21 @@ private fun HiddenLyricsContent(onRestore: () -> Unit) {
 @Composable
 private fun PlainLyricsContent(
     plainText: String,
+    translatedLines: List<String>? = null,
     lineSpacingDp: Float = 12f
 ) {
     val isLandscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
     val computedLineHeight = (24f + lineSpacingDp * 0.85f).coerceIn(26f, 52f).sp
+    val primaryStyle = MaterialTheme.typography.titleMedium.copy(
+        fontSize = 19.sp,
+        lineHeight = computedLineHeight,
+        textDirection = TextDirection.Content
+    )
+    val translatedStyle = MaterialTheme.typography.bodyMedium.copy(
+        fontSize = 15.sp,
+        lineHeight = 22.sp,
+        textDirection = TextDirection.Content
+    )
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -1284,16 +1447,41 @@ private fun PlainLyricsContent(
                 end = 22.dp
             )
     ) {
-        Text(
-            text = plainText,
-            style = MaterialTheme.typography.titleMedium.copy(
-                fontSize = 19.sp,
-                lineHeight = computedLineHeight,
-                textDirection = TextDirection.Content
-            ),
-            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.92f),
-            textAlign = TextAlign.Start
-        )
+        if (translatedLines.isNullOrEmpty()) {
+            Text(
+                text = plainText,
+                style = primaryStyle,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.92f),
+                textAlign = TextAlign.Start
+            )
+        } else {
+            val rawLines = remember(plainText) { plainText.lines() }
+            rawLines.forEachIndexed { index, rawLine ->
+                if (rawLine.isBlank()) {
+                    Spacer(modifier = Modifier.height(10.dp))
+                } else {
+                    Text(
+                        text = rawLine,
+                        style = primaryStyle,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.94f),
+                        textAlign = TextAlign.Start,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    val translation = translatedLines.getOrNull(index)?.takeIf { it.isNotBlank() }
+                    if (translation != null) {
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = translation,
+                            style = translatedStyle,
+                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.86f),
+                            textAlign = TextAlign.Start,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                    Spacer(modifier = Modifier.height((lineSpacingDp * 0.55f).coerceIn(4f, 16f).dp))
+                }
+            }
+        }
     }
 }
 

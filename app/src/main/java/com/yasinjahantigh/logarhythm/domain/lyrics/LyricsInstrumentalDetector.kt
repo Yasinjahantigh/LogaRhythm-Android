@@ -45,7 +45,8 @@ object LyricsInstrumentalDetector {
     fun findActiveGap(
         lines: List<LyricLine>,
         activeIndex: Int,
-        effectivePosMs: Long
+        effectivePosMs: Long,
+        trackDurationMs: Long = 0L
     ): ActiveInstrumentalGap? {
         if (lines.isEmpty() || effectivePosMs < 0L) return null
 
@@ -68,7 +69,8 @@ object LyricsInstrumentalDetector {
         // 2. Explicit blank or instrumental-marker LRC line
         if (isInstrumentalMarker(current.text)) {
             val start = current.timestampMs
-            val end = (next?.timestampMs?.minus(EXIT_LEAD_MS)) ?: (start + 10_000L)
+            val end = (next?.timestampMs?.minus(EXIT_LEAD_MS))
+                ?: if (trackDurationMs > start + 2_000L) (trackDurationMs - EXIT_LEAD_MS) else (start + 10_000L)
             if (effectivePosMs in start..end && end > start) {
                 val p = ((effectivePosMs - start).toFloat() / (end - start).toFloat()).coerceIn(0f, 1f)
                 return ActiveInstrumentalGap(slotIndex = activeIndex, progress = p)
@@ -76,8 +78,25 @@ object LyricsInstrumentalDetector {
             return null
         }
 
-        // 3. Natural instrumental gap between two vocal lines (e.g. 10s..20s music break)
-        if (next == null) return null
+        // 3. Instrumental outro after the final vocal line when trackDurationMs is known
+        if (next == null) {
+            if (trackDurationMs <= 0L) return null
+            val estSingEnd = if (current.words.isNotEmpty()) {
+                current.words.last().startMs + 1_300L
+            } else {
+                val estDuration = (1_700L + current.text.length * 60L).coerceIn(2_300L, 4_000L)
+                current.timestampMs + estDuration
+            }
+            val outroEnd = (trackDurationMs - EXIT_LEAD_MS).coerceAtLeast(estSingEnd)
+            if (outroEnd - estSingEnd < MIN_BETWEEN_LINES_GAP_MS) return null
+            if (effectivePosMs in estSingEnd..outroEnd) {
+                val p = ((effectivePosMs - estSingEnd).toFloat() / (outroEnd - estSingEnd).toFloat()).coerceIn(0f, 1f)
+                return ActiveInstrumentalGap(slotIndex = -2, progress = p)
+            }
+            return null
+        }
+
+        // 4. Natural instrumental gap between two vocal lines (e.g. 10s..20s music break)
         val gapMs = next.timestampMs - current.timestampMs
         if (gapMs < MIN_BETWEEN_LINES_GAP_MS) return null
 

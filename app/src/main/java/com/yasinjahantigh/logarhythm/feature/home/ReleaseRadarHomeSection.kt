@@ -92,7 +92,8 @@ fun ReleaseRadarHomeSection(
     onDismissRelease: (ArtistReleaseEntity) -> Unit,
     onMarkSeen: () -> Unit,
     onUnfollowArtist: (String) -> Unit,
-    onSetRadarEnabled: (Boolean) -> Unit
+    onSetRadarEnabled: (Boolean) -> Unit,
+    onInspectRelease: (ArtistReleaseEntity) -> Unit = {}
 ) {
     if (followedArtists.isEmpty()) return
     var showManageSheet by remember { mutableStateOf(false) }
@@ -345,6 +346,7 @@ fun ReleaseRadarHomeSection(
                     RadarReleaseCard(
                         release = release,
                         isDownloading = isBusy,
+                        onInspect = { onInspectRelease(release) },
                         onDownload = {
                             downloadingIds = downloadingIds + release.releaseId
                             onDownloadRelease(release)
@@ -499,6 +501,7 @@ fun ReleaseRadarHomeSection(
 private fun RadarReleaseCard(
     release: ArtistReleaseEntity,
     isDownloading: Boolean,
+    onInspect: () -> Unit,
     onDownload: () -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -520,6 +523,8 @@ private fun RadarReleaseCard(
         },
         modifier = Modifier
             .width(184.dp)
+            .clip(RoundedCornerShape(22.dp))
+            .clickable(onClick = onInspect)
             .testTag("radar_release_card_${release.releaseId}")
     ) {
         Column {
@@ -527,6 +532,7 @@ private fun RadarReleaseCard(
                 modifier = Modifier
                     .fillMaxWidth()
                     .aspectRatio(1.12f)
+                    .clickable(onClick = onInspect)
             ) {
                 ArtworkImage(
                     uri = release.artworkUrl,

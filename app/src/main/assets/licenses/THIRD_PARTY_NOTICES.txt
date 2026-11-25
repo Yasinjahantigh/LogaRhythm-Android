@@ -1,0 +1,28 @@
+Third-party components bundled in LogaRhythm
+=============================================
+
+LogaRhythm is licensed under the GNU General Public License v3.0 (GPL-3.0).
+Source: https://github.com/Yasinjahantigh/LogaRhythm-Android
+
+1. youtubedl-android
+   https://github.com/junkfood02/youtubedl-android
+   License: GNU General Public License v3.0 (GPL-3.0)
+
+2. yt-dlp
+   https://github.com/yt-dlp/yt-dlp
+   License: The Unlicense
+
+3. Python runtime bundled by youtubedl-android
+   https://www.python.org
+   License: Python Software Foundation License (PSF)
+
+4. AndroidX, Jetpack Compose, Media3, Room, WorkManager, Glance, ExifInterface, Hilt
+   License: Apache License 2.0
+
+5. OkHttp, Coil, Kotlinx Coroutines
+   License: Apache License 2.0
+
+6. Bundled Typography (SIL Open Font License 1.1)
+   Vazirmatn, Plus Jakarta Sans, Space Grotesk, Playfair Display,
+   JetBrains Mono, Lalezar, Noto Kufi Arabic, Noto Naskh Arabic.
+   (See assets/OFL.txt for the full SIL Open Font License 1.1 text.)

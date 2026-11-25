@@ -193,7 +193,7 @@ class MusicManDownloader @Inject constructor(
                                         .coerceAtLeast(1L)
                                     val remaining = (expected - written).coerceAtLeast(0L)
                                     val eta = (remaining * elapsed / written.coerceAtLeast(1L)) / 1000
-                                    onProgress(percent / 100f, eta, "[download] MusicMan $percent%")
+                                    onProgress(percent.toFloat(), eta, "[download] MusicMan $percent%")
                                 }
                             }
                         }

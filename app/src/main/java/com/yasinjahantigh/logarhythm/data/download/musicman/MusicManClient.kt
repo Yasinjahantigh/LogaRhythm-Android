@@ -298,8 +298,11 @@ class MusicManClient @Inject constructor(
         if (audio.isBale && !msgId.isNullOrBlank()) {
             return baleProxyUrl(msgId)
         }
-        val host = audio.url.toHttpUrlOrNull()?.host.orEmpty()
-        val needsProxy = host.endsWith("telegram.org") ||
+        val parsed = audio.url.toHttpUrlOrNull()
+        val host = parsed?.host.orEmpty()
+        val isCleartextHttp = parsed != null && !parsed.isHttps
+        val needsProxy = isCleartextHttp ||
+            host.endsWith("telegram.org") ||
             host.endsWith("t.me") ||
             audio.url.contains("<token>")
         return if (needsProxy && proxyBase.isNotBlank()) proxied(audio.url) else audio.url
@@ -405,7 +408,8 @@ class MusicManClient @Inject constructor(
             albumArtist = artist,
             trackCount = optInt("trackCount", 0).coerceAtLeast(0),
             collectionId = id,
-            artistId = opt("artistId")?.toString()?.takeIf { it.isNotBlank() && it != "null" }
+            artistId = opt("artistId")?.toString()?.takeIf { it.isNotBlank() && it != "null" },
+            releaseDate = optString("releaseDate").trim().takeIf { it.length >= 4 && !it.equals("null", true) }.orEmpty()
         )
     }
 
@@ -422,6 +426,9 @@ class MusicManClient @Inject constructor(
             .ifBlank { artist }
         val artwork = bestArtwork()
             ?: optString("artworkUrl100").takeIf { it.startsWith("http") }?.let(::upgradeItunesArtwork)
+        val rawReleaseDate = optString("releaseDate").trim()
+            .takeIf { it.length >= 4 && !it.equals("null", ignoreCase = true) }
+            .orEmpty()
         return DownloadSearchResult(
             id = trackId,
             title = title,
@@ -436,7 +443,8 @@ class MusicManClient @Inject constructor(
             trackNumber = optInt("trackNumber", 0).coerceAtLeast(0),
             collectionId = opt("collectionId")?.toString()?.takeIf { it.isNotBlank() && it != "null" },
             artistId = opt("artistId")?.toString()?.takeIf { it.isNotBlank() && it != "null" },
-            hasReadyAudio = bestAudio() != null
+            hasReadyAudio = bestAudio() != null,
+            releaseDate = rawReleaseDate
         )
     }
 
@@ -526,12 +534,16 @@ class MusicManClient @Inject constructor(
         else -> size.substringBefore('x').toIntOrNull() ?: 0
     }
 
-    private fun upgradeItunesArtwork(url: String): String =
-        if (url.contains("mzstatic.com")) {
-            url.replace(Regex("/\\d+x\\d+bb\\.(jpg|jpeg|png)$"), "/600x600bb.$1")
+    private fun upgradeItunesArtwork(url: String): String {
+        val httpsUrl = if (url.startsWith("http://", ignoreCase = true)) {
+            "https://" + url.substring(7)
+        } else url
+        return if (httpsUrl.contains("mzstatic.com")) {
+            httpsUrl.replace(Regex("/\\d+x\\d+bb\\.(jpg|jpeg|png)$"), "/600x600bb.$1")
         } else {
-            url
+            httpsUrl
         }
+    }
 
     private suspend fun audiosFromLookup(
         trackId: String,

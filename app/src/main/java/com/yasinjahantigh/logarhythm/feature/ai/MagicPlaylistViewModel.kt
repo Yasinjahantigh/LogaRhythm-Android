@@ -24,6 +24,7 @@ data class MagicPlaylistUiState(
     val trackCount: Int = 20,
     val isGenerating: Boolean = false,
     val failure: AiFailure? = null,
+    val failureDetail: String? = null,
     val result: MagicPlaylist? = null,
     val isSaving: Boolean = false
 )
@@ -40,7 +41,7 @@ class MagicPlaylistViewModel @Inject constructor(
     val state: StateFlow<MagicPlaylistUiState> = _state.asStateFlow()
 
     fun setPrompt(prompt: String) {
-        _state.update { it.copy(prompt = prompt, failure = null) }
+        _state.update { it.copy(prompt = prompt, failure = null, failureDetail = null) }
     }
 
     fun setTrackCount(count: Int) {
@@ -51,7 +52,7 @@ class MagicPlaylistViewModel @Inject constructor(
         val current = _state.value
         if (current.isGenerating || current.prompt.isBlank()) return
         viewModelScope.launch {
-            _state.update { it.copy(isGenerating = true, failure = null, result = null) }
+            _state.update { it.copy(isGenerating = true, failure = null, failureDetail = null, result = null) }
             try {
                 val generated = if (baseTracks.isEmpty()) {
                     repository.generatePlaylist(current.prompt, current.trackCount)
@@ -69,7 +70,11 @@ class MagicPlaylistViewModel @Inject constructor(
                     }
 
                     is MagicPlaylistResult.Failure -> _state.update {
-                        it.copy(isGenerating = false, failure = result.reason)
+                        it.copy(
+                            isGenerating = false,
+                            failure = result.reason,
+                            failureDetail = repository.lastErrorDetail()
+                        )
                     }
                 }
             } catch (cancelled: CancellationException) {

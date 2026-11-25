@@ -42,7 +42,8 @@ fun AiSettingsDialog(
     onTest: (AiProvider, String, String, String?) -> Unit,
     onSave: (AiProvider, String, String, String?) -> Unit,
     onClearKey: () -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    onClearTestState: () -> Unit = {}
 ) {
     var provider by remember(settings.provider) { mutableStateOf(settings.provider) }
     var baseUrl by remember(settings.baseUrl) { mutableStateOf(settings.baseUrl) }
@@ -57,6 +58,7 @@ fun AiSettingsDialog(
         provider = next
         if (baseWasDefault) baseUrl = AiSettings.defaultBase(next)
         if (modelWasDefault) model = AiSettings.defaultModel(next)
+        onClearTestState()
     }
 
     fun validUrl(): Boolean {
@@ -100,6 +102,7 @@ fun AiSettingsDialog(
                     onValueChange = {
                         baseUrl = it
                         showUrlError = false
+                        onClearTestState()
                     },
                     label = { Text(stringResource(R.string.settings_ai_base_url)) },
                     placeholder = { Text(AiSettings.defaultBase(provider)) },
@@ -115,7 +118,10 @@ fun AiSettingsDialog(
                 Spacer(modifier = Modifier.height(8.dp))
                 OutlinedTextField(
                     value = model,
-                    onValueChange = { model = it },
+                    onValueChange = {
+                        model = it
+                        onClearTestState()
+                    },
                     label = { Text(stringResource(R.string.settings_ai_model)) },
                     placeholder = { Text(AiSettings.defaultModel(provider)) },
                     singleLine = true,
@@ -126,7 +132,10 @@ fun AiSettingsDialog(
                 Spacer(modifier = Modifier.height(8.dp))
                 OutlinedTextField(
                     value = apiKey,
-                    onValueChange = { apiKey = it },
+                    onValueChange = {
+                        apiKey = it
+                        onClearTestState()
+                    },
                     label = { Text(stringResource(R.string.settings_ai_api_key)) },
                     placeholder = {
                         Text(
@@ -188,11 +197,15 @@ fun AiSettingsDialog(
                         color = MaterialTheme.colorScheme.primary
                     )
 
-                    testState.failure != null -> Text(
-                        text = stringResource(testState.failure.messageRes()),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.error
-                    )
+                    testState.failure != null -> {
+                        val summary = stringResource(testState.failure.messageRes())
+                        val detail = testState.detail?.takeIf { it.isNotBlank() }
+                        Text(
+                            text = if (detail != null) "$summary\n$detail" else summary,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    }
                 }
             }
         },

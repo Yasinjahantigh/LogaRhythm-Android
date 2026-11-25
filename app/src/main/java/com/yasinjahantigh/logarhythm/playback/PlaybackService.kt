@@ -53,6 +53,9 @@ class PlaybackService : MediaSessionService() {
         const val ACTION_PREVIOUS = "com.yasinjahantigh.logarhythm.action.PREVIOUS"
         private const val ACTION_TOGGLE_SHUFFLE = "com.yasinjahantigh.logarhythm.action.TOGGLE_SHUFFLE"
         private const val ACTION_CYCLE_REPEAT = "com.yasinjahantigh.logarhythm.action.CYCLE_REPEAT"
+        const val ACTION_SET_PREFERRED_AUDIO_DEVICE =
+            "com.yasinjahantigh.logarhythm.action.SET_PREFERRED_AUDIO_DEVICE"
+        const val EXTRA_AUDIO_DEVICE_ID = "audio_device_id"
 
         /**
          * The player of the running service. The widget reads playback state from it because the
@@ -88,6 +91,9 @@ class PlaybackService : MediaSessionService() {
     @Inject
     lateinit var stereoBalanceAudioProcessor: StereoBalanceAudioProcessor
 
+    @Inject
+    lateinit var audioOutputManager: AudioOutputManager
+
     private var mediaSession: MediaSession? = null
     private var enhancer: PlaybackEnhancer? = null
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
@@ -101,6 +107,7 @@ class PlaybackService : MediaSessionService() {
             val commands = MediaSession.ConnectionResult.DEFAULT_SESSION_COMMANDS.buildUpon()
                 .add(SessionCommand(ACTION_TOGGLE_SHUFFLE, Bundle.EMPTY))
                 .add(SessionCommand(ACTION_CYCLE_REPEAT, Bundle.EMPTY))
+                .add(SessionCommand(ACTION_SET_PREFERRED_AUDIO_DEVICE, Bundle.EMPTY))
                 .build()
             return MediaSession.ConnectionResult.AcceptedResultBuilder(session)
                 .setAvailableSessionCommands(commands)
@@ -117,6 +124,11 @@ class PlaybackService : MediaSessionService() {
             when (customCommand.customAction) {
                 ACTION_TOGGLE_SHUFFLE -> playerController.toggleShuffle()
                 ACTION_CYCLE_REPEAT -> playerController.cycleRepeat()
+                ACTION_SET_PREFERRED_AUDIO_DEVICE -> {
+                    val deviceId = args.getInt(EXTRA_AUDIO_DEVICE_ID, -1)
+                    val deviceInfo = audioOutputManager.findOutputDeviceInfo(deviceId)
+                    (mediaSession?.player as? ExoPlayer)?.setPreferredAudioDevice(deviceInfo)
+                }
                 else -> return Futures.immediateFuture(
                     SessionResult(SessionError.ERROR_NOT_SUPPORTED)
                 )
@@ -163,6 +175,9 @@ class PlaybackService : MediaSessionService() {
             .setWakeMode(C.WAKE_MODE_LOCAL)
             .build()
         livePlayer = player
+        audioOutputManager.preferredDeviceId
+            ?.let { audioOutputManager.findOutputDeviceInfo(it) }
+            ?.let { player.setPreferredAudioDevice(it) }
 
         scope.launch {
             preferencesManager.stereoBalance.collect { stereoBalanceAudioProcessor.setStereoBalance(it) }
@@ -286,7 +301,7 @@ class PlaybackService : MediaSessionService() {
         if (widgetCommand) {
             // The command may have started the service from the background, so the notification
             // has to be posted before the foreground service start deadline runs out.
-            mediaSession?.let { onUpdateNotification(it, true) }
+            mediaSession?.let { session -> runCatching { onUpdateNotification(session, true) } }
         }
         if (player != null && player.mediaItemCount == 0 &&
             (action == ACTION_PLAY_PAUSE || action == ACTION_NEXT || action == ACTION_PREVIOUS)
@@ -302,6 +317,7 @@ class PlaybackService : MediaSessionService() {
                     player.prepare()
                 }
                 executePlayerAction(player, action)
+                mediaSession?.let { session -> runCatching { onUpdateNotification(session, true) } }
                 com.yasinjahantigh.logarhythm.widget.MusicWidgetUpdater.requestUpdate(this@PlaybackService)
             }
             return super.onStartCommand(intent, flags, startId)

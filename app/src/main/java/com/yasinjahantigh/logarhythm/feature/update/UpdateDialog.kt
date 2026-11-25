@@ -36,6 +36,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -146,7 +147,8 @@ private fun AvailableDialog(
                 Spacer(Modifier.height(14.dp))
 
                 // Changelog / Release notes section
-                val cleanedNotes = formatReleaseNotes(release.notes)
+                val isPersian = LocalConfiguration.current.locales[0]?.language.equals("fa", ignoreCase = true)
+                val cleanedNotes = formatReleaseNotes(release.notes, preferPersian = isPersian)
                 if (cleanedNotes.isNotBlank()) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(
@@ -203,11 +205,67 @@ private fun AvailableDialog(
     )
 }
 
-/** Formats GitHub release markdown text into clean bullet points for easy reading. */
-private fun formatReleaseNotes(raw: String): String {
-    return raw.lines()
-        .map { it.trim() }
-        .filterNot { it.startsWith("## ") || it.startsWith("# ") || it.startsWith("### ") || it.startsWith("**Full Changelog**") || it.startsWith("Full Changelog:") }
+private val HEADING_REGEX = Regex("""^#{1,3}\s+(.+)$""")
+
+private fun classifySection(heading: String): String? {
+    val normalized = heading.trim().lowercase()
+    return when {
+        "فارسی" in normalized || "تغییرات" in normalized || "persian" in normalized -> "fa"
+        "what's new" in normalized || "whats new" in normalized || "english" in normalized ||
+            "changelog" in normalized || "changes" in normalized -> "en"
+        else -> null
+    }
+}
+
+private fun isPromoOrMetaLine(line: String): Boolean {
+    val trimmed = line.trim()
+    return trimmed == "---" ||
+        trimmed.startsWith("**Full Changelog**") ||
+        trimmed.startsWith("Full Changelog:") ||
+        trimmed.startsWith("📥") ||
+        trimmed.startsWith("☕") ||
+        trimmed.startsWith("💬") ||
+        trimmed.startsWith("📢") ||
+        trimmed.startsWith("https://t.me/") ||
+        trimmed.startsWith("https://daramet.com/") ||
+        trimmed.startsWith("https://github.com/Yasinjahantigh/LogaRhythm-Android/releases")
+}
+
+/**
+ * Formats GitHub release markdown text into clean bullet points for the in-app dialog.
+ * When bilingual sections (e.g. `## What's New` and `## فارسی`) are present, picks the
+ * section matching [preferPersian] while falling back gracefully for older single-language notes.
+ */
+internal fun formatReleaseNotes(raw: String, preferPersian: Boolean = false): String {
+    val lines = raw.lines()
+    val enLines = mutableListOf<String>()
+    val faLines = mutableListOf<String>()
+    val otherLines = mutableListOf<String>()
+    var activeLang: String? = null
+
+    for (rawLine in lines) {
+        val trimmed = rawLine.trim()
+        val headingMatch = HEADING_REGEX.matchEntire(trimmed)
+        if (headingMatch != null) {
+            activeLang = classifySection(headingMatch.groupValues[1])
+            continue
+        }
+        when (activeLang) {
+            "en" -> enLines += trimmed
+            "fa" -> faLines += trimmed
+            else -> otherLines += trimmed
+        }
+    }
+
+    val chosen = when {
+        enLines.isNotEmpty() && faLines.isNotEmpty() -> if (preferPersian) faLines else enLines
+        faLines.isNotEmpty() -> faLines
+        enLines.isNotEmpty() -> enLines
+        else -> otherLines
+    }
+
+    return chosen
+        .filter { it.isNotBlank() && !isPromoOrMetaLine(it) }
         .map { line ->
             when {
                 line.startsWith("* ") || line.startsWith("- ") -> "•  " + line.substring(2).trim()
@@ -215,7 +273,6 @@ private fun formatReleaseNotes(raw: String): String {
                 else -> line
             }
         }
-        .filter { it.isNotBlank() }
         .joinToString("\n")
 }
 

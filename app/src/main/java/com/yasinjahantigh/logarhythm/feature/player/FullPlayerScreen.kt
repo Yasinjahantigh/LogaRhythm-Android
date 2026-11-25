@@ -7,6 +7,11 @@ import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.draw.shadow
@@ -52,6 +57,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -63,6 +69,7 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -121,6 +128,7 @@ import com.yasinjahantigh.logarhythm.R
 import com.yasinjahantigh.logarhythm.core.utils.ArtworkColorExtractor
 import com.yasinjahantigh.logarhythm.core.utils.FileUtils
 import com.yasinjahantigh.logarhythm.core.utils.TimeUtils
+import com.yasinjahantigh.logarhythm.core.utils.rememberMediaStoreConsent
 import com.yasinjahantigh.logarhythm.domain.model.Track
 import com.yasinjahantigh.logarhythm.feature.equalizer.EqualizerScreen
 import com.yasinjahantigh.logarhythm.feature.lyrics.LyricsView
@@ -185,6 +193,8 @@ fun FullPlayerScreen(
 
     val isVinylMode by viewModel.isVinylMode.collectAsStateWithLifecycle()
     val audioOutputState by viewModel.audioOutputState.collectAsStateWithLifecycle()
+    val artistInfo by viewModel.currentArtistInfo.collectAsStateWithLifecycle()
+    val isInstrumentalSilence by lyricsViewModel.isInstrumentalSilence.collectAsStateWithLifecycle()
 
     var showLyrics by remember { mutableStateOf(false) }
     var showSpeedDialog by remember { mutableStateOf(false) }
@@ -196,10 +206,15 @@ fun FullPlayerScreen(
     var showRemainingTime by remember { mutableStateOf(false) }
     var showFullArtworkDialog by remember { mutableStateOf(false) }
     var showSongShareSheet by remember { mutableStateOf(false) }
+    var showDeleteConfirmDialog by remember { mutableStateOf(false) }
+    var showAboutArtistSheet by remember { mutableStateOf(false) }
     var isCarMode by remember { mutableStateOf(false) }
 
     val track = currentTrack
+    val nextTrack = remember(queue, queueIndex) { queue.getOrNull(queueIndex + 1) }
+    val silencePulseActive = isPlaying && isInstrumentalSilence
     val context = LocalContext.current
+    val mediaStoreConsent = rememberMediaStoreConsent()
 
     val coroutineScope = rememberCoroutineScope()
     val artworkDragOffsetX = remember { Animatable(0f) }
@@ -299,6 +314,73 @@ fun FullPlayerScreen(
         FullArtworkDialog(
             track = track,
             onDismiss = { showFullArtworkDialog = false }
+        )
+    }
+
+    if (showDeleteConfirmDialog && track != null) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirmDialog = false },
+            title = { Text(stringResource(R.string.dialog_delete_song_title)) },
+            text = {
+                Text(
+                    text = stringResource(
+                        R.string.dialog_delete_song_confirm,
+                        track.title.cleanMetaOrNull() ?: track.title
+                    )
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val targetTrack = track
+                        showDeleteConfirmDialog = false
+                        mediaStoreConsent.delete(
+                            track = targetTrack,
+                            onApproved = { approvedTrack ->
+                                viewModel.deleteCurrentTrack(approvedTrack) { deleted ->
+                                    Toast.makeText(
+                                        context,
+                                        context.getString(if (deleted) R.string.song_deleted else R.string.track_delete_failed),
+                                        Toast.LENGTH_SHORT
+                                    ).show()
+                                }
+                            },
+                            onCancelled = {
+                                Toast.makeText(
+                                    context,
+                                    context.getString(R.string.track_delete_failed),
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                            }
+                        )
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.error,
+                        contentColor = MaterialTheme.colorScheme.onError
+                    ),
+                    modifier = Modifier.testTag("player_delete_confirm_button")
+                ) {
+                    Text(stringResource(R.string.btn_delete))
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { showDeleteConfirmDialog = false },
+                    modifier = Modifier.testTag("player_delete_cancel_button")
+                ) {
+                    Text(stringResource(R.string.btn_cancel))
+                }
+            }
+        )
+    }
+
+    if (showAboutArtistSheet && track != null) {
+        AboutArtistSheet(
+            track = track,
+            artistInfo = artistInfo,
+            onPlayTrack = { t -> viewModel.play(listOf(t), 0) },
+            onOpenArtistPage = onNavigateToArtist,
+            onDismiss = { showAboutArtistSheet = false }
         )
     }
 
@@ -419,6 +501,7 @@ fun FullPlayerScreen(
                             track = track,
                             isPlaying = isPlaying,
                             isVinylMode = isVinylMode,
+                            silencePulseActive = silencePulseActive,
                             glowColor = animatedBgColor,
                             queue = queue,
                             currentIndex = queueIndex,
@@ -448,7 +531,8 @@ fun FullPlayerScreen(
         Box(modifier = Modifier.fillMaxSize()) {
             PlayerBackdrop(
                 tint = animatedBgColor,
-                glow = scheme.tertiary
+                glow = scheme.tertiary,
+                silencePulseActive = silencePulseActive
             )
 
             BoxWithConstraints(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -502,7 +586,10 @@ fun FullPlayerScreen(
                             viewModel.hideCurrentTrack { hidden ->
                                 Toast.makeText(context, context.getString(R.string.track_hidden_toast, hidden.title), Toast.LENGTH_SHORT).show()
                             }
-                        }
+                        },
+                        onDeleteSong = if (track != null) {
+                            { showDeleteConfirmDialog = true }
+                        } else null
                     )
 
                     if (!showLyrics) {
@@ -578,6 +665,12 @@ fun FullPlayerScreen(
                                     onOpenTimer = { showSleepTimerDialog = true },
                                     speedLabel = speedLabel,
                                     onOpenSpeed = { showSpeedDialog = true }
+                                )
+                                PlayerBottomDiscoveryStrip(
+                                    nextTrack = nextTrack,
+                                    hasArtistInfo = track != null,
+                                    onOpenQueue = viewModel::openQueue,
+                                    onOpenAboutArtist = { showAboutArtistSheet = true }
                                 )
                             }
                         }
@@ -659,8 +752,17 @@ fun FullPlayerScreen(
                             onOpenTimer = { showSleepTimerDialog = true },
                             speedLabel = speedLabel,
                             onOpenSpeed = { showSpeedDialog = true },
-                            modifier = Modifier.padding(bottom = 6.dp)
+                            modifier = Modifier.padding(bottom = 4.dp)
                         )
+                        if (!showLyrics) {
+                            PlayerBottomDiscoveryStrip(
+                                nextTrack = nextTrack,
+                                hasArtistInfo = track != null,
+                                onOpenQueue = viewModel::openQueue,
+                                onOpenAboutArtist = { showAboutArtistSheet = true },
+                                modifier = Modifier.padding(bottom = 4.dp)
+                            )
+                        }
                     }
                 }
             }
@@ -680,9 +782,25 @@ private val HeroArtworkShape = RoundedCornerShape(32.dp)
 private fun PlayerBackdrop(
     tint: Color,
     glow: Color,
+    silencePulseActive: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     val surface = MaterialTheme.colorScheme.surface
+    val pulseMix by animateFloatAsState(
+        targetValue = if (silencePulseActive) 1f else 0f,
+        animationSpec = tween(durationMillis = 550, easing = FastOutSlowInEasing),
+        label = "backdrop_silence_mix"
+    )
+    val breathTransition = rememberInfiniteTransition(label = "backdrop_silence_breath")
+    val breathWave by breathTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 1900, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "backdrop_silence_wave"
+    )
     Box(
         modifier = modifier
             .fillMaxSize()
@@ -697,6 +815,11 @@ private fun PlayerBackdrop(
                     center = Offset(size.width * 0.96f, size.height * 0.88f),
                     radius = size.maxDimension * 0.75f
                 )
+                val silenceHalo = Brush.radialGradient(
+                    colors = listOf(tint.copy(alpha = 0.42f), glow.copy(alpha = 0.16f), Color.Transparent),
+                    center = Offset(size.width * 0.5f, size.height * 0.38f),
+                    radius = size.maxDimension * 0.72f
+                )
                 val scrim = Brush.verticalGradient(
                     colors = listOf(
                         surface.copy(alpha = 0.30f),
@@ -707,6 +830,12 @@ private fun PlayerBackdrop(
                 onDrawBehind {
                     drawRect(brush = topGlow)
                     drawRect(brush = bottomGlow)
+                    if (pulseMix > 0.01f) {
+                        drawRect(
+                            brush = silenceHalo,
+                            alpha = (pulseMix * (0.35f + 0.65f * breathWave)).coerceIn(0f, 1f)
+                        )
+                    }
                     drawRect(brush = scrim)
                 }
             }
@@ -723,6 +852,7 @@ private fun PlayerArtwork(
     track: Track?,
     isPlaying: Boolean,
     isVinylMode: Boolean,
+    silencePulseActive: Boolean,
     glowColor: Color,
     queue: List<Track>,
     currentIndex: Int,
@@ -796,9 +926,29 @@ private fun PlayerArtwork(
         contentAlignment = Alignment.Center
     ) {
         // Feathered circular ambient glow behind the cover — cached Brush, zero per-frame allocations.
+        val haloMix by animateFloatAsState(
+            targetValue = if (silencePulseActive) 1f else 0f,
+            animationSpec = tween(durationMillis = 500, easing = FastOutSlowInEasing),
+            label = "artwork_silence_mix"
+        )
+        val haloTransition = rememberInfiniteTransition(label = "artwork_silence_halo")
+        val haloWave by haloTransition.animateFloat(
+            initialValue = 0f,
+            targetValue = 1f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(durationMillis = 1650, easing = FastOutSlowInEasing),
+                repeatMode = RepeatMode.Reverse
+            ),
+            label = "artwork_silence_wave"
+        )
         Box(
             modifier = Modifier
                 .fillMaxSize()
+                .graphicsLayer {
+                    val pulseScale = 1f + haloMix * (0.04f + 0.08f * haloWave)
+                    scaleX = pulseScale
+                    scaleY = pulseScale
+                }
                 .drawWithCache {
                     val glowBrush = Brush.radialGradient(
                         colors = listOf(
@@ -809,8 +959,23 @@ private fun PlayerArtwork(
                         center = Offset(size.width / 2f, size.height / 2f),
                         radius = size.maxDimension * 0.62f
                     )
+                    val silenceRingBrush = Brush.radialGradient(
+                        colors = listOf(
+                            glowColor.copy(alpha = 0.45f),
+                            glowColor.copy(alpha = 0.18f),
+                            Color.Transparent
+                        ),
+                        center = Offset(size.width / 2f, size.height / 2f),
+                        radius = size.maxDimension * 0.68f
+                    )
                     onDrawBehind {
                         drawCircle(brush = glowBrush)
+                        if (haloMix > 0.01f) {
+                            drawCircle(
+                                brush = silenceRingBrush,
+                                alpha = (haloMix * (0.35f + 0.65f * haloWave)).coerceIn(0f, 1f)
+                            )
+                        }
                     }
                 }
         )
