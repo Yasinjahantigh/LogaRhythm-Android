@@ -76,10 +76,14 @@ class NewFeaturesUnitTest {
             "local:1" to 9_600_000L, // ~320 kbps
             "local:2" to 3_800_000L, // ~128 kbps
             "local:3" to 5_120_000L,
-            "local:4" to 5_124_000L  // within 16KB + same duration => file-size duplicate
+            "local:4" to 5_124_000L
+        )
+        val fingerprints = mapOf(
+            "local:3" to "audio_fp_same_1",
+            "local:4" to "audio_fp_same_1"
         )
 
-        val groups = DuplicateFinder.find(listOf(t1, t2, t3, t4), fileSizes = sizes)
+        val groups = DuplicateFinder.find(listOf(t1, t2, t3, t4), fileSizes = sizes, audioFingerprints = fingerprints)
         assertEquals(2, groups.size)
 
         val goleGroup = groups.first { g -> g.tracks.any { it.id == "local:1" } }
@@ -87,9 +91,9 @@ class NewFeaturesUnitTest {
         assertEquals("local:1", goleGroup.recommendedKeepId)
         assertEquals(DuplicateMatchReason.MULTI_SOURCE, goleGroup.reason)
 
-        val sizeGroup = groups.first { g -> g.tracks.any { it.id == "local:3" } }
-        assertEquals(2, sizeGroup.tracks.size)
-        assertEquals(DuplicateMatchReason.SAME_FILE_SIZE, sizeGroup.reason)
+        val audioGroup = groups.first { g -> g.tracks.any { it.id == "local:3" } }
+        assertEquals(2, audioGroup.tracks.size)
+        assertEquals(DuplicateMatchReason.IDENTICAL_AUDIO, audioGroup.reason)
 
         val extras = DuplicateFinder.extraDuplicatesToRemove(groups)
         assertEquals(2, extras.size)
@@ -141,6 +145,58 @@ class NewFeaturesUnitTest {
         )
         assertNotNull(outroGap)
         assertEquals(-2, outroGap!!.slotIndex)
+    }
+
+    @Test
+    fun lyricsInstrumentalDetector_requiresMoreThanFourSecondsOfSilence() {
+        val shortLines = listOf(
+            LyricLine(timestampMs = 4_500L, text = "Short intro"),
+            LyricLine(timestampMs = 10_000L, text = ""),
+            LyricLine(timestampMs = 13_800L, text = "Hello"),
+            LyricLine(timestampMs = 19_500L, text = "Medium gap"),
+            LyricLine(timestampMs = 30_000L, text = "Final")
+        )
+        // Intro gap = 4_500 - 350 - 300 = 3_850ms <= 4s -> null
+        assertNull(LyricsInstrumentalDetector.findActiveGap(shortLines, activeIndex = -1, effectivePosMs = 2_000L))
+
+        // Explicit blank marker lasting 3_450ms <= 4s -> null
+        assertNull(LyricsInstrumentalDetector.findActiveGap(shortLines, activeIndex = 1, effectivePosMs = 11_500L))
+
+        // Natural gap: "Hello" (5 chars -> 2_000ms est singing -> ends 15_800L), next line 19_500 (breakEnd 19_150) -> 3_350ms silence <= 4s -> null
+        assertNull(LyricsInstrumentalDetector.findActiveGap(shortLines, activeIndex = 2, effectivePosMs = 17_500L))
+
+        // Outro lasting 3s after "Final" (2_000ms singing -> ends 32_000L, trackDuration 35_000L -> 2_650ms <= 4s) -> null
+        assertNull(LyricsInstrumentalDetector.findActiveGap(shortLines, activeIndex = 4, effectivePosMs = 33_500L, trackDurationMs = 35_000L))
+
+        val longLines = listOf(
+            LyricLine(timestampMs = 5_000L, text = "First line"),
+            LyricLine(timestampMs = 10_000L, text = "[Instrumental]"),
+            LyricLine(timestampMs = 15_000L, text = "Second")
+        )
+        // Intro 5_000 -> 4_350ms > 4s -> active
+        assertNotNull(LyricsInstrumentalDetector.findActiveGap(longLines, activeIndex = -1, effectivePosMs = 2_500L))
+        // Explicit marker 10_000..14_650 = 4_650ms > 4s -> active
+        assertNotNull(LyricsInstrumentalDetector.findActiveGap(longLines, activeIndex = 1, effectivePosMs = 12_000L))
+    }
+
+    @Test
+    fun uiVisibilityPreferences_allOptionalSectionsEnabledByDefault() {
+        val defaults = com.yasinjahantigh.logarhythm.data.datastore.UiVisibilityPreferences()
+        assertTrue(defaults.playerShowFormatBadge)
+        assertTrue(defaults.playerShowSeekButtons)
+        assertTrue(defaults.playerWaveformSeekbar)
+        assertTrue(defaults.playerShowOutputButton)
+        assertTrue(defaults.playerShowUpNextHeader)
+        assertTrue(defaults.playerShowQuickActions)
+        assertTrue(defaults.homeShowRightNow)
+        assertTrue(defaults.homeShowQuickPicks)
+        assertTrue(defaults.homeShowQuickActions)
+        assertTrue(defaults.homeShowJumpBackIn)
+        assertTrue(defaults.homeShowDailyMixes)
+        assertTrue(defaults.homeShowMoods)
+        assertTrue(defaults.homeShowStatsBanner)
+        assertTrue(defaults.showMicroTips)
+        assertTrue(defaults.showArtistPortraitBadges)
     }
 
     @Test

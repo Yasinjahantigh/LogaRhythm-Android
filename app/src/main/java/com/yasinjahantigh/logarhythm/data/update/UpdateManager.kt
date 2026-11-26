@@ -118,7 +118,9 @@ class UpdateManager @Inject constructor(
         if (!silent) _state.value = UpdateState.Checking
         scope.launch {
             try {
-                val release = runCatching { fetchLatestRelease() }.getOrNull()
+                val release = runCatching { fetchLatestRelease() }
+                    .onFailure { com.yasinjahantigh.logarhythm.data.analytics.AppLog.w("Update", "Release check failed", it) }
+                    .getOrNull()
                 if (release == null) {
                     _state.value = UpdateState.Hidden
                     if (!silent) _messages.emit(R.string.update_check_failed)

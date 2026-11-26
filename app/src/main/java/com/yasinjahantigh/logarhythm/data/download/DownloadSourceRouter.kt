@@ -3,6 +3,7 @@ package com.yasinjahantigh.logarhythm.data.download
 import android.content.Context
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
+import com.yasinjahantigh.logarhythm.data.analytics.AppLog
 import com.yasinjahantigh.logarhythm.domain.model.DownloadSource
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CancellationException
@@ -120,6 +121,7 @@ class DownloadSourceRouter @Inject constructor(
         } else {
             failedSources[source] = System.currentTimeMillis()
             latencyMs[source] = FAILED_PENALTY_MS
+            AppLog.w("DownloadRouter", "Marked source degraded: ${source.raw} (vpn=$vpnNow)")
         }
         publishStatus(vpnNow, isBenchmarking = false)
     }
@@ -283,6 +285,7 @@ class DownloadSourceRouter @Inject constructor(
     private fun resetCacheIfVpnChanged(vpnNow: Boolean) {
         val prev = lastVpnState
         if (prev != null && prev != vpnNow) {
+            AppLog.i("DownloadRouter", "VPN changed $prev -> $vpnNow; clearing latency cache")
             latencyMs.clear()
             failedSources.clear()
             lastBenchmarkedAtMs = 0L

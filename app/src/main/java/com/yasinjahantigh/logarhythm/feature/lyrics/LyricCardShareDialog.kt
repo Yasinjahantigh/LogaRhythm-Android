@@ -106,7 +106,22 @@ fun LyricCardShareDialog(
 
     // 0 = Pick lines, 1 = Live Customize & Preview Studio
     var step by remember { mutableIntStateOf(0) }
-    var options by remember { mutableStateOf(ShareCardOptions(accentColor = defaultAccent)) }
+    val (defaultFontKey, defaultCustomPath) = com.yasinjahantigh.logarhythm.ui.components.rememberShareDefaultFont()
+    var userPickedFont by remember(snapshotTrack.id) { mutableStateOf(false) }
+    var options by remember {
+        mutableStateOf(
+            ShareCardOptions(
+                accentColor = defaultAccent,
+                fontKey = defaultFontKey,
+                customFontPath = defaultCustomPath
+            )
+        )
+    }
+    LaunchedEffect(defaultFontKey, defaultCustomPath) {
+        if (!userPickedFont) {
+            options = options.copy(fontKey = defaultFontKey, customFontPath = defaultCustomPath)
+        }
+    }
     var previewBitmap by remember { mutableStateOf<Bitmap?>(null) }
     var rendering by remember { mutableStateOf(false) }
     var sharing by remember { mutableStateOf(false) }
@@ -261,8 +276,16 @@ fun LyricCardShareDialog(
 
                     ShareCardCustomizePanel(
                         options = options,
-                        onOptionsChange = { options = it },
-                        defaultAccentColor = defaultAccent
+                        onOptionsChange = { next ->
+                            if (next.fontKey != options.fontKey || next.customFontPath != options.customFontPath) {
+                                userPickedFont = true
+                            }
+                            options = next
+                        },
+                        defaultAccentColor = defaultAccent,
+                        showLineSpacing = true,
+                        showAlignment = true,
+                        customFontPath = defaultCustomPath
                     )
 
                     Row(

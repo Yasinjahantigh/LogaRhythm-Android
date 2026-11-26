@@ -207,4 +207,31 @@ class MusicManClientTest {
         assertTrue(client.playableUrl(telegram).startsWith("https://proxy.example/?url="))
         assertEquals(direct.url, client.playableUrl(direct))
     }
+
+    @Test
+    fun resolveAudioCandidates_matchesItPrefixedIdAndPreservesHttpsFallbackUrls() = runTest {
+        server.enqueue(
+            MockResponse().setBody(
+                """
+                {"results": [
+                  {"wrapperType": "track", "trackId": 99, "trackName": "Test Song",
+                   "attachments": {
+                     "audioUrls": [{
+                       "quality": "320",
+                       "source": "bale",
+                       "baleMessageId": "123456",
+                       "baleFileUrl": "bale://message/123456",
+                       "url": "https://cdn.example/fallback-320.mp3"
+                     }]
+                   }}
+                ]}
+                """.trimIndent()
+            )
+        )
+
+        val candidates = client.resolveAudioCandidates("it_99")
+        assertEquals(1, candidates.size)
+        assertEquals("bale://message/123456", candidates[0].url)
+        assertTrue(candidates[0].fallbackUrls.contains("https://cdn.example/fallback-320.mp3"))
+    }
 }

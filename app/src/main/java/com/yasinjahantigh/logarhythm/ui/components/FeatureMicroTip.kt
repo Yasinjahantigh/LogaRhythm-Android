@@ -46,6 +46,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -75,6 +76,10 @@ class FeatureHintsViewModel @Inject constructor(
             initialValue = preferencesManager.seenFeatureHintsCached()
         )
 
+    val showMicroTips: StateFlow<Boolean> = preferencesManager.uiVisibility
+        .map { it.showMicroTips }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
+
     fun dismiss(hintId: String) {
         viewModelScope.launch {
             preferencesManager.markFeatureHintSeen(hintId)
@@ -97,18 +102,19 @@ fun FeatureMicroTip(
     viewModel: FeatureHintsViewModel = hiltViewModel()
 ) {
     val seenHints by viewModel.seenHints.collectAsStateWithLifecycle()
+    val showMicroTips by viewModel.showMicroTips.collectAsStateWithLifecycle()
     val alreadySeen = hintId in seenHints
     var locallyDismissed by remember(hintId) { mutableStateOf(false) }
     var settled by remember(hintId) { mutableStateOf(false) }
 
-    LaunchedEffect(hintId, enabled, alreadySeen) {
-        if (enabled && !alreadySeen && !locallyDismissed) {
+    LaunchedEffect(hintId, enabled, showMicroTips, alreadySeen) {
+        if (enabled && showMicroTips && !alreadySeen && !locallyDismissed) {
             delay(320L)
             settled = true
         }
     }
 
-    val visible = enabled && settled && !alreadySeen && !locallyDismissed
+    val visible = enabled && showMicroTips && settled && !alreadySeen && !locallyDismissed
 
     AnimatedVisibility(
         visible = visible,

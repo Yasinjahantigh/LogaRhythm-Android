@@ -87,8 +87,16 @@ fun MainScreen(
         }
     }
     val isExpanded by playerViewModel.isExpanded.collectAsStateWithLifecycle()
+    val isQueueOpen by playerViewModel.isQueueOpen.collectAsStateWithLifecycle()
     val isCompact by playerViewModel.isCompactMiniPlayer.collectAsStateWithLifecycle()
     val isDismissed by playerViewModel.isDismissed.collectAsStateWithLifecycle()
+
+    LaunchedEffect(currentRoute) {
+        com.yasinjahantigh.logarhythm.data.analytics.AppDiagnosticContext.onRouteChanged(currentRoute)
+    }
+    LaunchedEffect(isExpanded, isQueueOpen) {
+        com.yasinjahantigh.logarhythm.data.analytics.AppDiagnosticContext.onPlayerUiChanged(isExpanded, isQueueOpen)
+    }
 
     val configuration = LocalConfiguration.current
     val useNavigationRail = configuration.screenWidthDp >= 700 || configuration.screenHeightDp < configuration.screenWidthDp

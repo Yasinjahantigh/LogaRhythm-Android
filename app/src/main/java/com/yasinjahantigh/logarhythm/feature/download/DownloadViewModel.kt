@@ -188,8 +188,8 @@ class DownloadViewModel @Inject constructor(
                 runtime.currentVersion()
             } catch (cancelled: CancellationException) {
                 throw cancelled
-            } catch (_: Exception) {
-                // Failures are reported when a search or download actually needs the engine.
+            } catch (err: Exception) {
+                com.yasinjahantigh.logarhythm.data.analytics.AppLog.w("DownloadVM", "yt-dlp init warmup failed: ${err.message}")
             } finally {
                 _preparing.value = false
             }
@@ -283,6 +283,12 @@ class DownloadViewModel @Inject constructor(
             try {
                 searchService.searchFlow(trimmed, source, category).collect { outcome ->
                     val merged = if (outcome.results.isNotEmpty()) outcome.results else cached
+                    if (outcome.isFinal) {
+                        com.yasinjahantigh.logarhythm.data.analytics.AppLog.i(
+                            "DownloadVM",
+                            "Search finished q='${trimmed.take(40)}' count=${outcome.results.size} cached=${cached.size} err=${outcome.failure?.raw}"
+                        )
+                    }
                     _rawSearchState.value = DownloadSearchUiState(
                         searching = !outcome.isFinal,
                         results = merged,
@@ -296,7 +302,8 @@ class DownloadViewModel @Inject constructor(
                 }
             } catch (cancelled: CancellationException) {
                 throw cancelled
-            } catch (_: Exception) {
+            } catch (err: Exception) {
+                com.yasinjahantigh.logarhythm.data.analytics.AppLog.e("DownloadVM", "Search crashed q='${trimmed.take(40)}'", err)
                 _rawSearchState.value = DownloadSearchUiState(
                     searching = false,
                     results = cached,

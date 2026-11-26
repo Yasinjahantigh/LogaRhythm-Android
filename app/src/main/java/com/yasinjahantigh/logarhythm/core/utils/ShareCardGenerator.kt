@@ -20,6 +20,8 @@ import android.text.StaticLayout
 import android.text.TextDirectionHeuristics
 import android.text.TextPaint
 import androidx.core.content.FileProvider
+import com.yasinjahantigh.logarhythm.R
+import com.yasinjahantigh.logarhythm.ui.theme.resolveAppTypefacePair
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -43,14 +45,18 @@ data class ShareCardOptions(
     val style: ShareCardStyle = ShareCardStyle.DARK_GLASS,
     val aspect: ShareCardAspect = ShareCardAspect.STORY_9_16,
     val accentColor: Int = 0xFFF4B266.toInt(),
-    val textScale: Float = 1.0f
+    val textScale: Float = 1.0f,
+    val lineSpacing: Float = 1.0f,
+    val fontKey: String = "vazirmatn",
+    val customFontPath: String? = null,
+    val centerLyrics: Boolean = false
 )
 
 /**
  * Renders customizable high-res graphic cards (and fast in-memory previews) for:
  * - Now Playing Song Cards
- * - Lyric Quote Cards (overlap-proof + RTL Persian friendly)
- * - Listening Report Cards
+ * - Lyric Quote Cards (overlap-proof + RTL Persian friendly + custom line spacing)
+ * - Listening Report Cards (dynamic row heights so larger text never clips or deforms)
  */
 object ShareCardGenerator {
 
@@ -153,6 +159,7 @@ object ShareCardGenerator {
         val w = opts.aspect.widthPx
         val h = opts.aspect.heightPx
         val palette = paletteFor(opts.style, opts.accentColor)
+        val (regularTf, boldTf) = resolveAppTypefacePair(opts.fontKey, context, opts.customFontPath)
         val cover = loadBitmap(context, data.artworkUri)
         val bitmap = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
@@ -175,16 +182,69 @@ object ShareCardGenerator {
 
         val innerPad = 56f
         val innerW = (cardRect.width() - innerPad * 2).toInt().coerceAtLeast(300)
-        val scale = opts.textScale.coerceIn(0.8f, 1.3f)
+        val scale = opts.textScale.coerceIn(0.75f, 1.8f)
 
-        // Centered artwork (or vinyl disc in WARM_VINYL style)
-        val artSize = when (opts.aspect) {
+        val titlePaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = palette.primaryText
+            textSize = (54f * scale).coerceIn(34f, 96f)
+            typeface = boldTf
+        }
+        val titleLayout = buildTextLayout(
+            text = data.songTitle.ifBlank { "Untitled" },
+            paint = titlePaint,
+            width = innerW,
+            maxLines = 2,
+            alignment = Layout.Alignment.ALIGN_CENTER,
+            lineMult = 1.12f
+        )
+
+        val artistPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = palette.accentText
+            textSize = (36f * scale).coerceIn(24f, 64f)
+            typeface = boldTf
+        }
+        val artistLayout = buildTextLayout(
+            text = data.artist.ifBlank { "Unknown Artist" },
+            paint = artistPaint,
+            width = innerW,
+            maxLines = 2,
+            alignment = Layout.Alignment.ALIGN_CENTER
+        )
+
+        val metaLine = listOfNotNull(
+            data.album?.takeIf { it.isNotBlank() },
+            data.durationLabel?.takeIf { it.isNotBlank() }
+        ).joinToString("  ·  ")
+        val metaLayout = if (metaLine.isNotBlank()) {
+            val metaPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = palette.secondaryText
+                textSize = (28f * scale).coerceIn(20f, 46f)
+                typeface = regularTf
+            }
+            buildTextLayout(
+                text = metaLine,
+                paint = metaPaint,
+                width = innerW,
+                maxLines = 1,
+                alignment = Layout.Alignment.ALIGN_CENTER
+            )
+        } else null
+
+        val barReservedH = 74f
+        val textGap = if (opts.aspect == ShareCardAspect.SQUARE_1_1) 30f else 44f
+        val totalTextH = titleLayout.height + 14f + artistLayout.height +
+            (metaLayout?.let { 10f + it.height } ?: 0f)
+        val maxArtByAspect = when (opts.aspect) {
             ShareCardAspect.STORY_9_16 -> min(cardRect.width() - innerPad * 2, 740f)
             ShareCardAspect.POST_4_5 -> min(cardRect.width() - innerPad * 2, 620f)
             ShareCardAspect.SQUARE_1_1 -> min(cardRect.width() - innerPad * 2, 470f)
         }
+        val artTopExtra = if (opts.aspect == ShareCardAspect.STORY_9_16) 24f else 0f
+        val availableArtH = (cardRect.height() - innerPad - artTopExtra - textGap - totalTextH - barReservedH)
+            .coerceAtLeast(180f)
+        val artSize = min(maxArtByAspect, availableArtH)
         val artLeft = (w - artSize) / 2f
-        val artTop = cardRect.top + innerPad + if (opts.aspect == ShareCardAspect.STORY_9_16) 28f else 0f
+        val artTop = cardRect.top + innerPad + artTopExtra
         val artRect = RectF(artLeft, artTop, artLeft + artSize, artTop + artSize)
 
         if (opts.style == ShareCardStyle.WARM_VINYL) {
@@ -197,72 +257,30 @@ object ShareCardGenerator {
             }
         }
 
-        // Track title, artist, album neatly stacked underneath artwork without ever overlapping
-        var curY = artRect.bottom + if (opts.aspect == ShareCardAspect.SQUARE_1_1) 36f else 52f
-        val titleSize = (54f * scale).coerceIn(38f, 70f)
-        val titlePaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = palette.primaryText
-            textSize = titleSize
-            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-        }
-        val titleLayout = buildTextLayout(
-            text = data.songTitle.ifBlank { "Untitled" },
-            paint = titlePaint,
-            width = innerW,
-            maxLines = 2,
-            alignment = Layout.Alignment.ALIGN_CENTER,
-            lineMult = 1.15f
-        )
+        var curY = artRect.bottom + textGap
         canvas.save()
         canvas.translate(cardRect.left + innerPad, curY)
         titleLayout.draw(canvas)
         canvas.restore()
-        curY += titleLayout.height + 16f
+        curY += titleLayout.height + 14f
 
-        val artistPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = palette.accentText
-            textSize = (36f * scale).coerceIn(26f, 48f)
-            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-        }
-        val artistLayout = buildTextLayout(
-            text = data.artist.ifBlank { "Unknown Artist" },
-            paint = artistPaint,
-            width = innerW,
-            maxLines = 1,
-            alignment = Layout.Alignment.ALIGN_CENTER
-        )
         canvas.save()
         canvas.translate(cardRect.left + innerPad, curY)
         artistLayout.draw(canvas)
         canvas.restore()
-        curY += artistLayout.height + 12f
+        curY += artistLayout.height + 10f
 
-        val metaLine = listOfNotNull(
-            data.album?.takeIf { it.isNotBlank() },
-            data.durationLabel?.takeIf { it.isNotBlank() }
-        ).joinToString("  ·  ")
-        if (metaLine.isNotBlank() && curY + 42f < cardRect.bottom - 52f) {
-            val metaPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
-                color = palette.secondaryText
-                textSize = (28f * scale).coerceIn(22f, 36f)
-            }
-            val metaLayout = buildTextLayout(
-                text = metaLine,
-                paint = metaPaint,
-                width = innerW,
-                maxLines = 1,
-                alignment = Layout.Alignment.ALIGN_CENTER
-            )
+        if (metaLayout != null && curY + metaLayout.height < cardRect.bottom - 52f) {
             canvas.save()
             canvas.translate(cardRect.left + innerPad, curY)
             metaLayout.draw(canvas)
             canvas.restore()
-            curY += metaLayout.height + 28f
+            curY += metaLayout.height + 24f
         }
 
         // Minimal playback bar decoration inside card if room allows
-        val barY = cardRect.bottom - 56f
-        if (barY > curY + 26f) {
+        val barY = cardRect.bottom - 52f
+        if (barY > curY + 22f) {
             val barLeft = cardRect.left + innerPad + 24f
             val barRight = cardRect.right - innerPad - 24f
             val trackPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -281,18 +299,19 @@ object ShareCardGenerator {
             canvas.drawCircle(progressX, barY, 11f, fillPaint)
         }
 
-        drawFooter(canvas, w, h, palette)
+        drawFooter(canvas, w, h, palette, boldTf)
         cover?.recycle()
         return bitmap
     }
 
-    // ---- Lyric Card Renderer (Overlap-Proof + RTL-Aware) -------------------------------------
+    // ---- Lyric Card Renderer (Overlap-Proof + RTL-Aware + Custom Fonts & Spacing) ----------
 
     private fun drawLyricCardBitmap(context: Context, data: LyricCardData): Bitmap {
         val opts = data.options
         val w = opts.aspect.widthPx
         val h = opts.aspect.heightPx
         val palette = paletteFor(opts.style, opts.accentColor)
+        val (regularTf, boldTf) = resolveAppTypefacePair(opts.fontKey, context, opts.customFontPath)
         val cover = loadBitmap(context, data.artworkUri)
         val bitmap = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
@@ -327,11 +346,15 @@ object ShareCardGenerator {
             textStartX += artSize + 32f
         }
 
+        val scale = opts.textScale.coerceIn(0.75f, 1.8f)
+        val lineSpacing = opts.lineSpacing.coerceIn(0.6f, 2.0f)
+        val headerScale = (1f + (scale - 1f) * 0.25f).coerceIn(0.85f, 1.25f)
+
         val headerTextWidth = (cardRect.right - innerPad - textStartX).toInt().coerceAtLeast(240)
         val titlePaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
             color = palette.primaryText
-            textSize = if (opts.aspect == ShareCardAspect.SQUARE_1_1) 36f else 42f
-            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            textSize = (if (opts.aspect == ShareCardAspect.SQUARE_1_1) 36f else 42f) * headerScale
+            typeface = boldTf
         }
         val titleLayout = buildTextLayout(
             text = data.songTitle.ifBlank { "Untitled" },
@@ -344,7 +367,8 @@ object ShareCardGenerator {
 
         val artistPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
             color = palette.secondaryText
-            textSize = if (opts.aspect == ShareCardAspect.SQUARE_1_1) 28f else 32f
+            textSize = (if (opts.aspect == ShareCardAspect.SQUARE_1_1) 28f else 32f) * headerScale
+            typeface = regularTf
         }
         val artistLayout = buildTextLayout(
             text = data.artist.ifBlank { "Unknown Artist" },
@@ -367,63 +391,119 @@ object ShareCardGenerator {
         val headerBottom = maxOf(headerTop + artSize, headerBlockTop + headerTextTotalH)
 
         // Subtle divider separating song header from lyrics so they NEVER collide
-        val dividerY = headerBottom + 34f
+        val dividerY = headerBottom + 32f
         val dividerPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = palette.cardStroke
             strokeWidth = 2f
         }
         canvas.drawLine(cardRect.left + innerPad, dividerY, cardRect.right - innerPad, dividerY, dividerPaint)
 
-        // Lyrics body: auto-fit font size dynamically to available box height so lines NEVER overlap or clip!
+        // Lyrics body: lay out each line independently so chosen font & line spacing stay crisp,
+        // and dynamically auto-fit font size only if the block exceeds available height.
         val quoteLines = data.lines.map { it.trim() }.filter { it.isNotEmpty() }
-        val quoteText = quoteLines.joinToString("\n\n")
+        val totalChars = quoteLines.sumOf { it.length }
         val availableTop = dividerY + 42f
         val availableBottom = cardRect.bottom - innerPad
         val availableHeight = (availableBottom - availableTop).coerceAtLeast(180f)
         val quoteWidth = (cardRect.width() - innerPad * 2).toInt().coerceAtLeast(360)
 
         val baseSize = when {
-            quoteText.length > 210 -> 44f
-            quoteText.length > 130 -> 52f
-            quoteText.length > 70 -> 60f
-            else -> 68f
-        } * opts.textScale.coerceIn(0.75f, 1.35f)
+            totalChars > 210 -> 44f
+            totalChars > 130 -> 54f
+            totalChars > 70 -> 64f
+            else -> 76f
+        } * scale
 
-        var chosenSize = baseSize.coerceIn(28f, 84f)
-        var quoteLayout: StaticLayout
+        var chosenSize = baseSize.coerceIn(26f, 140f)
         val quotePaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
             color = palette.primaryText
-            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            typeface = boldTf
         }
-        val align = if (containsRtl(quoteText)) Layout.Alignment.ALIGN_NORMAL else Layout.Alignment.ALIGN_NORMAL
+        val wrapLineMult = (1.06f + (lineSpacing - 1.0f) * 0.22f).coerceIn(0.92f, 1.38f)
+
+        var lineLayouts: List<StaticLayout>
+        var lineGapPx: Float
+        var totalBlockHeight: Float
 
         while (true) {
             quotePaint.textSize = chosenSize
-            quoteLayout = buildTextLayout(
-                text = quoteText,
-                paint = quotePaint,
-                width = quoteWidth,
-                maxLines = 18,
-                alignment = align,
-                lineExtra = chosenSize * 0.16f,
-                lineMult = 1.18f
-            )
-            if (quoteLayout.height <= availableHeight || chosenSize <= 24f) {
+            lineGapPx = chosenSize * 0.42f * lineSpacing
+            lineLayouts = quoteLines.map { line ->
+                val isRtlLine = containsRtl(line)
+                buildTextLayout(
+                    text = line,
+                    paint = quotePaint,
+                    width = quoteWidth,
+                    maxLines = 12,
+                    alignment = if (opts.centerLyrics) Layout.Alignment.ALIGN_CENTER else Layout.Alignment.ALIGN_NORMAL,
+                    lineMult = wrapLineMult,
+                    preferRtl = isRtlLine
+                )
+            }
+            val gapsTotal = (lineLayouts.size - 1).coerceAtLeast(0) * lineGapPx
+            totalBlockHeight = lineLayouts.sumOf { it.height }.toFloat() + gapsTotal
+            if (totalBlockHeight <= availableHeight || chosenSize <= 22f) {
                 break
             }
-            chosenSize -= 3f
+            chosenSize -= 2.5f
         }
 
-        val quoteTop = (availableTop + ((availableHeight - quoteLayout.height) / 2f))
+        // If still slightly taller at minimum font size, compress inter-line gap so nothing clips
+        if (totalBlockHeight > availableHeight && lineLayouts.size > 1) {
+            val textOnlyH = lineLayouts.sumOf { it.height }.toFloat()
+            val remainingForGaps = (availableHeight - textOnlyH).coerceAtLeast(0f)
+            lineGapPx = remainingForGaps / (lineLayouts.size - 1)
+            totalBlockHeight = textOnlyH + remainingForGaps
+        }
+
+        val quoteHeadroom = (availableHeight - totalBlockHeight).coerceAtLeast(0f)
+        val showQuoteMark = quoteHeadroom >= 76f
+        val verticalBlockShift = if (showQuoteMark) 18f else 0f
+        var curY = (availableTop + (quoteHeadroom / 2f) + verticalBlockShift)
             .coerceAtLeast(availableTop)
+
+        if (showQuoteMark) {
+            val markPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = Color.argb(
+                    0x66,
+                    Color.red(palette.accentText),
+                    Color.green(palette.accentText),
+                    Color.blue(palette.accentText)
+                )
+                textSize = 72f
+                typeface = boldTf
+            }
+            val isMostlyRtl = quoteLines.any(::containsRtl)
+            val markX = when {
+                opts.centerLyrics -> {
+                    markPaint.textAlign = Paint.Align.CENTER
+                    cardRect.centerX()
+                }
+                isMostlyRtl -> {
+                    markPaint.textAlign = Paint.Align.RIGHT
+                    cardRect.right - innerPad
+                }
+                else -> {
+                    markPaint.textAlign = Paint.Align.LEFT
+                    cardRect.left + innerPad
+                }
+            }
+            val markBaseline = (curY - 14f).coerceAtLeast(availableTop + 44f)
+            canvas.drawText("“", markX, markBaseline, markPaint)
+        }
 
         canvas.save()
         canvas.clipRect(cardRect.left + innerPad, availableTop - 6f, cardRect.right - innerPad, availableBottom + 6f)
-        canvas.translate(cardRect.left + innerPad, quoteTop)
-        quoteLayout.draw(canvas)
+        for (layout in lineLayouts) {
+            canvas.save()
+            canvas.translate(cardRect.left + innerPad, curY)
+            layout.draw(canvas)
+            canvas.restore()
+            curY += layout.height + lineGapPx
+        }
         canvas.restore()
 
-        drawFooter(canvas, w, h, palette)
+        drawFooter(canvas, w, h, palette, boldTf)
         cover?.recycle()
         return bitmap
     }
@@ -435,25 +515,27 @@ object ShareCardGenerator {
         val w = opts.aspect.widthPx
         val h = opts.aspect.heightPx
         val palette = paletteFor(opts.style, opts.accentColor)
+        val (regularTf, boldTf) = resolveAppTypefacePair(opts.fontKey, context, opts.customFontPath)
         val cover = loadBitmap(context, data.artworkUri)
         val bitmap = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
 
         drawBackdrop(canvas, w, h, palette, opts.accentColor)
 
-        val scale = opts.textScale.coerceIn(0.85f, 1.25f)
+        val requestedScale = opts.textScale.coerceIn(0.75f, 1.8f)
         val padX = 72f
         val contentW = (w - padX * 2).toInt()
         val compact = opts.aspect != ShareCardAspect.STORY_9_16
+        val footerGuard = h - 98f
 
-        var curY = if (compact) 74f else 120f
+        var curY = if (compact) 68f else 112f
 
         val badgePaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
             color = palette.primaryText
-            textSize = (38f * scale).coerceIn(30f, 48f)
-            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            textSize = (38f * requestedScale).coerceIn(26f, 68f)
+            typeface = boldTf
         }
-        val headlineLayout = buildTextLayout(data.headline, badgePaint, contentW, maxLines = 1)
+        val headlineLayout = buildTextLayout(data.headline, badgePaint, contentW, maxLines = 2)
         canvas.save()
         canvas.translate(padX, curY)
         headlineLayout.draw(canvas)
@@ -462,104 +544,302 @@ object ShareCardGenerator {
 
         val subPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
             color = palette.secondaryText
-            textSize = (28f * scale).coerceIn(22f, 36f)
+            textSize = (28f * requestedScale).coerceIn(20f, 48f)
+            typeface = regularTf
         }
         val periodLayout = buildTextLayout(data.periodLabel, subPaint, contentW, maxLines = 1)
         canvas.save()
         canvas.translate(padX, curY)
         periodLayout.draw(canvas)
         canvas.restore()
-        curY += periodLayout.height + if (compact) 26f else 40f
+        curY += periodLayout.height + if (compact) 22f else 34f
 
-        // Hero stats summary card
-        val artSize = if (compact) 156f else 196f
-        val heroCardH = artSize + 56f
-        val heroRect = RectF(padX, curY, w - padX, curY + heroCardH)
+        // Hero stats summary card — dynamically sized to fit any textScale without clipping
+        val artSize = if (compact) 148f else 188f
+        val heroLeft = padX
+        val heroRight = w - padX
+        val textStartX = if (cover != null) heroLeft + 32f + artSize + 28f else heroLeft + 36f
+        val heroTextW = (heroRight - 28f - textStartX).toInt().coerceAtLeast(240)
+
+        var heroScale = requestedScale
+        var timeLayout: StaticLayout
+        var playsLayout: StaticLayout
+        var vibeLayout: StaticLayout?
+        var heroTextTotalH: Float
+        val vibeLine = listOfNotNull(data.peakHourLabel, data.vibeLabel).joinToString(" · ")
+
+        while (true) {
+            val timePaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = palette.primaryText
+                textSize = ((if (compact) 60f else 74f) * heroScale).coerceIn(38f, 126f)
+                typeface = boldTf
+            }
+            timeLayout = buildTextLayout(data.totalTimeLabel, timePaint, heroTextW, maxLines = 2)
+
+            val playsPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = palette.secondaryText
+                textSize = (30f * heroScale).coerceIn(22f, 52f)
+                typeface = boldTf
+            }
+            playsLayout = buildTextLayout(data.playsLabel, playsPaint, heroTextW, maxLines = 2)
+
+            vibeLayout = if (vibeLine.isNotBlank()) {
+                val vibePaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
+                    color = palette.accentText
+                    textSize = (25f * heroScale).coerceIn(19f, 44f)
+                    typeface = boldTf
+                }
+                buildTextLayout(vibeLine, vibePaint, heroTextW, maxLines = 2)
+            } else null
+
+            heroTextTotalH = timeLayout.height + 8f + playsLayout.height +
+                (vibeLayout?.let { 10f + it.height } ?: 0f)
+
+            val maxHeroH = (footerGuard - curY) * 0.45f
+            if (heroTextTotalH + 56f <= maxHeroH || heroScale <= 0.85f) break
+            heroScale -= 0.08f
+        }
+
+        val heroCardH = maxOf(artSize + 52f, heroTextTotalH + 56f)
+        val heroRect = RectF(heroLeft, curY, heroRight, curY + heroCardH)
         drawGlassCard(canvas, heroRect, palette, radius = 38f)
 
-        var heroTextX = heroRect.left + 32f
-        if (cover != null) {
-            val artRect = RectF(heroTextX, heroRect.top + 28f, heroTextX + artSize, heroRect.top + 28f + artSize)
+        // Vertical accent bar on cards without artwork for visual anchor
+        if (cover == null) {
+            val accentBarPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = palette.accentText }
+            val barRect = RectF(heroRect.left + 16f, heroRect.top + 24f, heroRect.left + 23f, heroRect.bottom - 24f)
+            canvas.drawRoundRect(barRect, 4f, 4f, accentBarPaint)
+        } else {
+            val artTop = heroRect.top + (heroCardH - artSize) / 2f
+            val artRect = RectF(heroLeft + 32f, artTop, heroLeft + 32f + artSize, artTop + artSize)
             drawRoundedBitmap(canvas, cover, artRect, 28f)
-            heroTextX += artSize + 30f
         }
-        val heroTextW = (heroRect.right - 28f - heroTextX).toInt().coerceAtLeast(240)
-        val timePaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = palette.primaryText
-            textSize = ((if (compact) 64f else 78f) * scale).coerceIn(48f, 92f)
-            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-        }
-        val timeLayout = buildTextLayout(data.totalTimeLabel, timePaint, heroTextW, maxLines = 1)
-        var ty = heroRect.top + 32f
+
+        var ty = heroRect.top + (heroCardH - heroTextTotalH) / 2f
         canvas.save()
-        canvas.translate(heroTextX, ty)
+        canvas.translate(textStartX, ty)
         timeLayout.draw(canvas)
         canvas.restore()
-        ty += timeLayout.height + 10f
+        ty += timeLayout.height + 8f
 
-        val playsPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = palette.secondaryText
-            textSize = (30f * scale).coerceIn(24f, 38f)
-            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-        }
-        val playsLayout = buildTextLayout(data.playsLabel, playsPaint, heroTextW, maxLines = 1)
         canvas.save()
-        canvas.translate(heroTextX, ty)
+        canvas.translate(textStartX, ty)
         playsLayout.draw(canvas)
         canvas.restore()
-        ty += playsLayout.height + 8f
+        ty += playsLayout.height + 10f
 
-        val vibeLine = listOfNotNull(data.peakHourLabel, data.vibeLabel).joinToString(" · ")
-        if (vibeLine.isNotBlank()) {
-            val vibePaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
-                color = palette.accentText
-                textSize = (26f * scale).coerceIn(20f, 32f)
-                typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-            }
-            val vibeLayout = buildTextLayout(vibeLine, vibePaint, heroTextW, maxLines = 1)
+        if (vibeLayout != null) {
             canvas.save()
-            canvas.translate(heroTextX, ty)
+            canvas.translate(textStartX, ty)
             vibeLayout.draw(canvas)
             canvas.restore()
         }
 
-        curY = heroRect.bottom + if (compact) 28f else 44f
+        curY = heroRect.bottom + if (compact) 24f else 36f
         val maxItems = when (opts.aspect) {
             ShareCardAspect.STORY_9_16 -> 4
             ShareCardAspect.POST_4_5 -> 3
             ShareCardAspect.SQUARE_1_1 -> 2
         }
-        val footerGuard = h - 120f
 
-        if (data.topArtists.isNotEmpty() && curY + 140f < footerGuard) {
-            curY = drawSectionList(
-                canvas = canvas,
-                width = w,
-                title = "TOP ARTISTS",
-                items = data.topArtists.take(maxItems),
-                startY = curY,
-                palette = palette,
-                scale = scale,
-                compact = compact
-            ) + if (compact) 24f else 38f
+        val artistsTitle = context.getString(R.string.share_card_top_artists_heading)
+        val tracksTitle = context.getString(R.string.share_card_top_tracks_heading)
+        val hasArtists = data.topArtists.isNotEmpty()
+        val hasTracks = data.topTracks.isNotEmpty()
+        val sectionGap = if (compact) 22f else 32f
+
+        // Measure and fit Top Artists + Top Tracks cleanly inside remaining height above footerGuard
+        val remainingH = (footerGuard - curY).coerceAtLeast(0f)
+        var listScale = requestedScale
+        var artistCount = if (hasArtists) minOf(maxItems, data.topArtists.size) else 0
+        var trackCount = if (hasTracks) minOf(maxItems, data.topTracks.size) else 0
+
+        var artistSection: PreparedSection? = null
+        var trackSection: PreparedSection? = null
+
+        while (true) {
+            artistSection = if (artistCount > 0) {
+                prepareSectionList(w, artistsTitle, data.topArtists.take(artistCount), palette, listScale, compact, regularTf, boldTf)
+            } else null
+            trackSection = if (trackCount > 0) {
+                prepareSectionList(w, tracksTitle, data.topTracks.take(trackCount), palette, listScale, compact, regularTf, boldTf)
+            } else null
+
+            val needed = (artistSection?.totalHeight ?: 0f) +
+                (if (artistSection != null && trackSection != null) sectionGap else 0f) +
+                (trackSection?.totalHeight ?: 0f)
+
+            if (needed <= remainingH) break
+
+            // Trim item counts fairly first, then scale down list font only if even 1 item won't fit
+            if (artistCount > 1 || trackCount > 1) {
+                if (trackCount >= artistCount && trackCount > 1) trackCount--
+                else if (artistCount > 1) artistCount--
+            } else if (listScale > 0.72f) {
+                listScale -= 0.08f
+            } else {
+                // Last resort on extremely tight canvas: keep at least Top Artists
+                if (trackCount > 0 && artistCount > 0) trackCount = 0
+                else break
+            }
         }
 
-        if (data.topTracks.isNotEmpty() && curY + 140f < footerGuard) {
-            drawSectionList(
-                canvas = canvas,
-                width = w,
-                title = "TOP TRACKS",
-                items = data.topTracks.take(maxItems),
-                startY = curY,
-                palette = palette,
-                scale = scale,
-                compact = compact
-            )
+        if (artistSection != null && curY + artistSection.totalHeight <= footerGuard + 8f) {
+            curY = drawPreparedSectionList(canvas, artistSection, curY, palette) + sectionGap
+        }
+        if (trackSection != null && curY + trackSection.totalHeight <= footerGuard + 8f) {
+            drawPreparedSectionList(canvas, trackSection, curY, palette)
         }
 
-        drawFooter(canvas, w, h, palette)
+        drawFooter(canvas, w, h, palette, boldTf)
         cover?.recycle()
         return bitmap
+    }
+
+    private data class PreparedSectionRow(
+        val rank: Int,
+        val mainLayout: StaticLayout,
+        val subLayout: StaticLayout,
+        val rowHeight: Float
+    )
+
+    private data class PreparedSection(
+        val width: Int,
+        val headerLayout: StaticLayout,
+        val headerGap: Float,
+        val boxPaddingV: Float,
+        val rows: List<PreparedSectionRow>,
+        val numPaint: TextPaint,
+        val badgeSize: Float
+    ) {
+        val boxHeight: Float = rows.sumOf { it.rowHeight.toDouble() }.toFloat() + boxPaddingV * 2f
+        val totalHeight: Float = headerLayout.height + headerGap + boxHeight
+    }
+
+    private fun prepareSectionList(
+        width: Int,
+        title: String,
+        items: List<Pair<String, String>>,
+        palette: CardPalette,
+        scale: Float,
+        compact: Boolean,
+        regularTf: Typeface,
+        boldTf: Typeface
+    ): PreparedSection {
+        val padX = 72f
+        val contentW = (width - padX * 2).toInt().coerceAtLeast(240)
+        val headerPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = palette.accentText
+            textSize = (26f * scale).coerceIn(20f, 44f)
+            letterSpacing = if (containsRtl(title)) 0f else 0.08f
+            typeface = boldTf
+        }
+        val headerLayout = buildTextLayout(title, headerPaint, contentW, maxLines = 1)
+
+        val numPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = palette.accentText
+            textSize = (28f * scale).coerceIn(20f, 46f)
+            typeface = boldTf
+            textAlign = Paint.Align.CENTER
+        }
+        val mainPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = palette.primaryText
+            textSize = ((if (compact) 30f else 34f) * scale).coerceIn(22f, 56f)
+            typeface = boldTf
+        }
+        val subPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = palette.secondaryText
+            textSize = ((if (compact) 23f else 26f) * scale).coerceIn(18f, 44f)
+            typeface = regularTf
+        }
+
+        val badgeSize = (46f + (scale - 1f).coerceAtLeast(0f) * 20f).coerceIn(42f, 70f)
+        val numColW = badgeSize + 24f
+        val textMaxW = (contentW - numColW - 56f).toInt().coerceAtLeast(220)
+        val minRowH = if (compact) 84f else 98f
+
+        val rows = items.mapIndexed { idx, (name, meta) ->
+            val mainLayout = buildTextLayout(name, mainPaint, textMaxW, maxLines = 1, preferRtl = containsRtl(name))
+            val subLayout = buildTextLayout(meta, subPaint, textMaxW, maxLines = 1, preferRtl = containsRtl(meta))
+            val rowH = maxOf(minRowH, mainLayout.height + subLayout.height + 24f)
+            PreparedSectionRow(idx + 1, mainLayout, subLayout, rowH)
+        }
+
+        return PreparedSection(
+            width = width,
+            headerLayout = headerLayout,
+            headerGap = 12f,
+            boxPaddingV = 14f,
+            rows = rows,
+            numPaint = numPaint,
+            badgeSize = badgeSize
+        )
+    }
+
+    private fun drawPreparedSectionList(
+        canvas: Canvas,
+        section: PreparedSection,
+        startY: Float,
+        palette: CardPalette
+    ): Float {
+        val padX = 72f
+        var y = startY
+        canvas.save()
+        canvas.translate(padX + 12f, y)
+        section.headerLayout.draw(canvas)
+        canvas.restore()
+        y += section.headerLayout.height + section.headerGap
+
+        val boxRect = RectF(padX, y, section.width - padX, y + section.boxHeight)
+        drawGlassCard(canvas, boxRect, palette, radius = 32f)
+
+        var rowTop = y + section.boxPaddingV
+        val fm = section.numPaint.fontMetrics
+        val badgeLeft = padX + 24f
+        val badgeCenterX = badgeLeft + section.badgeSize / 2f
+        val textStartX = badgeLeft + section.badgeSize + 22f
+        val badgeFillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.argb(
+                if (palette.isLight) 0x22 else 0x2E,
+                Color.red(palette.accentText),
+                Color.green(palette.accentText),
+                Color.blue(palette.accentText)
+            )
+        }
+        val rowDividerPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.argb(
+                if (palette.isLight) 0x16 else 0x1C,
+                Color.red(palette.primaryText),
+                Color.green(palette.primaryText),
+                Color.blue(palette.primaryText)
+            )
+            strokeWidth = 1.5f
+        }
+
+        for ((index, row) in section.rows.withIndex()) {
+            val rowCenterY = rowTop + row.rowHeight / 2f
+            val half = section.badgeSize / 2f
+            val badgeRect = RectF(badgeLeft, rowCenterY - half, badgeLeft + section.badgeSize, rowCenterY + half)
+            canvas.drawRoundRect(badgeRect, 15f, 15f, badgeFillPaint)
+
+            val numBaseline = rowCenterY - (fm.ascent + fm.descent) / 2f
+            canvas.drawText("${row.rank}", badgeCenterX, numBaseline, section.numPaint)
+
+            val textBlockH = row.mainLayout.height + 2f + row.subLayout.height
+            val textTop = rowTop + (row.rowHeight - textBlockH) / 2f
+            canvas.save()
+            canvas.translate(textStartX, textTop)
+            row.mainLayout.draw(canvas)
+            canvas.translate(0f, row.mainLayout.height + 2f)
+            row.subLayout.draw(canvas)
+            canvas.restore()
+
+            rowTop += row.rowHeight
+            if (index < section.rows.lastIndex) {
+                canvas.drawLine(textStartX, rowTop, boxRect.right - 24f, rowTop, rowDividerPaint)
+            }
+        }
+        return y + section.boxHeight
     }
 
     // ---- Shared Drawing Helpers --------------------------------------------------------------
@@ -689,70 +969,12 @@ object ShareCardGenerator {
         canvas.drawRoundRect(rect, radius, radius, paint)
     }
 
-    private fun drawSectionList(
-        canvas: Canvas,
-        width: Int,
-        title: String,
-        items: List<Pair<String, String>>,
-        startY: Float,
-        palette: CardPalette,
-        scale: Float,
-        compact: Boolean
-    ): Float {
-        val padX = 72f
-        var y = startY
-        val headerPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = palette.accentText
-            textSize = (26f * scale).coerceIn(22f, 32f)
-            letterSpacing = 0.08f
-            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-        }
-        canvas.drawText(title, padX + 12f, y, headerPaint)
-        y += 22f
-
-        val rowH = if (compact) 92f else 108f
-        val cardHeight = (items.size * rowH) + 28f
-        val boxRect = RectF(padX, y, width - padX, y + cardHeight)
-        drawGlassCard(canvas, boxRect, palette, radius = 32f)
-
-        var rowTop = y + 18f
-        val numPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = palette.accentText
-            textSize = (32f * scale).coerceIn(24f, 40f)
-            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-        }
-        val mainPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = palette.primaryText
-            textSize = ((if (compact) 30f else 34f) * scale).coerceIn(24f, 40f)
-            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-        }
-        val subPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = palette.secondaryText
-            textSize = ((if (compact) 23f else 26f) * scale).coerceIn(19f, 32f)
-        }
-
-        val textMaxW = (boxRect.width() - 138f).toInt().coerceAtLeast(240)
-        items.forEachIndexed { idx, (name, meta) ->
-            canvas.drawText("${idx + 1}", padX + 34f, rowTop + 42f, numPaint)
-            val mainLayout = buildTextLayout(name, mainPaint, textMaxW, maxLines = 1)
-            val subLayout = buildTextLayout(meta, subPaint, textMaxW, maxLines = 1)
-            canvas.save()
-            canvas.translate(padX + 96f, rowTop + 6f)
-            mainLayout.draw(canvas)
-            canvas.translate(0f, mainLayout.height + 2f)
-            subLayout.draw(canvas)
-            canvas.restore()
-            rowTop += rowH
-        }
-        return y + cardHeight
-    }
-
-    private fun drawFooter(canvas: Canvas, w: Int, h: Int, palette: CardPalette) {
+    private fun drawFooter(canvas: Canvas, w: Int, h: Int, palette: CardPalette, boldTf: Typeface) {
         val paint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
             color = palette.footerText
             textSize = 26f
             letterSpacing = 0.08f
-            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            typeface = boldTf
             textAlign = Paint.Align.CENTER
         }
         canvas.drawText("LOGARHYTHM", w / 2f, h - 46f, paint)
@@ -765,14 +987,18 @@ object ShareCardGenerator {
         maxLines: Int = Int.MAX_VALUE,
         alignment: Layout.Alignment = Layout.Alignment.ALIGN_NORMAL,
         lineExtra: Float = 0f,
-        lineMult: Float = 1.0f
+        lineMult: Float = 1.0f,
+        preferRtl: Boolean = containsRtl(text)
     ): StaticLayout = StaticLayout.Builder
         .obtain(text, 0, text.length, paint, width.coerceAtLeast(100))
         .setAlignment(alignment)
         .setMaxLines(maxLines)
         .setLineSpacing(lineExtra, lineMult)
         .setIncludePad(true)
-        .setTextDirection(TextDirectionHeuristics.FIRSTSTRONG_LTR)
+        .setTextDirection(
+            if (preferRtl) TextDirectionHeuristics.FIRSTSTRONG_RTL
+            else TextDirectionHeuristics.FIRSTSTRONG_LTR
+        )
         .setEllipsize(android.text.TextUtils.TruncateAt.END)
         .build()
 

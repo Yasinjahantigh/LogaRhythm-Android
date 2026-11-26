@@ -93,6 +93,9 @@ interface PlaylistDao {
     @Query("SELECT * FROM playlists")
     suspend fun getAllPlaylistEntitiesOnce(): List<PlaylistEntity>
 
+    @Query("SELECT COUNT(*) FROM playlists")
+    suspend fun countPlaylists(): Int
+
     @Query("SELECT * FROM playlist_tracks ORDER BY playlistId ASC, orderIndex ASC")
     suspend fun getAllPlaylistTracksOnce(): List<PlaylistTrackEntity>
 }

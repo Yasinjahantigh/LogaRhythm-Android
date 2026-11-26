@@ -1,5 +1,21 @@
 # Changelog
 
+## 2.2.5 - 2026-11-26
+
+### Player UI/UX & Interface Customization
+- **Refined Full Player Layout**: Moved **Up Next** cleanly into the player header (tappable to open the queue), turned the artist row into a clear tappable button with an artist avatar/person icon that opens **About Artist**, and unified player quick actions into a single 4-button Material 3 dock (`Lyrics · Timer · Speed · Queue`)
+- **Fixed Dynamic Artwork Colors & Bitrate Display**: Tuned `generateDynamicSchemeFromSeed` so warm/gold album covers no longer shift toward olive/muddy green, and fixed `AudioFormatReader` reporting `320000 kbps` instead of `320 kbps`
+- **Settings → Interface & Sections**: Added 15 individual toggles (all enabled by default) to hide or show optional UI elements across the Player (next track in header, artist button, format/quality badge, seek ±10s buttons, waveform vs. Material 3 slider, shuffle, repeat, quick-action dock, output button, favorite button), Home (Quick Picks, Greeting, Daily Mixes, Mood Mixes), and Lyrics (translation toggle)
+
+### Features & Bug Fixes
+- **Add Songs Inside Playlists**: Added a `+` button in the Playlist Detail header, an empty-state CTA, and a searchable multi-select sheet to add songs directly while browsing a playlist
+- **Instrumental Silence Threshold**: Updated instrumental/silence animation detection so it only triggers during breaks strictly longer than 4 seconds (`> 4s`) across intro, between-line gaps, and outro
+- **Internet Artist Photo Search**: Added direct internet photo lookup (Bing Web Images, Wikipedia `fa`/`en`, Wikimedia Commons) for artist avatars without requiring a VPN
+- **Share Card Studio Fonts & Controls**: Fixed bundled/selected fonts missing when rendering lyric cards and listening reports (`resolveAppTypefacePair`), and added font chips and text alignment controls
+- **Downloader Reliability & Logging**: Fixed YouTube/SoundCloud channel/label uploader verification, MusicMan fallback URLs & ID cleanup, and unified `yt-dlp`/direct fallback recovery with detailed diagnostic logging
+- **Duplicate Finder & Home Quick Picks**: Upgraded Duplicate Finder with decoded PCM audio fingerprinting alongside metadata matching, and added a minimize/expand toggle for Home Quick Picks
+- **Diagnostics & Bug Reporting**: Added rolling in-app logs, diagnostic context tracking, and sanitized bug/crash snapshots for Shake-to-Report and Settings feedback
+
 ## 2.2.0 - 2026-11-25
 
 ### Security, Licensing & Store Compliance

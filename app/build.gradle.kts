@@ -45,13 +45,10 @@ fun getVersionInfo(): Pair<Int, String> {
   var tag = System.getenv("GIT_TAG") ?: ""
   if (tag.isBlank()) {
     try {
-      val stdout = ByteArrayOutputStream()
-      providers.exec {
+      tag = providers.exec {
         commandLine("git", "describe", "--tags", "--always")
-        standardOutput = stdout
         isIgnoreExitValue = true
-      }
-      tag = stdout.toString().trim()
+      }.standardOutput.asText.get().trim()
     } catch (_: Exception) {}
   }
 

@@ -111,6 +111,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.yasinjahantigh.logarhythm.R
 import com.yasinjahantigh.logarhythm.data.ai.AiProvider
+import com.yasinjahantigh.logarhythm.data.datastore.UiVisibilityToggle
 import com.yasinjahantigh.logarhythm.data.update.UpdateState
 import com.yasinjahantigh.logarhythm.ui.components.FeatureGuideSheet
 import com.yasinjahantigh.logarhythm.ui.components.formatCount
@@ -123,6 +124,7 @@ private enum class SettingsCategory(
     val icon: ImageVector
 ) {
     APPEARANCE(R.string.settings_category_appearance, Icons.Filled.ColorLens),
+    CUSTOMIZATION(R.string.settings_category_customization, Icons.Filled.Tune),
     PLAYBACK(R.string.settings_category_playback, Icons.AutoMirrored.Filled.VolumeUp),
     LIBRARY(R.string.settings_category_library, Icons.Filled.LibraryMusic),
     LYRICS(R.string.settings_category_lyrics, Icons.Filled.Lyrics),
@@ -182,6 +184,7 @@ fun SettingsScreen(
     val crashReportsEnabled by viewModel.crashReportsEnabled.collectAsStateWithLifecycle()
     val weeklyStatsEnabled by viewModel.weeklyStatsEnabled.collectAsStateWithLifecycle()
     val totalDeviceInstalls by viewModel.totalDeviceInstalls.collectAsStateWithLifecycle()
+    val uiVisibility by viewModel.uiVisibility.collectAsStateWithLifecycle()
     val message by viewModel.message.collectAsStateWithLifecycle()
     val context = LocalContext.current
 
@@ -228,6 +231,7 @@ fun SettingsScreen(
     var showFeatureGuide by remember { mutableStateOf(false) }
     var showSuggestionsDialog by remember { mutableStateOf(false) }
     var showBugReportSheet by remember { mutableStateOf(false) }
+    var showDiagnosticLogsSheet by remember { mutableStateOf(false) }
     var showLicensesSheet by remember { mutableStateOf(false) }
 
     if (showAiDialog) {
@@ -454,7 +458,22 @@ fun SettingsScreen(
         ShakeBugReportSheet(
             recentLogsCount = viewModel.recentLogLineCount(),
             onSubmit = viewModel::sendBugReport,
+            onOpenLogViewer = {
+                showBugReportSheet = false
+                showDiagnosticLogsSheet = true
+            },
             onDismiss = { showBugReportSheet = false }
+        )
+    }
+
+    if (showDiagnosticLogsSheet) {
+        DiagnosticLogViewerSheet(
+            lineCountProvider = viewModel::recentLogLineCount,
+            sizeBytesProvider = viewModel::diagnosticLogSizeBytes,
+            reportLoader = viewModel::buildDiagnosticReport,
+            onShareFile = { title -> viewModel.shareDiagnosticLogFile(title) },
+            onClearLogs = viewModel::clearDiagnosticLogs,
+            onDismiss = { showDiagnosticLogsSheet = false }
         )
     }
 
@@ -493,8 +512,27 @@ fun SettingsScreen(
         isCustomLyricsEnabled
     ).count { it }
 
+    val uiEnabledCount = listOf(
+        uiVisibility.playerShowFormatBadge,
+        uiVisibility.playerShowSeekButtons,
+        uiVisibility.playerWaveformSeekbar,
+        uiVisibility.playerShowOutputButton,
+        uiVisibility.playerShowUpNextHeader,
+        uiVisibility.playerShowQuickActions,
+        uiVisibility.homeShowRightNow,
+        uiVisibility.homeShowQuickPicks,
+        uiVisibility.homeShowQuickActions,
+        uiVisibility.homeShowJumpBackIn,
+        uiVisibility.homeShowDailyMixes,
+        uiVisibility.homeShowMoods,
+        uiVisibility.homeShowStatsBanner,
+        uiVisibility.showMicroTips,
+        uiVisibility.showArtistPortraitBadges
+    ).count { it }
+
     val categorySubtitles: Map<SettingsCategory, String> = mapOf(
         SettingsCategory.APPEARANCE to "$themeStyleLabel · $languageLabel",
+        SettingsCategory.CUSTOMIZATION to stringResource(R.string.settings_hub_customization_sub, formatCount(uiEnabledCount), formatCount(15)),
         SettingsCategory.PLAYBACK to stringResource(R.string.settings_hub_playback_sub),
         SettingsCategory.LIBRARY to stringResource(R.string.settings_hub_library_sub),
         SettingsCategory.LYRICS to "${formatCount(enabledLyricsCount)}/${formatCount(6)} · " +
@@ -551,6 +589,148 @@ fun SettingsScreen(
                                 onCheckedChange = viewModel::setCompactMiniPlayer,
                                 rowTag = "settings_compact_player_item",
                                 switchTag = "settings_compact_player_switch"
+                            )
+                        }
+                    }
+                }
+
+                SettingsCategory.CUSTOMIZATION -> {
+                    item {
+                        SettingsGroup(title = stringResource(R.string.settings_custom_player_group)) {
+                            SettingsSwitchItem(
+                                title = stringResource(R.string.settings_ui_player_up_next_title),
+                                subtitle = stringResource(R.string.settings_ui_player_up_next_desc),
+                                icon = Icons.Filled.SkipNext,
+                                checked = uiVisibility.playerShowUpNextHeader,
+                                onCheckedChange = { viewModel.setUiVisibility(UiVisibilityToggle.PLAYER_SHOW_UP_NEXT_HEADER, it) },
+                                rowTag = "settings_ui_player_up_next"
+                            )
+                            SettingsSwitchItem(
+                                title = stringResource(R.string.settings_ui_player_format_title),
+                                subtitle = stringResource(R.string.settings_ui_player_format_desc),
+                                icon = Icons.Filled.GraphicEq,
+                                checked = uiVisibility.playerShowFormatBadge,
+                                onCheckedChange = { viewModel.setUiVisibility(UiVisibilityToggle.PLAYER_SHOW_FORMAT_BADGE, it) },
+                                rowTag = "settings_ui_player_format"
+                            )
+                            SettingsSwitchItem(
+                                title = stringResource(R.string.settings_ui_player_seek_buttons_title),
+                                subtitle = stringResource(R.string.settings_ui_player_seek_buttons_desc),
+                                icon = Icons.Filled.TouchApp,
+                                checked = uiVisibility.playerShowSeekButtons,
+                                onCheckedChange = { viewModel.setUiVisibility(UiVisibilityToggle.PLAYER_SHOW_SEEK_BUTTONS, it) },
+                                rowTag = "settings_ui_player_seek_buttons"
+                            )
+                            SettingsSwitchItem(
+                                title = stringResource(R.string.settings_ui_player_waveform_title),
+                                subtitle = stringResource(R.string.settings_ui_player_waveform_desc),
+                                icon = Icons.Filled.GraphicEq,
+                                checked = uiVisibility.playerWaveformSeekbar,
+                                onCheckedChange = { viewModel.setUiVisibility(UiVisibilityToggle.PLAYER_WAVEFORM_SEEKBAR, it) },
+                                rowTag = "settings_ui_player_waveform"
+                            )
+                            SettingsSwitchItem(
+                                title = stringResource(R.string.settings_ui_player_output_title),
+                                subtitle = stringResource(R.string.settings_ui_player_output_desc),
+                                icon = Icons.Filled.Headset,
+                                checked = uiVisibility.playerShowOutputButton,
+                                onCheckedChange = { viewModel.setUiVisibility(UiVisibilityToggle.PLAYER_SHOW_OUTPUT_BUTTON, it) },
+                                rowTag = "settings_ui_player_output"
+                            )
+                            SettingsSwitchItem(
+                                title = stringResource(R.string.settings_ui_player_quick_actions_title),
+                                subtitle = stringResource(R.string.settings_ui_player_quick_actions_desc),
+                                icon = Icons.Filled.ViewStream,
+                                checked = uiVisibility.playerShowQuickActions,
+                                onCheckedChange = { viewModel.setUiVisibility(UiVisibilityToggle.PLAYER_SHOW_QUICK_ACTIONS, it) },
+                                rowTag = "settings_ui_player_quick_actions"
+                            )
+                        }
+                    }
+                    item {
+                        SettingsGroup(title = stringResource(R.string.settings_custom_home_group)) {
+                            SettingsSwitchItem(
+                                title = stringResource(R.string.settings_ui_home_right_now_title),
+                                subtitle = stringResource(R.string.settings_ui_home_right_now_desc),
+                                icon = Icons.Filled.AutoAwesome,
+                                checked = uiVisibility.homeShowRightNow,
+                                onCheckedChange = { viewModel.setUiVisibility(UiVisibilityToggle.HOME_SHOW_RIGHT_NOW, it) },
+                                rowTag = "settings_ui_home_right_now"
+                            )
+                            SettingsSwitchItem(
+                                title = stringResource(R.string.settings_ui_home_quick_picks_title),
+                                subtitle = stringResource(R.string.settings_ui_home_quick_picks_desc),
+                                icon = Icons.Filled.LibraryMusic,
+                                checked = uiVisibility.homeShowQuickPicks,
+                                onCheckedChange = { viewModel.setUiVisibility(UiVisibilityToggle.HOME_SHOW_QUICK_PICKS, it) },
+                                rowTag = "settings_ui_home_quick_picks"
+                            )
+                            SettingsSwitchItem(
+                                title = stringResource(R.string.settings_ui_home_quick_actions_title),
+                                subtitle = stringResource(R.string.settings_ui_home_quick_actions_desc),
+                                icon = Icons.Filled.Tune,
+                                checked = uiVisibility.homeShowQuickActions,
+                                onCheckedChange = { viewModel.setUiVisibility(UiVisibilityToggle.HOME_SHOW_QUICK_ACTIONS, it) },
+                                rowTag = "settings_ui_home_quick_actions"
+                            )
+                            SettingsSwitchItem(
+                                title = stringResource(R.string.settings_ui_home_jump_back_in_title),
+                                subtitle = stringResource(R.string.settings_ui_home_jump_back_in_desc),
+                                icon = Icons.Filled.Restore,
+                                checked = uiVisibility.homeShowJumpBackIn,
+                                onCheckedChange = { viewModel.setUiVisibility(UiVisibilityToggle.HOME_SHOW_JUMP_BACK_IN, it) },
+                                rowTag = "settings_ui_home_jump_back_in"
+                            )
+                            SettingsSwitchItem(
+                                title = stringResource(R.string.settings_ui_home_daily_mixes_title),
+                                subtitle = stringResource(R.string.settings_ui_home_daily_mixes_desc),
+                                icon = Icons.Filled.AutoFixHigh,
+                                checked = uiVisibility.homeShowDailyMixes,
+                                onCheckedChange = { viewModel.setUiVisibility(UiVisibilityToggle.HOME_SHOW_DAILY_MIXES, it) },
+                                rowTag = "settings_ui_home_daily_mixes"
+                            )
+                            SettingsSwitchItem(
+                                title = stringResource(R.string.settings_ui_home_moods_title),
+                                subtitle = stringResource(R.string.settings_ui_home_moods_desc),
+                                icon = Icons.Filled.Favorite,
+                                checked = uiVisibility.homeShowMoods,
+                                onCheckedChange = { viewModel.setUiVisibility(UiVisibilityToggle.HOME_SHOW_MOODS, it) },
+                                rowTag = "settings_ui_home_moods"
+                            )
+                            SettingsSwitchItem(
+                                title = stringResource(R.string.settings_ui_home_stats_title),
+                                subtitle = stringResource(R.string.settings_ui_home_stats_desc),
+                                icon = Icons.Filled.BarChart,
+                                checked = uiVisibility.homeShowStatsBanner,
+                                onCheckedChange = { viewModel.setUiVisibility(UiVisibilityToggle.HOME_SHOW_STATS_BANNER, it) },
+                                rowTag = "settings_ui_home_stats"
+                            )
+                        }
+                    }
+                    item {
+                        SettingsGroup(title = stringResource(R.string.settings_custom_extras_group)) {
+                            SettingsSwitchItem(
+                                title = stringResource(R.string.settings_ui_artist_badges_title),
+                                subtitle = stringResource(R.string.settings_ui_artist_badges_desc),
+                                icon = Icons.Filled.Info,
+                                checked = uiVisibility.showArtistPortraitBadges,
+                                onCheckedChange = { viewModel.setUiVisibility(UiVisibilityToggle.SHOW_ARTIST_PORTRAIT_BADGES, it) },
+                                rowTag = "settings_ui_artist_badges"
+                            )
+                            SettingsSwitchItem(
+                                title = stringResource(R.string.settings_ui_micro_tips_title),
+                                subtitle = stringResource(R.string.settings_ui_micro_tips_desc),
+                                icon = Icons.Filled.AutoAwesome,
+                                checked = uiVisibility.showMicroTips,
+                                onCheckedChange = { viewModel.setUiVisibility(UiVisibilityToggle.SHOW_MICRO_TIPS, it) },
+                                rowTag = "settings_ui_micro_tips"
+                            )
+                            SettingsActionItem(
+                                title = stringResource(R.string.settings_ui_reset_all_title),
+                                subtitle = stringResource(R.string.settings_ui_reset_all_desc),
+                                icon = Icons.Filled.Restore,
+                                onClick = viewModel::resetUiVisibilityDefaults,
+                                testTag = "settings_ui_reset_all"
                             )
                         }
                     }
@@ -950,6 +1130,13 @@ fun SettingsScreen(
                                 icon = Icons.Filled.BugReport,
                                 onClick = { showBugReportSheet = true },
                                 testTag = "settings_bug_report_item"
+                            )
+                            SettingsActionItem(
+                                title = stringResource(R.string.settings_diagnostic_logs_title),
+                                subtitle = stringResource(R.string.settings_diagnostic_logs_desc),
+                                icon = Icons.Filled.Info,
+                                onClick = { showDiagnosticLogsSheet = true },
+                                testTag = "settings_diagnostic_logs_item"
                             )
                         }
                     }

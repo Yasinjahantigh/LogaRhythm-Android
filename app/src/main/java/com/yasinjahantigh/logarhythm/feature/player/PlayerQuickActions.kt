@@ -1,9 +1,11 @@
 package com.yasinjahantigh.logarhythm.feature.player
 
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.MarqueeSpacing
 import androidx.compose.foundation.background
 import androidx.compose.foundation.basicMarquee
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -21,6 +23,7 @@ import androidx.compose.material.icons.filled.Lyrics
 import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -36,53 +39,60 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.yasinjahantigh.logarhythm.R
 
-/** Lyrics, queue, sleep timer and speed controls with live labels for active states. */
+/** Lyrics, sleep timer, speed and queue controls in one clean Material 3 dock. */
 @Composable
 fun PlayerQuickActions(
     showLyrics: Boolean,
     onToggleLyrics: () -> Unit,
-    onOpenQueue: () -> Unit,
     timerLabel: String?,
     onOpenTimer: () -> Unit,
     speedLabel: String?,
     onOpenSpeed: () -> Unit,
+    onOpenQueue: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(28.dp))
-            .background(MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.6f))
-            .padding(4.dp)
+    val scheme = MaterialTheme.colorScheme
+    Surface(
+        shape = RoundedCornerShape(22.dp),
+        color = scheme.surfaceContainerHigh.copy(alpha = 0.56f),
+        tonalElevation = 2.dp,
+        border = BorderStroke(0.75.dp, scheme.outlineVariant.copy(alpha = 0.35f)),
+        modifier = modifier.fillMaxWidth()
     ) {
-        QuickAction(
-            icon = Icons.Default.Lyrics,
-            label = stringResource(R.string.player_action_lyrics),
-            active = showLyrics,
-            onClick = onToggleLyrics,
-            modifier = Modifier.weight(1f).testTag("player_lyrics_toggle_button")
-        )
-        QuickAction(
-            icon = Icons.AutoMirrored.Filled.QueueMusic,
-            label = stringResource(R.string.player_action_queue),
-            active = false,
-            onClick = onOpenQueue,
-            modifier = Modifier.weight(1f).testTag("player_queue_button")
-        )
-        QuickAction(
-            icon = Icons.Default.Bedtime,
-            label = timerLabel ?: stringResource(R.string.player_action_timer),
-            active = timerLabel != null,
-            onClick = onOpenTimer,
-            modifier = Modifier.weight(1f).testTag("player_sleep_timer_button")
-        )
-        QuickAction(
-            icon = Icons.Default.Speed,
-            label = speedLabel ?: stringResource(R.string.player_action_speed),
-            active = speedLabel != null,
-            onClick = onOpenSpeed,
-            modifier = Modifier.weight(1f).testTag("player_speed_button")
-        )
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(4.dp)
+        ) {
+            QuickAction(
+                icon = Icons.Default.Lyrics,
+                label = stringResource(R.string.player_action_lyrics),
+                active = showLyrics,
+                onClick = onToggleLyrics,
+                modifier = Modifier.weight(1f).testTag("player_lyrics_toggle_button")
+            )
+            QuickAction(
+                icon = Icons.Default.Bedtime,
+                label = timerLabel ?: stringResource(R.string.player_action_timer),
+                active = timerLabel != null,
+                onClick = onOpenTimer,
+                modifier = Modifier.weight(1f).testTag("player_sleep_timer_button")
+            )
+            QuickAction(
+                icon = Icons.Default.Speed,
+                label = speedLabel ?: stringResource(R.string.player_action_speed),
+                active = speedLabel != null,
+                onClick = onOpenSpeed,
+                modifier = Modifier.weight(1f).testTag("player_speed_button")
+            )
+            QuickAction(
+                icon = Icons.AutoMirrored.Filled.QueueMusic,
+                label = stringResource(R.string.player_action_queue),
+                active = false,
+                onClick = onOpenQueue,
+                modifier = Modifier.weight(1f).testTag("player_queue_button")
+            )
+        }
     }
 }
 
@@ -96,33 +106,33 @@ private fun QuickAction(
 ) {
     val scheme = MaterialTheme.colorScheme
     val container by animateColorAsState(
-        targetValue = if (active) scheme.primaryContainer else scheme.primaryContainer.copy(alpha = 0f),
+        targetValue = if (active) scheme.primary.copy(alpha = 0.16f) else scheme.primary.copy(alpha = 0f),
         label = "quick_action_container"
     )
     val scale by androidx.compose.animation.core.animateFloatAsState(
-        targetValue = if (active) 1.04f else 1f,
+        targetValue = if (active) 1.03f else 1f,
         animationSpec = androidx.compose.animation.core.spring(dampingRatio = 0.65f, stiffness = 360f),
         label = "quick_action_scale"
     )
-    val tint = if (active) scheme.onPrimaryContainer else scheme.onSurfaceVariant
+    val tint = if (active) scheme.primary else scheme.onSurface.copy(alpha = 0.72f)
     Column(
         modifier = modifier
-            .defaultMinSize(minHeight = 48.dp)
+            .defaultMinSize(minHeight = 42.dp)
             .graphicsLayer {
                 scaleX = scale
                 scaleY = scale
             }
-            .clip(RoundedCornerShape(24.dp))
+            .clip(RoundedCornerShape(16.dp))
             .background(container)
             .clickable(onClick = onClick)
-            .padding(vertical = 8.dp, horizontal = 4.dp),
+            .padding(vertical = 6.dp, horizontal = 4.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Icon(
             imageVector = icon,
             contentDescription = null,
             tint = tint,
-            modifier = Modifier.size(21.dp)
+            modifier = Modifier.size(19.dp)
         )
         Spacer(modifier = Modifier.height(2.dp))
         Text(

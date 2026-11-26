@@ -194,6 +194,14 @@ class PlaybackService : MediaSessionService() {
 
         // The widget follows the service player, so it has to be told about every state change.
         player.addListener(object : Player.Listener {
+            override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
+                com.yasinjahantigh.logarhythm.data.analytics.AppLog.e(
+                    "PlaybackSvc",
+                    "Player error code=${error.errorCodeName} (${error.errorCode})",
+                    error
+                )
+            }
+
             override fun onIsPlayingChanged(isPlaying: Boolean) {
                 com.yasinjahantigh.logarhythm.widget.MusicWidgetUpdater.requestUpdate(this@PlaybackService)
             }

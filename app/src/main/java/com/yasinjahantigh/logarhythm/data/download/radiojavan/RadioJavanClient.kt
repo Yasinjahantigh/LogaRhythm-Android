@@ -1,5 +1,6 @@
 package com.yasinjahantigh.logarhythm.data.download.radiojavan
 
+import com.yasinjahantigh.logarhythm.data.analytics.AppLog
 import com.yasinjahantigh.logarhythm.domain.download.DownloadPipelineException
 import com.yasinjahantigh.logarhythm.domain.model.DownloadErrorKind
 import com.yasinjahantigh.logarhythm.domain.model.DownloadResultKind
@@ -175,19 +176,29 @@ class RadioJavanClient @Inject constructor(
 
         return try {
             client.newCall(request).execute().use { response ->
-                if (!response.isSuccessful) null
-                else response.body?.string()?.let { runCatching { JSONObject(it) }.getOrNull() }
+                if (!response.isSuccessful) {
+                    AppLog.w("RadioJavan", "HTTP ${response.code} ${url.encodedPath}")
+                    null
+                } else {
+                    response.body?.string()?.let { runCatching { JSONObject(it) }.getOrNull() }
+                }
             }
-        } catch (_: Exception) {
+        } catch (err: Exception) {
+            AppLog.w("RadioJavan", "Direct failed (${err.message}), trying proxy ${url.encodedPath}")
             // Try via proxy if direct fails
             try {
                 val proxiedUrl = (proxyBase + URLEncoder.encode(urlStr, Charsets.UTF_8.name())).toHttpUrlOrNull() ?: return null
                 val proxyReq = Request.Builder().url(proxiedUrl).header("Accept", "application/json").build()
                 client.newCall(proxyReq).execute().use { response ->
-                    if (!response.isSuccessful) null
-                    else response.body?.string()?.let { runCatching { JSONObject(it) }.getOrNull() }
+                    if (!response.isSuccessful) {
+                        AppLog.w("RadioJavan", "Proxy HTTP ${response.code} ${url.encodedPath}")
+                        null
+                    } else {
+                        response.body?.string()?.let { runCatching { JSONObject(it) }.getOrNull() }
+                    }
                 }
-            } catch (_: Exception) {
+            } catch (proxyErr: Exception) {
+                AppLog.w("RadioJavan", "Proxy failed ${url.encodedPath}: ${proxyErr.message}")
                 null
             }
         }

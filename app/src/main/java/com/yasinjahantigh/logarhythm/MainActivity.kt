@@ -35,6 +35,7 @@ import com.yasinjahantigh.logarhythm.core.library.LibrarySync
 import com.yasinjahantigh.logarhythm.core.utils.ArtworkColorExtractor
 import com.yasinjahantigh.logarhythm.core.utils.ShakeDetector
 import com.yasinjahantigh.logarhythm.data.analytics.AppLogBuffer
+import com.yasinjahantigh.logarhythm.data.analytics.DiagnosticSnapshotCollector
 import com.yasinjahantigh.logarhythm.data.analytics.InstallReporter
 import com.yasinjahantigh.logarhythm.data.datastore.PreferencesManager
 import com.yasinjahantigh.logarhythm.data.datastore.ThemePreferences
@@ -76,6 +77,9 @@ class MainActivity : ComponentActivity() {
 
     @Inject
     lateinit var appLogBuffer: AppLogBuffer
+
+    @Inject
+    lateinit var diagnosticSnapshotCollector: DiagnosticSnapshotCollector
 
     private var shareEventSeq by mutableStateOf(0)
 
@@ -303,18 +307,40 @@ class MainActivity : ComponentActivity() {
                             }
                         )
                     }
+                    var showDiagnosticLogViewer by remember { mutableStateOf(false) }
                     if (showShakeReportSheet) {
                         ShakeBugReportSheet(
                             recentLogsCount = appLogBuffer.lineCount(),
                             onSubmit = { category, description, contact, includeLogs ->
+                                val stateSnapshot = if (includeLogs) {
+                                    runCatching { diagnosticSnapshotCollector.collectStateSnapshot() }.getOrDefault("")
+                                } else ""
+                                val payloadLogs = if (includeLogs) {
+                                    diagnosticSnapshotCollector.buildReportLogsPayload(includeLogs = true)
+                                } else ""
                                 installReporter.sendUserReport(
                                     category = category,
                                     description = description,
                                     contact = contact,
-                                    recentLogs = if (includeLogs) appLogBuffer.snapshot() else ""
+                                    recentLogs = payloadLogs,
+                                    deviceSnapshot = stateSnapshot
                                 )
                             },
+                            onOpenLogViewer = {
+                                showShakeReportSheet = false
+                                showDiagnosticLogViewer = true
+                            },
                             onDismiss = { showShakeReportSheet = false }
+                        )
+                    }
+                    if (showDiagnosticLogViewer) {
+                        com.yasinjahantigh.logarhythm.feature.settings.DiagnosticLogViewerSheet(
+                            lineCountProvider = { appLogBuffer.lineCount() },
+                            sizeBytesProvider = { appLogBuffer.totalLogSizeBytes() },
+                            reportLoader = { diagnosticSnapshotCollector.buildFullDiagnosticReport() },
+                            onShareFile = { title -> diagnosticSnapshotCollector.shareFullDiagnosticLogFile(title) },
+                            onClearLogs = { appLogBuffer.clearLogs() },
+                            onDismiss = { showDiagnosticLogViewer = false }
                         )
                     }
                 }

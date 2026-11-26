@@ -24,6 +24,8 @@ class CrashReportHandler(
 
     override fun uncaughtException(thread: Thread, throwable: Throwable) {
         try {
+            // Always persist uncaught crashes to the local rotating log file for offline inspection.
+            logBuffer.recordCrash(thread.name, throwable)
             if (!BuildConfig.DEBUG && isEnabledProvider()) {
                 persistCrash(throwable)
             }
@@ -47,9 +49,10 @@ class CrashReportHandler(
             put("exceptionType", throwable::class.java.name.take(120))
             put("message", AppLogBuffer.sanitize(throwable.message.orEmpty()).take(500))
             put("stackTrace", AppLogBuffer.sanitizeMultiline(rawStack, 5500))
-            put("recentLogs", AppLogBuffer.sanitizeMultiline(logBuffer.snapshot(), 5500))
+            put("recentLogs", AppLogBuffer.sanitizeMultiline(logBuffer.snapshotTail(5500), 5500))
             put("androidVersion", Build.VERSION.RELEASE.orEmpty().take(24))
             put("abi", Build.SUPPORTED_ABIS.firstOrNull().orEmpty().take(24))
+            put("device", "${Build.MANUFACTURER} ${Build.MODEL}".take(64))
         }
 
         val dir = pendingDir(appContext).apply { mkdirs() }

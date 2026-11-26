@@ -41,6 +41,13 @@ class PlaylistDetailViewModel @Inject constructor(
             initialValue = emptyList()
         )
 
+    val allTracks: StateFlow<List<Track>> = trackRepository.getAllTracks()
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = emptyList()
+        )
+
     val allPlaylists: StateFlow<List<Playlist>> = playlistRepository.getAllPlaylists()
         .stateIn(
             scope = viewModelScope,
@@ -121,7 +128,14 @@ class PlaylistDetailViewModel @Inject constructor(
 
     fun addTracksToPlaylist(targetPlaylistId: Long, trackIds: List<String>) {
         viewModelScope.launch {
-            trackIds.forEach { playlistRepository.addTrackToPlaylist(targetPlaylistId, it) }
+            playlistRepository.addTracksToPlaylist(targetPlaylistId, trackIds)
+        }
+    }
+
+    fun addTracksToCurrentPlaylist(trackIds: List<String>) {
+        if (trackIds.isEmpty()) return
+        viewModelScope.launch {
+            playlistRepository.addTracksToPlaylist(playlistId, trackIds)
         }
     }
 

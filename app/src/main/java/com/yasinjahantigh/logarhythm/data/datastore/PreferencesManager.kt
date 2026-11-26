@@ -72,6 +72,43 @@ data class ThemePreferences(
     val customBackgroundAlpha: Float = 0.35f
 )
 
+enum class UiVisibilityToggle(val keyName: String) {
+    PLAYER_SHOW_FORMAT_BADGE("key_ui_player_format_badge"),
+    PLAYER_SHOW_SEEK_BUTTONS("key_ui_player_seek_buttons"),
+    PLAYER_WAVEFORM_SEEKBAR("key_ui_player_waveform_seekbar"),
+    PLAYER_SHOW_OUTPUT_BUTTON("key_ui_player_output_button"),
+    PLAYER_SHOW_UP_NEXT_HEADER("key_ui_player_up_next_header"),
+    PLAYER_SHOW_QUICK_ACTIONS("key_ui_player_quick_actions"),
+    HOME_SHOW_RIGHT_NOW("key_ui_home_right_now"),
+    HOME_SHOW_QUICK_PICKS("key_ui_home_quick_picks"),
+    HOME_SHOW_QUICK_ACTIONS("key_ui_home_quick_actions"),
+    HOME_SHOW_JUMP_BACK_IN("key_ui_home_jump_back_in"),
+    HOME_SHOW_DAILY_MIXES("key_ui_home_daily_mixes"),
+    HOME_SHOW_MOODS("key_ui_home_moods"),
+    HOME_SHOW_STATS_BANNER("key_ui_home_stats_banner"),
+    SHOW_MICRO_TIPS("key_ui_show_micro_tips"),
+    SHOW_ARTIST_PORTRAIT_BADGES("key_ui_show_artist_badges")
+}
+
+/** Per-section UI element visibility preferences; every optional feature defaults to enabled. */
+data class UiVisibilityPreferences(
+    val playerShowFormatBadge: Boolean = true,
+    val playerShowSeekButtons: Boolean = true,
+    val playerWaveformSeekbar: Boolean = true,
+    val playerShowOutputButton: Boolean = true,
+    val playerShowUpNextHeader: Boolean = true,
+    val playerShowQuickActions: Boolean = true,
+    val homeShowRightNow: Boolean = true,
+    val homeShowQuickPicks: Boolean = true,
+    val homeShowQuickActions: Boolean = true,
+    val homeShowJumpBackIn: Boolean = true,
+    val homeShowDailyMixes: Boolean = true,
+    val homeShowMoods: Boolean = true,
+    val homeShowStatsBanner: Boolean = true,
+    val showMicroTips: Boolean = true,
+    val showArtistPortraitBadges: Boolean = true
+)
+
 @Singleton
 class PreferencesManager @Inject constructor(
     private val dataStore: DataStore<Preferences>,
@@ -1224,6 +1261,54 @@ class PreferencesManager @Inject constructor(
         dataStore.edit { prefs ->
             if (clean.isEmpty()) prefs.remove(keyLyricsTranslateLang)
             else prefs[keyLyricsTranslateLang] = clean
+        }
+    }
+
+    // ---- Home Quick Picks minimized state --------------------------------------------------
+
+    private val keyQuickPicksMinimized = booleanPreferencesKey("key_quick_picks_minimized")
+
+    val quickPicksMinimized: Flow<Boolean> = dataStore.data
+        .map { it[keyQuickPicksMinimized] ?: false }
+        .distinctUntilChanged()
+
+    suspend fun setQuickPicksMinimized(minimized: Boolean) {
+        dataStore.edit { it[keyQuickPicksMinimized] = minimized }
+    }
+
+    // ---- Interface visibility customization (all ON by default) ------------------------------
+
+    val uiVisibility: Flow<UiVisibilityPreferences> = dataStore.data.map { prefs ->
+        fun flag(toggle: UiVisibilityToggle): Boolean =
+            prefs[booleanPreferencesKey(toggle.keyName)] ?: true
+        UiVisibilityPreferences(
+            playerShowFormatBadge = flag(UiVisibilityToggle.PLAYER_SHOW_FORMAT_BADGE),
+            playerShowSeekButtons = flag(UiVisibilityToggle.PLAYER_SHOW_SEEK_BUTTONS),
+            playerWaveformSeekbar = flag(UiVisibilityToggle.PLAYER_WAVEFORM_SEEKBAR),
+            playerShowOutputButton = flag(UiVisibilityToggle.PLAYER_SHOW_OUTPUT_BUTTON),
+            playerShowUpNextHeader = flag(UiVisibilityToggle.PLAYER_SHOW_UP_NEXT_HEADER),
+            playerShowQuickActions = flag(UiVisibilityToggle.PLAYER_SHOW_QUICK_ACTIONS),
+            homeShowRightNow = flag(UiVisibilityToggle.HOME_SHOW_RIGHT_NOW),
+            homeShowQuickPicks = flag(UiVisibilityToggle.HOME_SHOW_QUICK_PICKS),
+            homeShowQuickActions = flag(UiVisibilityToggle.HOME_SHOW_QUICK_ACTIONS),
+            homeShowJumpBackIn = flag(UiVisibilityToggle.HOME_SHOW_JUMP_BACK_IN),
+            homeShowDailyMixes = flag(UiVisibilityToggle.HOME_SHOW_DAILY_MIXES),
+            homeShowMoods = flag(UiVisibilityToggle.HOME_SHOW_MOODS),
+            homeShowStatsBanner = flag(UiVisibilityToggle.HOME_SHOW_STATS_BANNER),
+            showMicroTips = flag(UiVisibilityToggle.SHOW_MICRO_TIPS),
+            showArtistPortraitBadges = flag(UiVisibilityToggle.SHOW_ARTIST_PORTRAIT_BADGES)
+        )
+    }.distinctUntilChanged()
+
+    suspend fun setUiVisibility(toggle: UiVisibilityToggle, enabled: Boolean) {
+        dataStore.edit { it[booleanPreferencesKey(toggle.keyName)] = enabled }
+    }
+
+    suspend fun resetUiVisibilityDefaults() {
+        dataStore.edit { prefs ->
+            UiVisibilityToggle.entries.forEach { toggle ->
+                prefs.remove(booleanPreferencesKey(toggle.keyName))
+            }
         }
     }
 }

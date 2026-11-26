@@ -2,6 +2,7 @@ package com.yasinjahantigh.logarhythm.feature.player
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -20,7 +21,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.filled.GraphicEq
-import androidx.compose.material.icons.filled.Headphones
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -33,8 +33,10 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -58,7 +60,7 @@ import java.util.Locale
 
 /**
  * Compact Spotify-inspired strip below PlayerQuickActions:
- * shows "Next: <track>" (tap opens Queue) and "About artist" (tap opens AboutArtistSheet).
+ * shows "Next: <track>" (or "Queue" when at the end of the queue) and "About artist".
  */
 @Composable
 fun PlayerBottomDiscoveryStrip(
@@ -68,8 +70,9 @@ fun PlayerBottomDiscoveryStrip(
     onOpenAboutArtist: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    if (nextTrack == null && !hasArtistInfo) return
     val scheme = MaterialTheme.colorScheme
+    val pillColor = scheme.onSurface.copy(alpha = 0.06f)
+    val pillBorder = BorderStroke(0.75.dp, scheme.onSurface.copy(alpha = 0.08f))
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -82,30 +85,30 @@ fun PlayerBottomDiscoveryStrip(
             Surface(
                 onClick = onOpenQueue,
                 shape = RoundedCornerShape(16.dp),
-                color = scheme.surfaceContainerHigh.copy(alpha = 0.72f),
-                border = BorderStroke(1.dp, scheme.outlineVariant.copy(alpha = 0.45f)),
+                color = pillColor,
+                border = pillBorder,
                 modifier = Modifier
                     .weight(1f)
-                    .defaultMinSize(minHeight = 48.dp)
+                    .defaultMinSize(minHeight = 42.dp)
                     .testTag("player_up_next_pill")
             ) {
                 Row(
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     ArtworkImage(
                         uri = nextTrack.artworkUri,
                         fallbackKey = nextTitle,
                         shape = RoundedCornerShape(8.dp),
-                        glyphSize = 14.sp,
+                        glyphSize = 13.sp,
                         contentDescription = null,
-                        modifier = Modifier.size(28.dp)
+                        modifier = Modifier.size(26.dp)
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
                         text = stringResource(R.string.player_up_next_label, nextTitle),
                         style = MaterialTheme.typography.labelMedium,
-                        color = scheme.onSurface,
+                        color = scheme.onSurface.copy(alpha = 0.88f),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f)
@@ -114,8 +117,41 @@ fun PlayerBottomDiscoveryStrip(
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.QueueMusic,
                         contentDescription = null,
-                        tint = scheme.onSurfaceVariant,
+                        tint = scheme.onSurface.copy(alpha = 0.65f),
                         modifier = Modifier.size(16.dp)
+                    )
+                }
+            }
+        } else {
+            Surface(
+                onClick = onOpenQueue,
+                shape = RoundedCornerShape(16.dp),
+                color = pillColor,
+                border = pillBorder,
+                modifier = Modifier
+                    .weight(1f)
+                    .defaultMinSize(minHeight = 42.dp)
+                    .testTag("player_queue_button")
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.QueueMusic,
+                        contentDescription = null,
+                        tint = scheme.onSurface.copy(alpha = 0.72f),
+                        modifier = Modifier.size(17.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = stringResource(R.string.player_action_queue),
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = scheme.onSurface.copy(alpha = 0.88f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
             }
@@ -125,21 +161,21 @@ fun PlayerBottomDiscoveryStrip(
             Surface(
                 onClick = onOpenAboutArtist,
                 shape = RoundedCornerShape(16.dp),
-                color = scheme.secondaryContainer.copy(alpha = 0.75f),
+                color = pillColor,
+                border = pillBorder,
                 modifier = Modifier
-                    .then(if (nextTrack == null) Modifier.fillMaxWidth() else Modifier)
-                    .defaultMinSize(minHeight = 48.dp)
+                    .defaultMinSize(minHeight = 42.dp)
                     .testTag("player_about_artist_pill")
             ) {
                 Row(
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.Center
                 ) {
                     Icon(
                         imageVector = Icons.Filled.Person,
                         contentDescription = null,
-                        tint = scheme.onSecondaryContainer,
+                        tint = scheme.primary,
                         modifier = Modifier.size(16.dp)
                     )
                     Spacer(modifier = Modifier.width(6.dp))
@@ -147,7 +183,7 @@ fun PlayerBottomDiscoveryStrip(
                         text = stringResource(R.string.player_about_artist),
                         style = MaterialTheme.typography.labelMedium,
                         fontWeight = FontWeight.SemiBold,
-                        color = scheme.onSecondaryContainer,
+                        color = scheme.onSurface.copy(alpha = 0.88f),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
@@ -161,13 +197,16 @@ fun PlayerBottomDiscoveryStrip(
 @Composable
 fun AboutArtistSheet(
     track: Track,
-    artistInfo: PlayerArtistInfo?,
+    artistsInfo: List<PlayerArtistInfo>,
     onPlayTrack: (Track) -> Unit,
     onOpenArtistPage: ((String) -> Unit)?,
     onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
     val scheme = MaterialTheme.colorScheme
+    var selectedArtistIndex by remember(track.id, artistsInfo.size) { mutableIntStateOf(0) }
+    val activeArtist = artistsInfo.getOrNull(selectedArtistIndex) ?: artistsInfo.firstOrNull()
+
     val formatInfo by produceState<AudioFormatInfo?>(initialValue = null, track.id, track.uri) {
         value = AudioFormatReader.read(context, track)
     }
@@ -191,12 +230,59 @@ fun AboutArtistSheet(
                 .padding(horizontal = 20.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            if (artistInfo != null) {
+            if (activeArtist != null) {
                 Text(
                     text = stringResource(R.string.player_about_artist_title),
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold
                 )
+
+                if (artistsInfo.size > 1) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState())
+                            .testTag("about_artist_tabs"),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        artistsInfo.forEachIndexed { index, info ->
+                            val selected = index == selectedArtistIndex
+                            Surface(
+                                onClick = { selectedArtistIndex = index },
+                                shape = CircleShape,
+                                color = if (selected) scheme.primaryContainer else scheme.surfaceContainerHigh,
+                                border = BorderStroke(
+                                    width = 1.dp,
+                                    color = if (selected) scheme.primary else scheme.outlineVariant.copy(alpha = 0.5f)
+                                ),
+                                modifier = Modifier.testTag("about_artist_tab_$index")
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(start = 6.dp, end = 12.dp, top = 6.dp, bottom = 6.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    ArtworkImage(
+                                        uri = info.photoUri,
+                                        fallbackKey = info.artistName,
+                                        shape = CircleShape,
+                                        glyphSize = 14.sp,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(26.dp)
+                                    )
+                                    Text(
+                                        text = info.artistName,
+                                        style = MaterialTheme.typography.labelLarge,
+                                        fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                                        color = if (selected) scheme.onPrimaryContainer else scheme.onSurface,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
 
                 Surface(
                     shape = RoundedCornerShape(22.dp),
@@ -212,16 +298,16 @@ fun AboutArtistSheet(
                             horizontalArrangement = Arrangement.spacedBy(14.dp)
                         ) {
                             ArtworkImage(
-                                uri = artistInfo.photoUri,
-                                fallbackKey = artistInfo.artistName,
+                                uri = activeArtist.photoUri,
+                                fallbackKey = activeArtist.artistName,
                                 shape = CircleShape,
                                 glyphSize = 32.sp,
-                                contentDescription = artistInfo.artistName,
+                                contentDescription = activeArtist.artistName,
                                 modifier = Modifier.size(72.dp)
                             )
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    text = artistInfo.artistName,
+                                    text = activeArtist.artistName,
                                     style = MaterialTheme.typography.titleMedium,
                                     fontWeight = FontWeight.Bold,
                                     maxLines = 2,
@@ -229,7 +315,7 @@ fun AboutArtistSheet(
                                 )
                                 Spacer(modifier = Modifier.height(2.dp))
                                 Text(
-                                    text = stringResource(R.string.player_artist_library_tracks, artistInfo.libraryTrackCount),
+                                    text = stringResource(R.string.player_artist_library_tracks, activeArtist.libraryTrackCount),
                                     style = MaterialTheme.typography.bodySmall,
                                     color = scheme.onSurfaceVariant
                                 )
@@ -247,7 +333,7 @@ fun AboutArtistSheet(
                             ) {
                                 Column(modifier = Modifier.padding(12.dp)) {
                                     Text(
-                                        text = artistInfo.playCount.toString(),
+                                        text = activeArtist.playCount.toString(),
                                         style = MaterialTheme.typography.titleMedium,
                                         fontWeight = FontWeight.Bold,
                                         color = scheme.primary
@@ -266,7 +352,7 @@ fun AboutArtistSheet(
                             ) {
                                 Column(modifier = Modifier.padding(12.dp)) {
                                     Text(
-                                        text = TimeUtils.formatListeningTimeSummary(artistInfo.totalListenTimeMs),
+                                        text = TimeUtils.formatListeningTimeSummary(activeArtist.totalListenTimeMs),
                                         style = MaterialTheme.typography.titleMedium,
                                         fontWeight = FontWeight.Bold,
                                         color = scheme.tertiary,
@@ -286,7 +372,7 @@ fun AboutArtistSheet(
                             FilledTonalButton(
                                 onClick = {
                                     onDismiss()
-                                    onOpenArtistPage(artistInfo.artistName)
+                                    onOpenArtistPage(activeArtist.artistName)
                                 },
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -301,14 +387,14 @@ fun AboutArtistSheet(
                     }
                 }
 
-                if (artistInfo.topTracks.isNotEmpty()) {
+                if (activeArtist.topTracks.isNotEmpty()) {
                     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         Text(
-                            text = stringResource(R.string.player_artist_top_tracks, artistInfo.artistName),
+                            text = stringResource(R.string.player_artist_top_tracks, activeArtist.artistName),
                             style = MaterialTheme.typography.titleSmall,
                             fontWeight = FontWeight.Bold
                         )
-                        artistInfo.topTracks.forEach { topTrack ->
+                        activeArtist.topTracks.forEach { topTrack ->
                             val cleanTitle = topTrack.title.cleanMetaOrNull() ?: stringResource(R.string.unknown_title)
                             val cleanAlbum = topTrack.album.cleanMetaOrNull()
                             Surface(

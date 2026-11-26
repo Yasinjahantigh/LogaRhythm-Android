@@ -3,10 +3,12 @@ package com.yasinjahantigh.logarhythm.feature.player
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.yasinjahantigh.logarhythm.data.datastore.PreferencesManager
+import com.yasinjahantigh.logarhythm.data.datastore.UiVisibilityPreferences
 import com.yasinjahantigh.logarhythm.data.repository.ArtistPhotoRepository
 import com.yasinjahantigh.logarhythm.data.room.SavedQueueDao
 import com.yasinjahantigh.logarhythm.data.room.SavedQueueEntity
 import com.yasinjahantigh.logarhythm.domain.curation.TrackCuration
+import com.yasinjahantigh.logarhythm.domain.library.ArtistSplitConfig
 import com.yasinjahantigh.logarhythm.domain.library.ArtistSplitter
 import com.yasinjahantigh.logarhythm.domain.model.Track
 import com.yasinjahantigh.logarhythm.domain.repository.PlaylistRepository
@@ -30,6 +32,7 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -69,6 +72,9 @@ class PlayerViewModel @Inject constructor(
 
     val isVinylMode: StateFlow<Boolean> = preferencesManager.vinylMode
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), preferencesManager.isVinylModeCached())
+
+    val uiVisibility: StateFlow<UiVisibilityPreferences> = preferencesManager.uiVisibility
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), UiVisibilityPreferences())
 
     fun setVinylMode(enabled: Boolean) {
         viewModelScope.launch {
@@ -116,70 +122,97 @@ class PlayerViewModel @Inject constructor(
     private val _showShareCardStudio = MutableStateFlow(false)
     val showShareCardStudio: StateFlow<Boolean> = _showShareCardStudio.asStateFlow()
 
-    val currentArtistInfo: StateFlow<PlayerArtistInfo?> = combine(
+    private val artistSplitConfig = combine(
+        preferencesManager.splitArtists,
+        preferencesManager.artistSeparators,
+        preferencesManager.artistNeverSplit
+    ) { enabled, sepsRaw, neverSplit ->
+        ArtistSplitConfig(
+            enabled = enabled,
+            separators = ArtistSplitter.parseSeparators(sepsRaw),
+            neverSplit = neverSplit
+        )
+    }
+
+    val currentArtistsInfo: StateFlow<List<PlayerArtistInfo>> = combine(
         currentTrack,
         trackRepository.getAllTracks(),
         statsRepository.getAllPlayEvents(),
-        artistPhotoRepository.photos
-    ) { track, allTracks, events, photos ->
+        artistPhotoRepository.photos,
+        artistSplitConfig
+    ) { track, allTracks, events, photos, splitConfig ->
         val rawArtist = track?.artist?.trim().orEmpty()
         if (rawArtist.isBlank() || rawArtist.equals("<unknown>", true) || rawArtist.equals("unknown", true)) {
-            return@combine null
+            return@combine emptyList()
         }
-        val primaryArtist = ArtistSplitter.split(rawArtist).firstOrNull()?.trim().takeUnless { it.isNullOrBlank() }
-            ?: rawArtist
-        val artistKey = artistPhotoRepository.normalizeKey(primaryArtist)
-        val artistTracks = allTracks.filter { candidate ->
-            ArtistSplitter.split(candidate.artist).any {
-                artistPhotoRepository.normalizeKey(it) == artistKey
-            } || artistPhotoRepository.normalizeKey(candidate.artist) == artistKey
-        }
-        val artistTrackIds = artistTracks.mapTo(HashSet()) { it.id }
-        val playCountByTrack = HashMap<String, Int>()
-        var totalPlays = 0
-        var totalListenMs = 0L
-        for (ev in events) {
-            if (ev.trackId in artistTrackIds) {
-                if (!ev.skipped) {
-                    totalPlays++
-                    playCountByTrack[ev.trackId] = (playCountByTrack[ev.trackId] ?: 0) + 1
-                }
-                totalListenMs += ev.listenedMs
+        val names = splitConfig.namesOf(rawArtist)
+            .map { it.trim() }
+            .filter { it.isNotBlank() && !it.equals("<unknown>", true) && !it.equals("unknown", true) }
+            .distinctBy { artistPhotoRepository.normalizeKey(it) }
+            .ifEmpty { listOf(rawArtist) }
+
+        names.map { artistName ->
+            val artistKey = artistPhotoRepository.normalizeKey(artistName)
+            val artistTracks = allTracks.filter { candidate ->
+                splitConfig.namesOf(candidate.artist).any {
+                    artistPhotoRepository.normalizeKey(it) == artistKey
+                } || artistPhotoRepository.normalizeKey(candidate.artist) == artistKey
             }
+            val artistTrackIds = artistTracks.mapTo(HashSet()) { it.id }
+            val playCountByTrack = HashMap<String, Int>()
+            var totalPlays = 0
+            var totalListenMs = 0L
+            for (ev in events) {
+                if (ev.trackId in artistTrackIds) {
+                    if (!ev.skipped) {
+                        totalPlays++
+                        playCountByTrack[ev.trackId] = (playCountByTrack[ev.trackId] ?: 0) + 1
+                    }
+                    totalListenMs += ev.listenedMs
+                }
+            }
+            val rankedTop = artistTracks.sortedWith(
+                compareByDescending<Track> { playCountByTrack[it.id] ?: 0 }
+                    .thenBy { it.title.lowercase() }
+            ).take(5)
+            val photoUri = photos[artistKey]
+                ?: artistTracks.firstNotNullOfOrNull { it.artworkUri?.takeIf(String::isNotBlank) }
+                ?: track?.artworkUri
+            PlayerArtistInfo(
+                artistName = artistName,
+                photoUri = photoUri,
+                playCount = totalPlays,
+                totalListenTimeMs = totalListenMs,
+                libraryTrackCount = artistTracks.size,
+                topTracks = rankedTop
+            )
         }
-        val rankedTop = artistTracks.sortedWith(
-            compareByDescending<Track> { playCountByTrack[it.id] ?: 0 }
-                .thenBy { it.title.lowercase() }
-        ).take(5)
-        val photoUri = photos[artistKey]
-            ?: artistTracks.firstNotNullOfOrNull { it.artworkUri?.takeIf(String::isNotBlank) }
-            ?: track?.artworkUri
-        PlayerArtistInfo(
-            artistName = primaryArtist,
-            photoUri = photoUri,
-            playCount = totalPlays,
-            totalListenTimeMs = totalListenMs,
-            libraryTrackCount = artistTracks.size,
-            topTracks = rankedTop
-        )
     }
         .flowOn(Dispatchers.Default)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val currentArtistInfo: StateFlow<PlayerArtistInfo?> = currentArtistsInfo
+        .map { it.firstOrNull() }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
     init {
         viewModelScope.launch {
-            currentTrack.collect { track ->
-                _isDismissed.value = false
-                val primaryArtist = track?.artist?.let { ArtistSplitter.split(it).firstOrNull()?.trim() }
-                if (!primaryArtist.isNullOrBlank() &&
-                    !primaryArtist.equals("<unknown>", true) &&
-                    !primaryArtist.equals("unknown", true)
-                ) {
-                    launch {
-                        runCatching { artistPhotoRepository.ensureFetched(primaryArtist, force = false) }
+            combine(currentTrack, artistSplitConfig) { track, splitConfig -> track to splitConfig }
+                .collect { (track, splitConfig) ->
+                    _isDismissed.value = false
+                    val raw = track?.artist?.trim().orEmpty()
+                    if (raw.isNotBlank() && !raw.equals("<unknown>", true) && !raw.equals("unknown", true)) {
+                        val names = splitConfig.namesOf(raw)
+                            .map { it.trim() }
+                            .filter { it.isNotBlank() && !it.equals("<unknown>", true) && !it.equals("unknown", true) }
+                            .distinctBy { artistPhotoRepository.normalizeKey(it) }
+                        for (artistName in names) {
+                            launch {
+                                runCatching { artistPhotoRepository.ensureFetched(artistName, force = false) }
+                            }
+                        }
                     }
                 }
-            }
         }
         viewModelScope.launch {
             isPlaying.collect { playing ->

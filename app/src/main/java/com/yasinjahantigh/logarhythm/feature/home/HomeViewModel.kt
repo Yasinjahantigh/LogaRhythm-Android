@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.yasinjahantigh.logarhythm.core.library.LibrarySync
 import com.yasinjahantigh.logarhythm.data.datastore.PreferencesManager
+import com.yasinjahantigh.logarhythm.data.datastore.UiVisibilityPreferences
 import com.yasinjahantigh.logarhythm.data.radar.ArtistFollowRepository
 import com.yasinjahantigh.logarhythm.data.radar.RadarRefreshSummary
 import com.yasinjahantigh.logarhythm.data.radar.ReleaseRadarNotifications
@@ -69,6 +70,18 @@ class HomeViewModel @Inject constructor(
 
     val releaseRadarEnabled: StateFlow<Boolean> = preferencesManager.releaseRadarEnabled
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
+
+    val quickPicksMinimized: StateFlow<Boolean> = preferencesManager.quickPicksMinimized
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+
+    val uiVisibility: StateFlow<UiVisibilityPreferences> = preferencesManager.uiVisibility
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), UiVisibilityPreferences())
+
+    fun toggleQuickPicksMinimized() {
+        viewModelScope.launch {
+            preferencesManager.setQuickPicksMinimized(!quickPicksMinimized.value)
+        }
+    }
 
     private val _radarRefreshing = MutableStateFlow(false)
     val radarRefreshing: StateFlow<Boolean> = _radarRefreshing.asStateFlow()

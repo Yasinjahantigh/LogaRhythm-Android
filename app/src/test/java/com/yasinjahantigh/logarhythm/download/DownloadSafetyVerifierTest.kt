@@ -252,4 +252,35 @@ class DownloadSafetyVerifierTest {
             candidateDurationMs = 212_000L
         )
     }
+
+    @Test
+    fun isSafeMatch_acceptsYoutubeOrSoundcloudLabelUploaderWhenArtistIsInTitle() {
+        val safe = DownloadSafetyVerifier.isSafeMatch(
+            expectedSource = DownloadSource.MUSICMAN,
+            expectedTrackId = "12345",
+            expectedTitle = "Khodafez",
+            expectedArtist = "Mehrad Hidden",
+            expectedDurationMs = 210_000L,
+            candidateSource = DownloadSource.YOUTUBE,
+            candidateTrackId = "yt_abc123",
+            candidateTitle = "Mehrad Hidden - Khodafez (Official Audio)",
+            candidateArtist = "Avang Music",
+            candidateDurationMs = 212_000L
+        )
+        assertTrue("YouTube/SoundCloud label channel upload with matching artist & title must be accepted", safe)
+
+        val wrongArtistCover = DownloadSafetyVerifier.isSafeMatch(
+            expectedSource = DownloadSource.MUSICMAN,
+            expectedTrackId = "12345",
+            expectedTitle = "Khodafez",
+            expectedArtist = "Mehrad Hidden",
+            expectedDurationMs = 210_000L,
+            candidateSource = DownloadSource.YOUTUBE,
+            candidateTrackId = "yt_xyz999",
+            candidateTitle = "Khodafez (Acoustic Cover)",
+            candidateArtist = "Random Cover Guy",
+            candidateDurationMs = 212_000L
+        )
+        assertFalse("Wrong artist without expected artist in title must still be rejected", wrongArtistCover)
+    }
 }

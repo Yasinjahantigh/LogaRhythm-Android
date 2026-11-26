@@ -132,75 +132,77 @@ fun generateDynamicSchemeFromSeed(seed: Color, isDark: Boolean): ColorScheme {
     ColorUtils.colorToHSL(seed.toArgb(), hsl)
 
     val hue = hsl[0]
-    val sat = hsl[1].coerceIn(0.3f, 0.85f)
-    val secondaryHue = hue + 24f
-    val tertiaryHue = hue + 150f
+    val sat = hsl[1].coerceIn(0.32f, 0.85f)
+    // Keep secondary harmonious with the artwork hue instead of shifting +24deg (which turns warm golds olive-green).
+    val secondaryHue = hue
+    val tertiaryHue = (hue + 36f) % 360f
 
     return if (isDark) {
-        val primary = tone(hue, sat, 0.75f)
-        val surface = tone(hue, 0.12f, 0.08f)
+        val accentSat = sat.coerceIn(0.42f, 0.84f)
+        val primary = tone(hue, accentSat, 0.76f)
+        val surface = tone(hue, 0.06f, 0.065f)
         darkColorScheme(
             primary = primary,
-            onPrimary = tone(hue, sat, 0.12f),
-            primaryContainer = tone(hue, sat, 0.25f),
-            onPrimaryContainer = tone(hue, sat, 0.90f),
-            secondary = tone(secondaryHue, sat * 0.45f, 0.78f),
-            onSecondary = tone(secondaryHue, sat * 0.45f, 0.14f),
-            secondaryContainer = tone(secondaryHue, sat * 0.35f, 0.26f),
-            onSecondaryContainer = tone(secondaryHue, sat * 0.45f, 0.90f),
-            tertiary = tone(tertiaryHue, sat * 0.45f, 0.78f),
-            onTertiary = tone(tertiaryHue, sat * 0.45f, 0.14f),
-            tertiaryContainer = tone(tertiaryHue, sat * 0.35f, 0.26f),
-            onTertiaryContainer = tone(tertiaryHue, sat * 0.45f, 0.90f),
+            onPrimary = tone(hue, accentSat, 0.10f),
+            primaryContainer = tone(hue, (accentSat * 0.55f).coerceIn(0.22f, 0.45f), 0.22f),
+            onPrimaryContainer = tone(hue, accentSat, 0.92f),
+            secondary = tone(secondaryHue, accentSat * 0.65f, 0.78f),
+            onSecondary = tone(secondaryHue, accentSat * 0.50f, 0.12f),
+            secondaryContainer = tone(secondaryHue, (accentSat * 0.30f).coerceIn(0.12f, 0.32f), 0.20f),
+            onSecondaryContainer = Color(0xFFF0F0F2),
+            tertiary = tone(tertiaryHue, accentSat * 0.55f, 0.76f),
+            onTertiary = tone(tertiaryHue, accentSat * 0.45f, 0.14f),
+            tertiaryContainer = tone(tertiaryHue, (accentSat * 0.30f).coerceIn(0.12f, 0.32f), 0.22f),
+            onTertiaryContainer = Color(0xFFF0F0F2),
             surface = surface,
             background = surface,
-            onSurface = Color(0xFFE5E5E5),
-            onBackground = Color(0xFFE5E5E5),
-            surfaceVariant = tone(hue, 0.15f, 0.20f),
-            onSurfaceVariant = Color(0xFFC4C7C5),
+            onSurface = Color(0xFFF2F2F4),
+            onBackground = Color(0xFFF2F2F4),
+            surfaceVariant = tone(hue, 0.08f, 0.17f),
+            onSurfaceVariant = Color(0xFFB8BCC2),
             surfaceTint = primary,
             surfaceDim = surface,
-            surfaceBright = tone(hue, 0.12f, 0.20f),
-            surfaceContainerLowest = tone(hue, 0.12f, 0.05f),
-            surfaceContainerLow = tone(hue, 0.12f, 0.10f),
-            surfaceContainer = tone(hue, 0.12f, 0.12f),
-            surfaceContainerHigh = tone(hue, 0.12f, 0.15f),
-            surfaceContainerHighest = tone(hue, 0.12f, 0.19f),
-            outline = tone(hue, 0.08f, 0.55f),
-            outlineVariant = tone(hue, 0.10f, 0.28f)
+            surfaceBright = tone(hue, 0.07f, 0.18f),
+            surfaceContainerLowest = tone(hue, 0.05f, 0.04f),
+            surfaceContainerLow = tone(hue, 0.06f, 0.085f),
+            surfaceContainer = tone(hue, 0.06f, 0.11f),
+            surfaceContainerHigh = tone(hue, 0.07f, 0.14f),
+            surfaceContainerHighest = tone(hue, 0.08f, 0.175f),
+            outline = tone(hue, 0.06f, 0.48f),
+            outlineVariant = tone(hue, 0.06f, 0.24f)
         )
     } else {
         val primary = tone(hue, sat, 0.38f)
-        val surface = tone(hue, 0.10f, 0.98f)
+        val surface = tone(hue, 0.08f, 0.98f)
         lightColorScheme(
             primary = primary,
             onPrimary = Color.White,
             primaryContainer = tone(hue, sat, 0.88f),
             onPrimaryContainer = tone(hue, sat, 0.14f),
-            secondary = tone(secondaryHue, sat * 0.45f, 0.38f),
+            secondary = tone(secondaryHue, sat * 0.55f, 0.40f),
             onSecondary = Color.White,
-            secondaryContainer = tone(secondaryHue, sat * 0.40f, 0.88f),
-            onSecondaryContainer = tone(secondaryHue, sat * 0.45f, 0.14f),
-            tertiary = tone(tertiaryHue, sat * 0.45f, 0.36f),
+            secondaryContainer = tone(secondaryHue, sat * 0.32f, 0.90f),
+            onSecondaryContainer = tone(secondaryHue, sat * 0.45f, 0.16f),
+            tertiary = tone(tertiaryHue, sat * 0.45f, 0.38f),
             onTertiary = Color.White,
-            tertiaryContainer = tone(tertiaryHue, sat * 0.40f, 0.88f),
-            onTertiaryContainer = tone(tertiaryHue, sat * 0.45f, 0.14f),
+            tertiaryContainer = tone(tertiaryHue, sat * 0.32f, 0.90f),
+            onTertiaryContainer = tone(tertiaryHue, sat * 0.45f, 0.16f),
             surface = surface,
             background = surface,
             onSurface = Color(0xFF1B1B1B),
             onBackground = Color(0xFF1B1B1B),
-            surfaceVariant = tone(hue, 0.15f, 0.90f),
+            surfaceVariant = tone(hue, 0.10f, 0.90f),
             onSurfaceVariant = Color(0xFF444746),
             surfaceTint = primary,
-            surfaceDim = tone(hue, 0.08f, 0.87f),
+            surfaceDim = tone(hue, 0.06f, 0.87f),
             surfaceBright = surface,
             surfaceContainerLowest = Color.White,
-            surfaceContainerLow = tone(hue, 0.10f, 0.96f),
-            surfaceContainer = tone(hue, 0.10f, 0.94f),
-            surfaceContainerHigh = tone(hue, 0.10f, 0.92f),
-            surfaceContainerHighest = tone(hue, 0.10f, 0.90f),
+            surfaceContainerLow = tone(hue, 0.08f, 0.96f),
+            surfaceContainer = tone(hue, 0.08f, 0.94f),
+            surfaceContainerHigh = tone(hue, 0.08f, 0.92f),
+            surfaceContainerHighest = tone(hue, 0.08f, 0.90f),
             outline = tone(hue, 0.06f, 0.46f),
-            outlineVariant = tone(hue, 0.10f, 0.80f)
+            outlineVariant = tone(hue, 0.08f, 0.82f)
         )
     }
 }

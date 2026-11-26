@@ -140,16 +140,20 @@ class InstallReporter @Inject constructor(
         category: String,
         description: String,
         contact: String?,
-        recentLogs: String
+        recentLogs: String,
+        deviceSnapshot: String = ""
     ): Result<Unit> = withContext(Dispatchers.IO) {
         val payload = JSONObject().apply {
             put("installId", getOrCreateInstallId())
             put("version", BuildConfig.VERSION_NAME)
             put("code", BuildConfig.VERSION_CODE)
             put("channel", BuildConfig.DISTRIBUTION_CHANNEL)
+            put("androidVersion", Build.VERSION.RELEASE.orEmpty().take(24))
+            put("device", "${Build.MANUFACTURER} ${Build.MODEL}".take(64))
             put("category", category.trim().take(48))
             put("description", AppLogBuffer.sanitizeMultiline(description, 2500))
             if (!contact.isNullOrBlank()) put("contact", contact.trim().take(120))
+            if (deviceSnapshot.isNotBlank()) put("deviceSnapshot", AppLogBuffer.sanitizeMultiline(deviceSnapshot, 4000))
             put("recentLogs", AppLogBuffer.sanitizeMultiline(recentLogs, 8000))
         }
         when (postJson(reportEndpoint, payload)) {

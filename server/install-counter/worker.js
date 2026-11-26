@@ -386,9 +386,12 @@ async function submitReport(request, env) {
     version: field(data.version, 24),
     code: Number(data.code || 0),
     channel: field(data.channel, 24) || "github",
+    device: field(data.device, 64),
+    androidVersion: field(data.androidVersion, 24),
     category: field(data.category, 48) || "bug",
     description,
     contact: field(data.contact, 120),
+    deviceSnapshot: sanitizeMultiline(data.deviceSnapshot, 4000),
     recentLogs: sanitizeMultiline(data.recentLogs, 8000)
   };
 
@@ -407,9 +410,11 @@ async function submitReport(request, env) {
   const tgText = [
     `🫨 Shake Bug Report (${entry.channel} v${entry.version})`,
     `Category: ${entry.category}`,
+    entry.device || entry.androidVersion ? `Device: ${entry.device || "?"} | Android ${entry.androidVersion || "?"}` : "",
     entry.contact ? `Contact: ${entry.contact}` : "",
-    `\n${description.slice(0, 1500)}`,
-    entry.recentLogs ? `\nRecent logs (tail):\n${entry.recentLogs.slice(-900)}` : ""
+    `\n${description.slice(0, 1200)}`,
+    entry.deviceSnapshot ? `\nState:\n${entry.deviceSnapshot.slice(0, 1500)}` : "",
+    entry.recentLogs ? `\nRecent logs (tail):\n${entry.recentLogs.slice(-800)}` : ""
   ].filter(Boolean).join("\n");
   await sendTelegram(env, tgText);
 
@@ -730,7 +735,11 @@ function renderItems(items) {
       '</div>';
     }
     const body = v.description || v.text || v.message || "";
+    const stateSnap = v.deviceSnapshot || "";
     const logs = v.recentLogs || v.stack || "";
+    const combinedLogs = stateSnap && !logs.includes("=== DEVICE & SYSTEM ===")
+      ? stateSnap + (logs ? "\n\n" + logs : "")
+      : logs;
     const pillClass = activeTab === "crashes" ? "danger" : (activeTab === "reports" ? "warn" : "");
     return '<div class="card">' +
       '<div class="meta">' +
@@ -741,7 +750,7 @@ function renderItems(items) {
         '<span>' + esc(fmtDate(v.at)) + '</span>' +
       '</div>' +
       (body ? '<div style="white-space:pre-wrap;font-size:14px">' + esc(body) + '</div>' : '') +
-      (logs ? '<details><summary>View Logs / Stack Trace</summary><div style="margin-top:8px"><button class="sec" onclick="copyPre(' + idx + ')">Copy</button></div><pre id="pre_' + idx + '">' + esc(logs) + '</pre></details>' : '') +
+      (combinedLogs ? '<details><summary>View State Snapshot & Logs</summary><div style="margin-top:8px"><button class="sec" onclick="copyPre(' + idx + ')">Copy</button></div><pre id="pre_' + idx + '">' + esc(combinedLogs) + '</pre></details>' : '') +
     '</div>';
   }).join("");
 }

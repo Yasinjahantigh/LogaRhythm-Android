@@ -34,8 +34,8 @@ fun TrackFormatLabel(
     if (!label.isNullOrBlank()) {
         Text(
             text = label,
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.65f),
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             modifier = modifier.testTag("player_format_label")

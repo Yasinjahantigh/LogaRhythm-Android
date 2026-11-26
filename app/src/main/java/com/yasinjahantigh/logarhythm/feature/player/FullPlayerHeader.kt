@@ -1,13 +1,19 @@
 package com.yasinjahantigh.logarhythm.feature.player
 
+import androidx.compose.foundation.MarqueeSpacing
+import androidx.compose.foundation.basicMarquee
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Album
 import androidx.compose.material.icons.filled.AutoAwesome
@@ -37,12 +43,15 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.yasinjahantigh.logarhythm.R
+import com.yasinjahantigh.logarhythm.ui.components.ArtworkImage
 
 /**
  * Slim header: collapse on the left, a live "Now playing" label (with the equaliser) and the
@@ -68,7 +77,11 @@ fun FullPlayerHeader(
     onToggleAbLoop: () -> Unit = {},
     onOpenCarMode: () -> Unit = {},
     onHideSong: (() -> Unit)? = null,
-    onDeleteSong: (() -> Unit)? = null
+    onDeleteSong: (() -> Unit)? = null,
+    nextTrackTitle: String? = null,
+    nextTrackArtworkUri: String? = null,
+    showNextInHeader: Boolean = true,
+    onOpenQueue: (() -> Unit)? = null
 ) {
     var showMoreMenu by remember { mutableStateOf(false) }
     val scheme = MaterialTheme.colorScheme
@@ -91,32 +104,70 @@ fun FullPlayerHeader(
         }
 
         Column(
-            modifier = Modifier.weight(1f),
+            modifier = Modifier
+                .weight(1f)
+                .clip(CircleShape)
+                .then(
+                    if (showNextInHeader && !nextTrackTitle.isNullOrBlank() && onOpenQueue != null) {
+                        Modifier.clickable(onClick = onOpenQueue)
+                    } else {
+                        Modifier
+                    }
+                )
+                .padding(horizontal = 8.dp, vertical = 4.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                EqualizerVisualizer(
-                    isPlaying = isPlaying,
-                    barColor = scheme.primary,
-                    maxHeight = 12.dp,
-                    barCount = 4
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = stringResource(R.string.now_playing),
-                    style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.SemiBold,
-                    color = scheme.onSurface
-                )
-            }
-            if (!subtitle.isNullOrBlank()) {
-                Text(
-                    text = subtitle,
-                    style = MaterialTheme.typography.labelMedium,
-                    color = scheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
+            if (showNextInHeader && !nextTrackTitle.isNullOrBlank()) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    ArtworkImage(
+                        uri = nextTrackArtworkUri,
+                        fallbackKey = nextTrackTitle,
+                        shape = RoundedCornerShape(5.dp),
+                        glyphSize = 9.sp,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = stringResource(R.string.player_up_next_label, nextTrackTitle),
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Medium,
+                        color = scheme.onSurface.copy(alpha = 0.86f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.basicMarquee(
+                            iterations = Int.MAX_VALUE,
+                            initialDelayMillis = 2000,
+                            spacing = MarqueeSpacing(36.dp),
+                            velocity = 26.dp
+                        )
+                    )
+                }
+            } else {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    EqualizerVisualizer(
+                        isPlaying = isPlaying,
+                        barColor = scheme.primary,
+                        maxHeight = 12.dp,
+                        barCount = 4
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = stringResource(R.string.now_playing),
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.SemiBold,
+                        color = scheme.onSurface
+                    )
+                }
+                if (!subtitle.isNullOrBlank()) {
+                    Text(
+                        text = subtitle,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = scheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
             }
         }
 

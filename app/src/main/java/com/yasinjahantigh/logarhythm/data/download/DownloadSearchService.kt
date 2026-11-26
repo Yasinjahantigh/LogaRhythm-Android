@@ -1,5 +1,6 @@
 package com.yasinjahantigh.logarhythm.data.download
 
+import com.yasinjahantigh.logarhythm.data.analytics.AppLog
 import com.yasinjahantigh.logarhythm.data.download.metadata.DeezerClient
 import com.yasinjahantigh.logarhythm.data.download.musicman.MusicManClient
 import com.yasinjahantigh.logarhythm.data.download.radiojavan.RadioJavanClient
@@ -54,6 +55,10 @@ class DownloadSearchService @Inject constructor(
 
         // Resolve initial VPN-aware bucket order (MusicMan first when VPN is off; fastest source when VPN is on)
         var bucketOrder = sourceRouter.rankedSearchBuckets()
+        AppLog.i(
+            "DownloadSearch",
+            "Start q='${query.take(40)}' src=${source?.raw ?: "ALL"} cat=${category.name} vpn=${sourceRouter.isVpnActive()} order=${bucketOrder.joinToString(",")}"
+        )
 
         suspend fun publish(isFinal: Boolean) {
             // Re-read fastest order after live timings arrive while VPN is active
@@ -179,8 +184,14 @@ class DownloadSearchService @Inject constructor(
                 null -> setOf(DownloadSource.YOUTUBE, DownloadSource.SOUNDCLOUD, DownloadSource.BANDCAMP)
                 else -> setOf(source)
             }
+            AppLog.i("DownloadSearch", "Trigger yt-dlp q='${query.take(40)}' explicit=$explicitYtDlp fastCount=$fastCount")
             val ytOutcome = withTimeoutOrNull(YT_FALLBACK_TIMEOUT_MS) {
                 ytDlp.search(query, ytSources)
+            }
+            if (ytOutcome == null) {
+                AppLog.w("DownloadSearch", "yt-dlp search timed out (${YT_FALLBACK_TIMEOUT_MS}ms) q='${query.take(40)}'")
+            } else {
+                AppLog.i("DownloadSearch", "yt-dlp search results=${ytOutcome.results.size} fail=${ytOutcome.failure?.raw}")
             }
             mutex.withLock {
                 if (ytOutcome != null) {
@@ -190,6 +201,10 @@ class DownloadSearchService @Inject constructor(
             }
         }
 
+        val summary = mutex.withLock {
+            byBucket.entries.joinToString(" ") { "${it.key}=${it.value.size}" }
+        }
+        AppLog.i("DownloadSearch", "Done q='${query.take(40)}' [$summary] fails=${failures.joinToString(",") { it.raw }}")
         publish(isFinal = true)
     }
 

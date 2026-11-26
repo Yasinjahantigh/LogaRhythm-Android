@@ -1,6 +1,7 @@
 package com.yasinjahantigh.logarhythm.data.download.radiojavan
 
 import android.os.SystemClock
+import com.yasinjahantigh.logarhythm.data.analytics.AppLog
 import com.yasinjahantigh.logarhythm.data.download.AudioFileProbe
 import com.yasinjahantigh.logarhythm.domain.download.DownloadPipelineException
 import com.yasinjahantigh.logarhythm.domain.download.DownloadTitleParser
@@ -42,10 +43,13 @@ class RadioJavanDownloader @Inject constructor(
         onProgress: (Float, Long, String) -> Unit
     ): File = withContext(Dispatchers.IO) {
         val resolvedUrl = clientApi.resolveMp3Url(songId, sourceUrl)
-            ?: throw DownloadPipelineException(
-                DownloadErrorKind.CONTENT,
-                "Radio Javan could not resolve the audio file for this track."
-            )
+            ?: run {
+                AppLog.w("RadioJavan", "Could not resolve MP3 URL songId=$songId")
+                throw DownloadPipelineException(
+                    DownloadErrorKind.CONTENT,
+                    "Radio Javan could not resolve the audio file for this track."
+                )
+            }
 
         val safeId = DownloadTitleParser.sanitizeFileName(songId.ifBlank { "radiojavan_track" })
         val target = File(workspace, "$safeId.part")
@@ -57,6 +61,7 @@ class RadioJavanDownloader @Inject constructor(
             } catch (pipeline: DownloadPipelineException) {
                 // If direct fails on blocked network, try proxy
                 if (pipeline.kind == DownloadErrorKind.NETWORK) {
+                    AppLog.w("RadioJavan", "Direct audio network fail songId=$songId, retrying via proxy")
                     target.delete()
                     val proxiedUrl = proxyBase + URLEncoder.encode(resolvedUrl, Charsets.UTF_8.name())
                     downloadTo(target, proxiedUrl, downloadId, onProgress)

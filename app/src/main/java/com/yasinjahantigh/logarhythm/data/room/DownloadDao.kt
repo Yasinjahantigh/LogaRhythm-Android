@@ -108,6 +108,9 @@ interface DownloadDao {
     @Query("DELETE FROM download_history WHERE id = :id")
     suspend fun delete(id: String)
 
+    @Query("SELECT * FROM download_history ORDER BY updatedAt DESC")
+    suspend fun getAllOnce(): List<DownloadEntity>
+
     @Query("DELETE FROM download_history WHERE status IN ('saved','failed','cancelled')")
     suspend fun deleteFinished()
 }

@@ -19,6 +19,7 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.MarqueeSpacing
 import androidx.compose.foundation.background
 import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.clickable
@@ -46,10 +47,12 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Album
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.GraphicEq
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.TouchApp
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.ui.text.style.TextAlign
@@ -194,9 +197,14 @@ fun FullPlayerScreen(
     val isVinylMode by viewModel.isVinylMode.collectAsStateWithLifecycle()
     val audioOutputState by viewModel.audioOutputState.collectAsStateWithLifecycle()
     val artistInfo by viewModel.currentArtistInfo.collectAsStateWithLifecycle()
+    val artistsInfo by viewModel.currentArtistsInfo.collectAsStateWithLifecycle()
+    val uiVisibility by viewModel.uiVisibility.collectAsStateWithLifecycle()
     val isInstrumentalSilence by lyricsViewModel.isInstrumentalSilence.collectAsStateWithLifecycle()
 
     var showLyrics by remember { mutableStateOf(false) }
+    LaunchedEffect(showLyrics) {
+        com.yasinjahantigh.logarhythm.data.analytics.AppDiagnosticContext.onLyricsOpenChanged(showLyrics)
+    }
     var showSpeedDialog by remember { mutableStateOf(false) }
     var showSleepTimerDialog by remember { mutableStateOf(false) }
     var showEqualizerSheet by remember { mutableStateOf(false) }
@@ -377,7 +385,7 @@ fun FullPlayerScreen(
     if (showAboutArtistSheet && track != null) {
         AboutArtistSheet(
             track = track,
-            artistInfo = artistInfo,
+            artistsInfo = artistsInfo.ifEmpty { listOfNotNull(artistInfo) },
             onPlayTrack = { t -> viewModel.play(listOf(t), 0) },
             onOpenArtistPage = onNavigateToArtist,
             onDismiss = { showAboutArtistSheet = false }
@@ -402,10 +410,10 @@ fun FullPlayerScreen(
         animationSpec = tween(durationMillis = 700),
         label = "player_bg_color"
     )
-    // Blend the artwork color into the player surface so the whole screen follows the cover.
+    // Subtle tint into the base surface so artwork color enriches the stage without turning controls muddy.
     val playerSurfaceColor = remember(animatedBgColor, surfaceColor) {
         val blended = androidx.core.graphics.ColorUtils.blendARGB(
-            surfaceColor.toArgb(), animatedBgColor.toArgb(), 0.28f
+            surfaceColor.toArgb(), animatedBgColor.toArgb(), 0.14f
         )
         Color(blended)
     }
@@ -453,6 +461,8 @@ fun FullPlayerScreen(
     val onRewind10 = { viewModel.seekTo((positionState.value - 10_000L).coerceAtLeast(0L)) }
     val onForward10 = { viewModel.seekTo((positionState.value + 10_000L).coerceAtMost(durationMs)) }
 
+    val primaryArtistPhotoUri = artistsInfo.firstOrNull()?.photoUri
+
     // The middle of the screen: big artwork, or lyrics (with a compact song row in portrait).
     val stage: @Composable (Modifier, Boolean) -> Unit = { stageModifier, compactIdentity ->
         Box(modifier = stageModifier) {
@@ -476,9 +486,12 @@ fun FullPlayerScreen(
                                 isFavorite = isFavorite,
                                 onToggleFavorite = viewModel::toggleFavorite,
                                 audioOutputState = audioOutputState,
-                                onOpenAudioOutput = { showAudioOutputSheet = true },
-                                artistSplitConfig = artistSplitConfig,
-                                onArtistClick = onNavigateToArtist
+                                onOpenAudioOutput = if (uiVisibility.playerShowOutputButton) {
+                                    { showAudioOutputSheet = true }
+                                } else null,
+                                artistPhotoUri = primaryArtistPhotoUri,
+                                showArtistBadge = uiVisibility.showArtistPortraitBadges,
+                                onOpenAboutArtist = { showAboutArtistSheet = true }
                             )
                         }
                         LyricsView(
@@ -544,12 +557,14 @@ fun FullPlayerScreen(
                         .widthIn(max = 1120.dp)
                         .statusBarsPadding()
                         .navigationBarsPadding()
-                        .padding(horizontal = if (isLandscapeLayout) 32.dp else 24.dp, vertical = 6.dp),
+                        .padding(horizontal = if (isLandscapeLayout) 32.dp else 22.dp, vertical = 4.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     FullPlayerHeader(
                         isPlaying = isPlaying,
-                        subtitle = albumText,
+                        subtitle = albumText?.takeUnless {
+                            it.equals(track?.artist.cleanMetaOrNull(), ignoreCase = true)
+                        },
                         isVinylMode = isVinylMode,
                         onCollapse = onCollapse,
                         onToggleVinyl = { viewModel.setVinylMode(!isVinylMode) },
@@ -589,7 +604,11 @@ fun FullPlayerScreen(
                         },
                         onDeleteSong = if (track != null) {
                             { showDeleteConfirmDialog = true }
-                        } else null
+                        } else null,
+                        nextTrackTitle = nextTrack?.title.cleanMetaOrNull(),
+                        nextTrackArtworkUri = nextTrack?.artworkUri,
+                        showNextInHeader = uiVisibility.playerShowUpNextHeader,
+                        onOpenQueue = viewModel::openQueue
                     )
 
                     if (!showLyrics) {
@@ -630,9 +649,13 @@ fun FullPlayerScreen(
                                     isFavorite = isFavorite,
                                     onToggleFavorite = viewModel::toggleFavorite,
                                     audioOutputState = audioOutputState,
-                                    onOpenAudioOutput = { showAudioOutputSheet = true },
-                                    artistSplitConfig = artistSplitConfig,
-                                    onArtistClick = onNavigateToArtist
+                                    onOpenAudioOutput = if (uiVisibility.playerShowOutputButton) {
+                                        { showAudioOutputSheet = true }
+                                    } else null,
+                                    showFormatBadge = uiVisibility.playerShowFormatBadge,
+                                    showArtistBadge = uiVisibility.showArtistPortraitBadges,
+                                    artistPhotoUri = primaryArtistPhotoUri,
+                                    onOpenAboutArtist = { showAboutArtistSheet = true }
                                 )
                                 PlaybackTimeline(
                                     positionState = positionState,
@@ -643,6 +666,8 @@ fun FullPlayerScreen(
                                     onSeek = viewModel::seekTo,
                                     onRewind10 = onRewind10,
                                     onForward10 = onForward10,
+                                    showSeekButtons = uiVisibility.playerShowSeekButtons,
+                                    useWaveform = uiVisibility.playerWaveformSeekbar,
                                     modifier = Modifier.padding(top = 6.dp)
                                 )
                                 FullPlayerControls(
@@ -657,21 +682,17 @@ fun FullPlayerScreen(
                                     modifier = Modifier.padding(vertical = 8.dp),
                                     compact = true
                                 )
-                                PlayerQuickActions(
-                                    showLyrics = showLyrics,
-                                    onToggleLyrics = { showLyrics = !showLyrics },
-                                    onOpenQueue = viewModel::openQueue,
-                                    timerLabel = timerLabel,
-                                    onOpenTimer = { showSleepTimerDialog = true },
-                                    speedLabel = speedLabel,
-                                    onOpenSpeed = { showSpeedDialog = true }
-                                )
-                                PlayerBottomDiscoveryStrip(
-                                    nextTrack = nextTrack,
-                                    hasArtistInfo = track != null,
-                                    onOpenQueue = viewModel::openQueue,
-                                    onOpenAboutArtist = { showAboutArtistSheet = true }
-                                )
+                                if (uiVisibility.playerShowQuickActions) {
+                                    PlayerQuickActions(
+                                        showLyrics = showLyrics,
+                                        onToggleLyrics = { showLyrics = !showLyrics },
+                                        timerLabel = timerLabel,
+                                        onOpenTimer = { showSleepTimerDialog = true },
+                                        speedLabel = speedLabel,
+                                        onOpenSpeed = { showSpeedDialog = true },
+                                        onOpenQueue = viewModel::openQueue
+                                    )
+                                }
                             }
                         }
                     } else {
@@ -684,9 +705,13 @@ fun FullPlayerScreen(
                                 isFavorite = isFavorite,
                                 onToggleFavorite = viewModel::toggleFavorite,
                                 audioOutputState = audioOutputState,
-                                onOpenAudioOutput = { showAudioOutputSheet = true },
-                                artistSplitConfig = artistSplitConfig,
-                                onArtistClick = onNavigateToArtist
+                                onOpenAudioOutput = if (uiVisibility.playerShowOutputButton) {
+                                    { showAudioOutputSheet = true }
+                                } else null,
+                                showFormatBadge = uiVisibility.playerShowFormatBadge,
+                                showArtistBadge = uiVisibility.showArtistPortraitBadges,
+                                artistPhotoUri = primaryArtistPhotoUri,
+                                onOpenAboutArtist = { showAboutArtistSheet = true }
                             )
                         }
 
@@ -729,6 +754,8 @@ fun FullPlayerScreen(
                             onSeek = viewModel::seekTo,
                             onRewind10 = onRewind10,
                             onForward10 = onForward10,
+                            showSeekButtons = uiVisibility.playerShowSeekButtons,
+                            useWaveform = uiVisibility.playerWaveformSeekbar,
                             modifier = Modifier.padding(top = 8.dp)
                         )
 
@@ -741,26 +768,19 @@ fun FullPlayerScreen(
                             onNext = viewModel::next,
                             onToggleShuffle = viewModel::toggleShuffle,
                             onCycleRepeat = viewModel::cycleRepeat,
-                            modifier = Modifier.padding(top = 4.dp, bottom = 14.dp)
+                            modifier = Modifier.padding(top = 6.dp, bottom = 14.dp)
                         )
 
-                        PlayerQuickActions(
-                            showLyrics = showLyrics,
-                            onToggleLyrics = { showLyrics = !showLyrics },
-                            onOpenQueue = viewModel::openQueue,
-                            timerLabel = timerLabel,
-                            onOpenTimer = { showSleepTimerDialog = true },
-                            speedLabel = speedLabel,
-                            onOpenSpeed = { showSpeedDialog = true },
-                            modifier = Modifier.padding(bottom = 4.dp)
-                        )
-                        if (!showLyrics) {
-                            PlayerBottomDiscoveryStrip(
-                                nextTrack = nextTrack,
-                                hasArtistInfo = track != null,
+                        if (uiVisibility.playerShowQuickActions) {
+                            PlayerQuickActions(
+                                showLyrics = showLyrics,
+                                onToggleLyrics = { showLyrics = !showLyrics },
+                                timerLabel = timerLabel,
+                                onOpenTimer = { showSleepTimerDialog = true },
+                                speedLabel = speedLabel,
+                                onOpenSpeed = { showSpeedDialog = true },
                                 onOpenQueue = viewModel::openQueue,
-                                onOpenAboutArtist = { showAboutArtistSheet = true },
-                                modifier = Modifier.padding(bottom = 4.dp)
+                                modifier = Modifier.padding(bottom = 6.dp)
                             )
                         }
                     }
@@ -806,26 +826,25 @@ private fun PlayerBackdrop(
             .fillMaxSize()
             .drawWithCache {
                 val topGlow = Brush.radialGradient(
-                    colors = listOf(tint.copy(alpha = 0.55f), Color.Transparent),
-                    center = Offset(size.width * 0.12f, size.height * 0.06f),
-                    radius = size.maxDimension * 0.9f
+                    colors = listOf(tint.copy(alpha = 0.48f), tint.copy(alpha = 0.18f), Color.Transparent),
+                    center = Offset(size.width * 0.5f, size.height * 0.22f),
+                    radius = size.maxDimension * 0.78f
                 )
                 val bottomGlow = Brush.radialGradient(
-                    colors = listOf(glow.copy(alpha = 0.14f), Color.Transparent),
-                    center = Offset(size.width * 0.96f, size.height * 0.88f),
-                    radius = size.maxDimension * 0.75f
+                    colors = listOf(glow.copy(alpha = 0.08f), Color.Transparent),
+                    center = Offset(size.width * 0.85f, size.height * 0.82f),
+                    radius = size.maxDimension * 0.65f
                 )
                 val silenceHalo = Brush.radialGradient(
                     colors = listOf(tint.copy(alpha = 0.42f), glow.copy(alpha = 0.16f), Color.Transparent),
-                    center = Offset(size.width * 0.5f, size.height * 0.38f),
+                    center = Offset(size.width * 0.5f, size.height * 0.36f),
                     radius = size.maxDimension * 0.72f
                 )
                 val scrim = Brush.verticalGradient(
-                    colors = listOf(
-                        surface.copy(alpha = 0.30f),
-                        surface.copy(alpha = 0.80f),
-                        surface
-                    )
+                    0f to surface.copy(alpha = 0.20f),
+                    0.48f to surface.copy(alpha = 0.68f),
+                    0.78f to surface.copy(alpha = 0.94f),
+                    1f to surface
                 )
                 onDrawBehind {
                     drawRect(brush = topGlow)
@@ -1098,12 +1117,12 @@ private fun FavoriteButton(
     val scheme = MaterialTheme.colorScheme
     val haptic = LocalHapticFeedback.current
     val favoriteContainer by animateColorAsState(
-        targetValue = if (isFavorite) scheme.primaryContainer else scheme.surfaceContainerHighest.copy(alpha = 0.6f),
+        targetValue = if (isFavorite) scheme.primary.copy(alpha = 0.20f) else scheme.onSurface.copy(alpha = 0.08f),
         animationSpec = tween(250),
         label = "favorite_container"
     )
     val heartScale by animateFloatAsState(
-        targetValue = if (isFavorite) 1.18f else 1f,
+        targetValue = if (isFavorite) 1.16f else 1f,
         animationSpec = spring(dampingRatio = 0.45f, stiffness = 400f),
         label = "favorite_scale"
     )
@@ -1113,16 +1132,16 @@ private fun FavoriteButton(
             onToggleFavorite()
         },
         modifier = modifier
-            .size(52.dp)
+            .size(42.dp)
             .background(favoriteContainer, CircleShape)
             .testTag("player_favorite_button")
     ) {
         Icon(
             imageVector = if (isFavorite) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
             contentDescription = stringResource(if (isFavorite) R.string.cd_unfavorite else R.string.cd_favorite),
-            tint = if (isFavorite) scheme.onPrimaryContainer else scheme.onSurfaceVariant,
+            tint = if (isFavorite) scheme.primary else scheme.onSurface.copy(alpha = 0.78f),
             modifier = Modifier
-                .size(26.dp)
+                .size(21.dp)
                 .graphicsLayer {
                     scaleX = heartScale
                     scaleY = heartScale
@@ -1140,23 +1159,90 @@ private fun AudioOutputButton(
     val scheme = MaterialTheme.colorScheme
     val isExternal = audioOutputState.activeKind != com.yasinjahantigh.logarhythm.playback.AudioOutputKind.SPEAKER
     val container by animateColorAsState(
-        targetValue = if (isExternal) scheme.secondaryContainer else scheme.surfaceContainerHighest.copy(alpha = 0.6f),
+        targetValue = if (isExternal) scheme.primary.copy(alpha = 0.16f) else scheme.onSurface.copy(alpha = 0.08f),
         animationSpec = tween(250),
         label = "audio_output_container"
     )
     IconButton(
         onClick = onClick,
         modifier = modifier
-            .size(48.dp)
+            .size(42.dp)
             .background(container, CircleShape)
             .testTag("player_audio_output_button")
     ) {
         Icon(
             imageVector = audioOutputState.activeKind.icon(),
             contentDescription = stringResource(R.string.cd_audio_output_switcher),
-            tint = if (isExternal) scheme.onSecondaryContainer else scheme.onSurfaceVariant,
-            modifier = Modifier.size(22.dp)
+            tint = if (isExternal) scheme.primary else scheme.onSurface.copy(alpha = 0.78f),
+            modifier = Modifier.size(20.dp)
         )
+    }
+}
+
+@Composable
+private fun ArtistActionPill(
+    artistName: String,
+    artistPhotoUri: String?,
+    showArtistBadge: Boolean,
+    textStyle: androidx.compose.ui.text.TextStyle,
+    onClick: (() -> Unit)?,
+    modifier: Modifier = Modifier
+) {
+    val scheme = MaterialTheme.colorScheme
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = modifier
+            .clip(RoundedCornerShape(10.dp))
+            .then(
+                if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier
+            )
+            .padding(vertical = 2.dp)
+    ) {
+        if (showArtistBadge) {
+            Box(
+                modifier = Modifier
+                    .size(20.dp)
+                    .clip(CircleShape)
+                    .background(scheme.primary.copy(alpha = 0.16f)),
+                contentAlignment = Alignment.Center
+            ) {
+                if (!artistPhotoUri.isNullOrBlank()) {
+                    ArtworkImage(
+                        uri = artistPhotoUri,
+                        fallbackKey = artistName,
+                        shape = CircleShape,
+                        glyphSize = 10.sp,
+                        contentDescription = null,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                } else {
+                    Icon(
+                        imageVector = Icons.Filled.Person,
+                        contentDescription = null,
+                        tint = scheme.primary,
+                        modifier = Modifier.size(13.dp)
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.width(6.dp))
+        }
+        Text(
+            text = artistName,
+            style = textStyle,
+            color = scheme.primary.copy(alpha = 0.94f),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f, fill = false)
+        )
+        if (onClick != null) {
+            Spacer(modifier = Modifier.width(2.dp))
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                contentDescription = stringResource(R.string.player_about_artist),
+                tint = scheme.primary.copy(alpha = 0.72f),
+                modifier = Modifier.size(16.dp)
+            )
+        }
     }
 }
 
@@ -1169,8 +1255,9 @@ private fun CompactTrackRow(
     modifier: Modifier = Modifier,
     audioOutputState: com.yasinjahantigh.logarhythm.playback.AudioOutputState = com.yasinjahantigh.logarhythm.playback.AudioOutputState(),
     onOpenAudioOutput: (() -> Unit)? = null,
-    artistSplitConfig: com.yasinjahantigh.logarhythm.domain.library.ArtistSplitConfig = com.yasinjahantigh.logarhythm.domain.library.ArtistSplitConfig(),
-    onArtistClick: ((String) -> Unit)? = null
+    artistPhotoUri: String? = null,
+    showArtistBadge: Boolean = true,
+    onOpenAboutArtist: (() -> Unit)? = null
 ) {
     val title = track?.title.cleanMetaOrNull() ?: stringResource(R.string.unknown_title)
     val artist = track?.artist.cleanMetaOrNull() ?: stringResource(R.string.unknown_artist)
@@ -1195,13 +1282,12 @@ private fun CompactTrackRow(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
-            com.yasinjahantigh.logarhythm.ui.components.SplitArtistText(
-                rawArtist = track?.artist,
-                displayArtist = artist,
-                artistSplitConfig = artistSplitConfig,
-                onArtistClick = onArtistClick,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.primary
+            ArtistActionPill(
+                artistName = artist,
+                artistPhotoUri = artistPhotoUri,
+                showArtistBadge = showArtistBadge,
+                textStyle = MaterialTheme.typography.bodyMedium,
+                onClick = if (track != null) onOpenAboutArtist else null
             )
         }
         Row(
@@ -1224,8 +1310,10 @@ fun TrackIdentityAndActions(
     modifier: Modifier = Modifier,
     audioOutputState: com.yasinjahantigh.logarhythm.playback.AudioOutputState = com.yasinjahantigh.logarhythm.playback.AudioOutputState(),
     onOpenAudioOutput: (() -> Unit)? = null,
-    artistSplitConfig: com.yasinjahantigh.logarhythm.domain.library.ArtistSplitConfig = com.yasinjahantigh.logarhythm.domain.library.ArtistSplitConfig(),
-    onArtistClick: ((String) -> Unit)? = null
+    showFormatBadge: Boolean = true,
+    showArtistBadge: Boolean = true,
+    artistPhotoUri: String? = null,
+    onOpenAboutArtist: (() -> Unit)? = null
 ) {
     val displayTitle = track?.title.cleanMetaOrNull() ?: stringResource(R.string.unknown_title)
     val displayArtist = track?.artist.cleanMetaOrNull() ?: stringResource(R.string.unknown_artist)
@@ -1237,25 +1325,33 @@ fun TrackIdentityAndActions(
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
         Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
-            TrackFormatLabel(track)
-            Spacer(modifier = Modifier.height(2.dp))
             Text(
                 text = displayTitle,
-                style = MaterialTheme.typography.headlineMedium,
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold,
                 color = scheme.onSurface,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.basicMarquee(initialDelayMillis = 1800)
+                modifier = Modifier.basicMarquee(
+                    iterations = Int.MAX_VALUE,
+                    initialDelayMillis = 2400,
+                    spacing = MarqueeSpacing(48.dp),
+                    velocity = 28.dp
+                )
             )
-            Spacer(modifier = Modifier.height(2.dp))
-            com.yasinjahantigh.logarhythm.ui.components.SplitArtistText(
-                rawArtist = track?.artist,
-                displayArtist = displayArtist,
-                artistSplitConfig = artistSplitConfig,
-                onArtistClick = onArtistClick,
-                style = MaterialTheme.typography.titleMedium,
-                color = scheme.primary
+            Spacer(modifier = Modifier.height(3.dp))
+            ArtistActionPill(
+                artistName = displayArtist,
+                artistPhotoUri = artistPhotoUri,
+                showArtistBadge = showArtistBadge,
+                textStyle = MaterialTheme.typography.titleMedium,
+                onClick = if (track != null) onOpenAboutArtist else null,
+                modifier = Modifier.testTag("player_about_artist_pill")
             )
+            if (showFormatBadge) {
+                Spacer(modifier = Modifier.height(2.dp))
+                TrackFormatLabel(track)
+            }
         }
         Row(
             horizontalArrangement = Arrangement.spacedBy(8.dp),

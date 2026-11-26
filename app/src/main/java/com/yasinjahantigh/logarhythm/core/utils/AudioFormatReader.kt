@@ -78,11 +78,12 @@ object AudioFormatReader {
             val codec = codecName(mime)
             val lossless = (codec != null && codec in LOSSLESS_CODECS) ||
                 (extension != null && extension in LOSSLESS_EXTENSIONS)
-            val estimated = bitrate <= 0
+            val rawKbps = if (bitrate > 2_000) (bitrate + 500) / 1000 else bitrate
+            val estimated = rawKbps <= 0
             val effectiveBitrate = if (lossless) {
                 0
             } else {
-                bitrate.takeIf { it > 0 }
+                rawKbps.takeIf { it > 0 }
                     ?: estimateBitrateKbps(context, path, uri, track.durationMs)
             }
 

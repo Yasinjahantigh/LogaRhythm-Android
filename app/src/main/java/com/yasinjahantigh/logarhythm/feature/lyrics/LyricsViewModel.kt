@@ -159,6 +159,38 @@ class LyricsViewModel @Inject constructor(
     }.distinctUntilChanged().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
 
     init {
+        viewModelScope.launch {
+            combine(
+                currentTrack,
+                _isLoading,
+                currentLyrics,
+                isHidden,
+                lyricsMismatch,
+                _translatedLines,
+                _translationFailed
+            ) { values ->
+                val track = values[0] as Track?
+                val loading = values[1] as Boolean
+                val lyrics = values[2] as Lyrics?
+                val hidden = values[3] as Boolean
+                val mismatch = values[4] as Boolean
+                @Suppress("UNCHECKED_CAST")
+                val translated = values[5] as List<String>?
+                val transFail = values[6] as Boolean
+                com.yasinjahantigh.logarhythm.data.analytics.AppDiagnosticContext.onLyricsState(
+                    trackId = track?.id,
+                    loading = loading,
+                    hasLyrics = lyrics != null && !lyrics.isEmpty,
+                    isSynced = lyrics?.isSynced == true,
+                    lineCount = lyrics?.lines?.size ?: lyrics?.plainText?.lines()?.count { it.isNotBlank() } ?: 0,
+                    source = lyrics?.source,
+                    hidden = hidden,
+                    mismatch = mismatch,
+                    translatedCount = translated?.size ?: 0,
+                    translationFailed = transFail
+                )
+            }.collect {}
+        }
         // Automatically attempt to discover/load lyrics when track changes
         viewModelScope.launch {
             currentTrack.collect { track ->

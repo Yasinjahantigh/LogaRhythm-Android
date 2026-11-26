@@ -8,6 +8,7 @@ import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.workDataOf
+import com.yasinjahantigh.logarhythm.data.analytics.AppLog
 import com.yasinjahantigh.logarhythm.data.datastore.PreferencesManager
 import com.yasinjahantigh.logarhythm.data.download.DownloadWorker
 import com.yasinjahantigh.logarhythm.data.download.DownloadWorkspace
@@ -96,6 +97,7 @@ class DownloadRepositoryImpl @Inject constructor(
         )
 
         enqueueWork(id, ExistingWorkPolicy.KEEP)
+        AppLog.i("Download", "Enqueued id=$id src=${result.source.raw} q=$qualityPref title=${result.title.take(40)}")
         withContext(Dispatchers.IO) { workspace.prune() }
         return id
     }
@@ -111,6 +113,7 @@ class DownloadRepositoryImpl @Inject constructor(
     }
 
     override suspend fun cancel(id: String) {
+        AppLog.i("Download", "Cancelled id=$id")
         dao.markCancelled(id, System.currentTimeMillis())
         runCatching { YoutubeDL.getInstance().destroyProcessById(id) }
         musicManDownloader.cancel(id)
@@ -120,12 +123,14 @@ class DownloadRepositoryImpl @Inject constructor(
     }
 
     override suspend fun retry(id: String) {
+        AppLog.i("Download", "Retry id=$id")
         dao.markQueued(id, System.currentTimeMillis())
         enqueueWork(id, ExistingWorkPolicy.REPLACE)
     }
 
     override suspend fun retryAllFailed(): Int {
         val failed = observeHistory().first().filter { it.status == DownloadStatus.FAILED }
+        AppLog.i("Download", "Retrying all failed count=${failed.size}")
         for (item in failed) {
             dao.markQueued(item.id, System.currentTimeMillis())
             enqueueWork(item.id, ExistingWorkPolicy.REPLACE)

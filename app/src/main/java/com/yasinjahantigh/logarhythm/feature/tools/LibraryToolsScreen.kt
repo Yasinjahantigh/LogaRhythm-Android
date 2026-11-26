@@ -818,8 +818,8 @@ fun LibraryToolsScreen(
                                             color = MaterialTheme.colorScheme.primary
                                         )
                                         val reasonRes = when (group.reason) {
-                                            com.yasinjahantigh.logarhythm.domain.library.DuplicateMatchReason.SAME_FILE_SIZE ->
-                                                R.string.tools_duplicates_reason_size
+                                            com.yasinjahantigh.logarhythm.domain.library.DuplicateMatchReason.IDENTICAL_AUDIO ->
+                                                R.string.tools_duplicates_reason_audio
                                             com.yasinjahantigh.logarhythm.domain.library.DuplicateMatchReason.MULTI_SOURCE ->
                                                 R.string.tools_duplicates_reason_multisource
                                             com.yasinjahantigh.logarhythm.domain.library.DuplicateMatchReason.SAME_METADATA ->

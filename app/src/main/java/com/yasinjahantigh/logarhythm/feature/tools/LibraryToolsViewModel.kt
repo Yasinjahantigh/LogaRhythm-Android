@@ -2,6 +2,7 @@ package com.yasinjahantigh.logarhythm.feature.tools
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.yasinjahantigh.logarhythm.core.utils.AudioFingerprint
 import com.yasinjahantigh.logarhythm.data.datastore.PreferencesManager
 import com.yasinjahantigh.logarhythm.domain.library.ArtistSplitter
 import com.yasinjahantigh.logarhythm.domain.library.DuplicateFinder
@@ -53,9 +54,20 @@ class LibraryToolsViewModel @Inject constructor(
             .flowOn(Dispatchers.IO)
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap())
 
+    private val audioFingerprints: StateFlow<Map<String, String>> =
+        combine(trackRepository.getAllTracks(), trackFileSizes) { tracks, sizes ->
+            resolveCandidateAudioFingerprints(tracks, sizes)
+        }.flowOn(Dispatchers.IO)
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap())
+
     val duplicates: StateFlow<List<DuplicateGroup>?> =
-        combine(trackRepository.getAllTracks(), separators, trackFileSizes) { tracks, seps, sizes ->
-            DuplicateFinder.find(tracks, seps, sizes)
+        combine(
+            trackRepository.getAllTracks(),
+            separators,
+            trackFileSizes,
+            audioFingerprints
+        ) { tracks, seps, sizes, fingerprints ->
+            DuplicateFinder.find(tracks, seps, sizes, fingerprints)
         }.flowOn(Dispatchers.Default)
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
@@ -86,6 +98,23 @@ class LibraryToolsViewModel @Inject constructor(
                 }.getOrDefault(0L)
             }
             if (size > 0L) result[track.id] = size
+        }
+        return result
+    }
+
+    private fun resolveCandidateAudioFingerprints(
+        tracks: List<Track>,
+        fileSizes: Map<String, Long>
+    ): Map<String, String> {
+        val candidateIds = AudioFingerprint.findCandidateIds(tracks, fileSizes)
+        if (candidateIds.isEmpty()) return emptyMap()
+        val result = HashMap<String, String>(candidateIds.size)
+        for (track in tracks) {
+            if (track.id !in candidateIds) continue
+            val fp = AudioFingerprint.computeForTrack(appContext, track)
+            if (!fp.isNullOrBlank()) {
+                result[track.id] = fp
+            }
         }
         return result
     }

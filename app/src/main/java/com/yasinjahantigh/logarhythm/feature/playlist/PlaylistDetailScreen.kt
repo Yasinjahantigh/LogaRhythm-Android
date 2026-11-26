@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -41,11 +42,15 @@ import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -68,7 +73,6 @@ import com.yasinjahantigh.logarhythm.core.utils.TimeUtils
 import com.yasinjahantigh.logarhythm.domain.model.Track
 import com.yasinjahantigh.logarhythm.feature.library.LibraryEmptyHint
 import com.yasinjahantigh.logarhythm.feature.library.SelectionAction
-import com.yasinjahantigh.logarhythm.feature.library.LibraryEmptyHint
 import com.yasinjahantigh.logarhythm.feature.library.SelectionActionBar
 import com.yasinjahantigh.logarhythm.feature.library.SelectionTopBar
 import com.yasinjahantigh.logarhythm.feature.library.TrackListItem
@@ -84,6 +88,7 @@ fun PlaylistDetailScreen(
 ) {
     val playlist by viewModel.playlist.collectAsStateWithLifecycle()
     val tracks by viewModel.tracks.collectAsStateWithLifecycle()
+    val allTracks by viewModel.allTracks.collectAsStateWithLifecycle()
     val allPlaylists by viewModel.allPlaylists.collectAsStateWithLifecycle()
     val isFavorite by viewModel.isFavorite.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
@@ -95,6 +100,7 @@ fun PlaylistDetailScreen(
     var showRenameDialog by remember { mutableStateOf(false) }
     var showDeleteDialog by remember { mutableStateOf(false) }
     var showBatchDeleteDialog by remember { mutableStateOf(false) }
+    var showAddTracksSheet by remember { mutableStateOf(false) }
     var selectedTrackForMenu by remember { mutableStateOf<Track?>(null) }
     var tracksForAddToPlaylist by remember { mutableStateOf<List<Track>?>(null) }
     var selectionMode by remember { mutableStateOf(false) }
@@ -319,6 +325,15 @@ fun PlaylistDetailScreen(
                             topEndAction = {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     IconButton(
+                                        onClick = { showAddTracksSheet = true },
+                                        modifier = Modifier.testTag("playlist_add_songs_button")
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.AutoMirrored.Filled.PlaylistAdd,
+                                            contentDescription = stringResource(R.string.playlist_add_songs)
+                                        )
+                                    }
+                                    IconButton(
                                         onClick = {
                                             showFilterBar = !showFilterBar
                                             if (!showFilterBar) filterQuery = ""
@@ -394,12 +409,33 @@ fun PlaylistDetailScreen(
 
                 if (filteredTracks.isEmpty()) {
                     item {
-                        Box(modifier = Modifier.fillMaxWidth().height(260.dp)) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 28.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center
+                        ) {
                             LibraryEmptyHint(
                                 text = stringResource(R.string.empty_playlist_tracks),
                                 icon = if (isBuiltIn) Icons.Default.Favorite else Icons.AutoMirrored.Filled.QueueMusic,
-                                modifier = Modifier.fillMaxSize()
+                                modifier = Modifier.fillMaxWidth()
                             )
+                            if (filterQuery.isBlank() && allTracks.isNotEmpty()) {
+                                Spacer(modifier = Modifier.height(14.dp))
+                                FilledTonalButton(
+                                    onClick = { showAddTracksSheet = true },
+                                    modifier = Modifier.testTag("playlist_empty_add_songs_button")
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.AutoMirrored.Filled.PlaylistAdd,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(stringResource(R.string.playlist_add_songs))
+                                }
+                            }
                         }
                     }
                 } else {
@@ -440,6 +476,183 @@ fun PlaylistDetailScreen(
                         .align(Alignment.BottomCenter)
                         .padding(bottom = bottomPadding + 10.dp)
                 )
+            }
+        }
+    }
+
+    if (showAddTracksSheet) {
+        val existingIds = remember(tracks) { tracks.mapTo(HashSet()) { it.id } }
+        AddTracksToPlaylistSheet(
+            playlistName = displayName,
+            allTracks = allTracks,
+            existingTrackIds = existingIds,
+            onDismiss = { showAddTracksSheet = false },
+            onConfirmAdd = { chosenIds ->
+                showAddTracksSheet = false
+                viewModel.addTracksToCurrentPlaylist(chosenIds)
+                scope.launch {
+                    snackbarHostState.showSnackbar(
+                        context.getString(R.string.playlist_songs_added_fmt, chosenIds.size)
+                    )
+                }
+            }
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun AddTracksToPlaylistSheet(
+    playlistName: String,
+    allTracks: List<Track>,
+    existingTrackIds: Set<String>,
+    onDismiss: () -> Unit,
+    onConfirmAdd: (List<String>) -> Unit
+) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    var searchQuery by remember { mutableStateOf("") }
+    var pickedIds by remember { mutableStateOf<Set<String>>(emptySet()) }
+
+    val candidateTracks = remember(allTracks, existingTrackIds, searchQuery) {
+        val base = allTracks.filter { it.id !in existingTrackIds }
+        val q = searchQuery.trim().lowercase()
+        if (q.isEmpty()) base
+        else base.filter {
+            it.title.lowercase().contains(q) ||
+                it.artist.lowercase().contains(q) ||
+                it.album.lowercase().contains(q)
+        }
+    }
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp)
+                .padding(bottom = 20.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = stringResource(R.string.playlist_add_songs),
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold
+                    )
+                    if (playlistName.isNotBlank()) {
+                        Text(
+                            text = playlistName,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+                if (candidateTracks.isNotEmpty()) {
+                    val allVisiblePicked = candidateTracks.all { it.id in pickedIds }
+                    TextButton(
+                        onClick = {
+                            pickedIds = if (allVisiblePicked) {
+                                pickedIds - candidateTracks.map { it.id }.toSet()
+                            } else {
+                                pickedIds + candidateTracks.map { it.id }
+                            }
+                        }
+                    ) {
+                        Text(
+                            stringResource(
+                                if (allVisiblePicked) R.string.selection_unselect_all else R.string.selection_select_all
+                            )
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+            OutlinedTextField(
+                value = searchQuery,
+                onValueChange = { searchQuery = it },
+                placeholder = { Text(stringResource(R.string.list_filter_hint)) },
+                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                trailingIcon = if (searchQuery.isNotEmpty()) {
+                    {
+                        IconButton(onClick = { searchQuery = "" }) {
+                            Icon(Icons.Default.Close, contentDescription = stringResource(R.string.cd_clear_search))
+                        }
+                    }
+                } else null,
+                singleLine = true,
+                shape = RoundedCornerShape(16.dp),
+                modifier = Modifier.fillMaxWidth()
+            )
+            Spacer(modifier = Modifier.height(10.dp))
+
+            if (candidateTracks.isEmpty()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(180.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = stringResource(
+                            if (searchQuery.isNotBlank()) R.string.playlist_search_no_matches
+                            else R.string.playlist_all_songs_already_added
+                        ),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            } else {
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(340.dp)
+                ) {
+                    items(candidateTracks, key = { it.id }) { track ->
+                        val isPicked = track.id in pickedIds
+                        TrackListItem(
+                            track = track,
+                            selectionMode = true,
+                            isSelected = isPicked,
+                            onClick = {
+                                pickedIds = if (isPicked) pickedIds - track.id else pickedIds + track.id
+                            }
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                TextButton(
+                    onClick = onDismiss,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text(stringResource(R.string.btn_cancel))
+                }
+                Button(
+                    onClick = { onConfirmAdd(pickedIds.toList()) },
+                    enabled = pickedIds.isNotEmpty(),
+                    modifier = Modifier.weight(2f)
+                ) {
+                    Text(
+                        if (pickedIds.isEmpty()) {
+                            stringResource(R.string.playlist_add_songs)
+                        } else {
+                            stringResource(R.string.playlist_add_songs_count_fmt, pickedIds.size)
+                        }
+                    )
+                }
             }
         }
     }

@@ -10,6 +10,7 @@ import androidx.media3.common.Player
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionCommand
 import androidx.media3.session.SessionToken
+import com.yasinjahantigh.logarhythm.data.analytics.AppLog
 import com.yasinjahantigh.logarhythm.data.datastore.PreferencesManager
 import com.yasinjahantigh.logarhythm.domain.curation.TrackCuration
 import com.yasinjahantigh.logarhythm.domain.model.Track
@@ -123,6 +124,7 @@ class PlayerControllerImpl @Inject constructor(
         val future = MediaController.Builder(context, token)
             .setListener(object : MediaController.Listener {
                 override fun onDisconnected(controller: MediaController) {
+                    AppLog.w("PlayerCtrl", "MediaController disconnected")
                     mediaController = null
                     scheduleReconnect()
                 }
@@ -134,8 +136,10 @@ class PlayerControllerImpl @Inject constructor(
                 val controller = future.get()
                 mediaController = controller
                 reconnectAttempts = 0
+                AppLog.i("PlayerCtrl", "MediaController connected (items=${controller.mediaItemCount})")
                 setupController(controller)
-            } catch (_: Exception) {
+            } catch (e: Exception) {
+                AppLog.w("PlayerCtrl", "MediaController connect failed (attempt=$reconnectAttempts)", e)
                 scheduleReconnect()
             }
         }, ContextCompat.getMainExecutor(context))
@@ -210,6 +214,11 @@ class PlayerControllerImpl @Inject constructor(
                 }
             }
             override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
+                AppLog.e(
+                    "PlayerCtrl",
+                    "ExoPlayer error code=${error.errorCodeName} (${error.errorCode}) track=${_currentTrack.value?.id}",
+                    error
+                )
                 // Recover gracefully if an AudioSink/Sonic reconfiguration error occurs after speed/pitch tweaks.
                 if (!recoveringFromSpeedError && (_playbackSpeed.value != 1.0f || _playbackPitch.value != 1.0f)) {
                     recoveringFromSpeedError = true

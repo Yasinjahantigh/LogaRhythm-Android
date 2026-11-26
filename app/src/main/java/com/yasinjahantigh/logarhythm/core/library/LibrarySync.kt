@@ -6,6 +6,7 @@ import android.os.Handler
 import android.os.Looper
 import android.os.Build
 import android.provider.MediaStore
+import com.yasinjahantigh.logarhythm.data.analytics.AppLog
 import com.yasinjahantigh.logarhythm.data.datastore.PreferencesManager
 import com.yasinjahantigh.logarhythm.core.utils.PermissionUtils
 import com.yasinjahantigh.logarhythm.domain.repository.TrackRepository
@@ -85,11 +86,14 @@ class LibrarySync @Inject constructor(
                     if (!force && stamp != null && stamp == preferencesManager.libraryGeneration.first()) {
                         return@withLock
                     }
+                    AppLog.i("LibrarySync", "Refreshing library (force=$force)")
                     trackRepository.refreshTracks()
                     if (stamp != null) preferencesManager.setLibraryGeneration(stamp)
+                    AppLog.i("LibrarySync", "Library refresh completed")
                 } catch (cancelled: CancellationException) {
                     throw cancelled
-                } catch (_: Exception) {
+                } catch (e: Exception) {
+                    AppLog.e("LibrarySync", "Library refresh failed", e)
                     // Keep the last good index; the Library screen reports scan failures to the user.
                 }
             }

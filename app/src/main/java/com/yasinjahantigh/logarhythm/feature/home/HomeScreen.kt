@@ -113,6 +113,8 @@ fun HomeScreen(
     val radarRefreshing by viewModel.radarRefreshing.collectAsStateWithLifecycle()
     val releaseRadarEnabled by viewModel.releaseRadarEnabled.collectAsStateWithLifecycle()
     val quickPicks by viewModel.quickPicks.collectAsStateWithLifecycle()
+    val quickPicksMinimized by viewModel.quickPicksMinimized.collectAsStateWithLifecycle()
+    val uiVisibility by viewModel.uiVisibility.collectAsStateWithLifecycle()
 
     var selectedTrackForMenu by remember { mutableStateOf<Track?>(null) }
     var trackForAddToPlaylist by remember { mutableStateOf<Track?>(null) }
@@ -260,27 +262,31 @@ fun HomeScreen(
                         )
                     }
 
-                    if (quickPicks.isNotEmpty()) {
+                    if (uiVisibility.homeShowRightNow) {
+                        rightNow?.takeIf { it.tracks.isNotEmpty() }?.let { now ->
+                            item(key = "right_now") {
+                                RightNowCard(
+                                    rightNow = now,
+                                    onPlay = viewModel::playRightNow,
+                                    modifier = Modifier.staggeredEntrance(1)
+                                )
+                            }
+                        }
+                    }
+
+                    if (uiVisibility.homeShowQuickPicks && quickPicks.isNotEmpty()) {
                         item(key = "quick_picks") {
                             QuickPicksGrid(
                                 items = quickPicks,
                                 onItemClick = viewModel::playQuickPick,
-                                modifier = Modifier.staggeredEntrance(1)
+                                minimized = quickPicksMinimized,
+                                onToggleMinimized = viewModel::toggleQuickPicksMinimized,
+                                modifier = Modifier.staggeredEntrance(2)
                             )
                         }
                     }
 
-                    rightNow?.takeIf { it.tracks.isNotEmpty() }?.let { now ->
-                        item(key = "right_now") {
-                            RightNowCard(
-                                rightNow = now,
-                                onPlay = viewModel::playRightNow,
-                                modifier = Modifier.staggeredEntrance(1)
-                            )
-                        }
-                    }
-
-                    if (allTracks.isNotEmpty()) {
+                    if (uiVisibility.homeShowQuickActions && allTracks.isNotEmpty()) {
                         item(key = "quick_start") {
                             HomeQuickActionsBar(
                                 onShuffleAll = viewModel::shuffleAllTracks,
@@ -290,13 +296,13 @@ fun HomeScreen(
                                     aiMixBase = null
                                     showMagicPlaylist = true
                                 },
-                                modifier = Modifier.staggeredEntrance(2)
+                                modifier = Modifier.staggeredEntrance(3)
                             )
                         }
                     }
 
                     // One shelf instead of three: recently played / new / on repeat share a row.
-                    if (activeShelf != null) {
+                    if (uiVisibility.homeShowJumpBackIn && activeShelf != null) {
                         item(key = "jump_back_in") {
                             Column(modifier = Modifier.staggeredEntrance(3)) {
                                 HomeSectionHeader(title = stringResource(R.string.home_jump_back_in))
@@ -337,7 +343,7 @@ fun HomeScreen(
                         }
                     }
 
-                    if (dailyMixes.isNotEmpty()) {
+                    if (uiVisibility.homeShowDailyMixes && dailyMixes.isNotEmpty()) {
                         item(key = "daily_mixes") {
                             Column {
                                 HomeSectionHeader(title = stringResource(R.string.home_daily_mixes))
@@ -358,15 +364,17 @@ fun HomeScreen(
                         }
                     }
 
-                    becauseYouPlayed?.let { because ->
-                        item(key = "because_played") {
-                            Column {
-                                HomeSectionHeader(title = stringResource(R.string.home_because_played, because.seed.title))
-                                TrackShelf(
-                                    tracks = because.tracks,
-                                    tagPrefix = "because_played",
-                                    onPlay = { list, index -> viewModel.playTracks(list, index) }
-                                )
+                    if (uiVisibility.homeShowDailyMixes) {
+                        becauseYouPlayed?.let { because ->
+                            item(key = "because_played") {
+                                Column {
+                                    HomeSectionHeader(title = stringResource(R.string.home_because_played, because.seed.title))
+                                    TrackShelf(
+                                        tracks = because.tracks,
+                                        tagPrefix = "because_played",
+                                        onPlay = { list, index -> viewModel.playTracks(list, index) }
+                                    )
+                                }
                             }
                         }
                     }
@@ -415,33 +423,35 @@ fun HomeScreen(
                         }
                     }
 
-                    item(key = "moods") {
-                        Column {
-                            HomeSectionHeader(title = stringResource(R.string.home_mixes_title))
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .horizontalScroll(rememberScrollState())
-                                    .padding(horizontal = 16.dp),
-                                horizontalArrangement = Arrangement.spacedBy(10.dp)
-                            ) {
-                                TrackCuration.Mood.entries.forEach { mood ->
-                                    MoodChip(
-                                        mood = mood,
-                                        onClick = {
-                                            viewModel.playMoodPlaylist(mood) {
-                                                coroutineScope.launch {
-                                                    snackbarHostState.showSnackbar(emptyMoodMessage)
+                    if (uiVisibility.homeShowMoods) {
+                        item(key = "moods") {
+                            Column {
+                                HomeSectionHeader(title = stringResource(R.string.home_mixes_title))
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .horizontalScroll(rememberScrollState())
+                                        .padding(horizontal = 16.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                ) {
+                                    TrackCuration.Mood.entries.forEach { mood ->
+                                        MoodChip(
+                                            mood = mood,
+                                            onClick = {
+                                                viewModel.playMoodPlaylist(mood) {
+                                                    coroutineScope.launch {
+                                                        snackbarHostState.showSnackbar(emptyMoodMessage)
+                                                    }
                                                 }
                                             }
-                                        }
-                                    )
+                                        )
+                                    }
                                 }
                             }
                         }
                     }
 
-                    if (totalTimeMs > 0L) {
+                    if (uiVisibility.homeShowStatsBanner && totalTimeMs > 0L) {
                         item(key = "stats") {
                             HomeStatsBanner(
                                 totalTimeMs = totalTimeMs,

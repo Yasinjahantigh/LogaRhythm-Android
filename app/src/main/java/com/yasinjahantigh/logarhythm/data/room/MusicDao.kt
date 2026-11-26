@@ -435,6 +435,9 @@ interface MusicDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertResumePosition(entity: ResumePositionEntity)
 
+    @Query("SELECT COUNT(*) FROM tracks")
+    suspend fun countTracks(): Int
+
     @Query("DELETE FROM resume_positions WHERE trackId = :trackId")
     suspend fun clearResumePosition(trackId: String)
 }

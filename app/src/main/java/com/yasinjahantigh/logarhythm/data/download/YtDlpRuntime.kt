@@ -1,6 +1,7 @@
 package com.yasinjahantigh.logarhythm.data.download
 
 import android.content.Context
+import com.yasinjahantigh.logarhythm.data.analytics.AppLog
 import com.yasinjahantigh.logarhythm.data.datastore.PreferencesManager
 import com.yasinjahantigh.logarhythm.domain.download.DownloadErrorClassifier
 import com.yasinjahantigh.logarhythm.domain.download.DownloadPipelineException
@@ -96,7 +97,9 @@ class YtDlpRuntime @Inject constructor(
                 try {
                     YoutubeDL.getInstance().init(context)
                     initialized = true
+                    AppLog.i("YtDlp", "Engine initialized")
                 } catch (error: Throwable) {
+                    AppLog.e("YtDlp", "Engine init failed", error)
                     throw DownloadPipelineException(
                         DownloadErrorKind.RUNTIME,
                         "The downloader could not start on this device.",
@@ -138,6 +141,7 @@ class YtDlpRuntime @Inject constructor(
                 runInterruptible(Dispatchers.IO) { block() }
             }
         } catch (timeout: TimeoutCancellationException) {
+            AppLog.w("YtDlp", "Command timed out (${timeoutMs}ms) proc=$processId")
             cancelProcess(processId)
             throw DownloadPipelineException(
                 DownloadErrorKind.NETWORK,
@@ -223,6 +227,7 @@ class YtDlpRuntime @Inject constructor(
                 } else {
                     YtdlpUpdateState.Ready(verified)
                 }
+                AppLog.i("YtDlp", "Update check result=${_updateState.value}")
                 _updateState.value
             } finally {
                 stateMutex.withLock {

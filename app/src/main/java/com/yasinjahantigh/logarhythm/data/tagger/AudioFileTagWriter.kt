@@ -164,21 +164,23 @@ class AudioFileTagWriter @Inject constructor(
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (e: UnsupportedTagException) {
+            com.yasinjahantigh.logarhythm.data.analytics.AppLog.w(TAG, "Unsupported tag layout: ${e.message}")
             TagWriteOutcome.Unsupported(e.message ?: "Unsupported tag layout")
         } catch (_: SecurityException) {
+            com.yasinjahantigh.logarhythm.data.analytics.AppLog.w(TAG, "Tag write security denied")
             TagWriteOutcome.Denied
         } catch (e: IOException) {
-            Log.w(TAG, "Tag write failed", e)
+            com.yasinjahantigh.logarhythm.data.analytics.AppLog.w(TAG, "Tag write failed", e)
             TagWriteOutcome.Failed
         } catch (e: Exception) {
-            Log.w(TAG, "Tag write failed", e)
+            com.yasinjahantigh.logarhythm.data.analytics.AppLog.w(TAG, "Tag write failed", e)
             TagWriteOutcome.Failed
         } finally {
             if (outputAttempted && !verified && original.isFile) {
                 val restored = withContext(NonCancellable) { restore(uri, original) }
                 if (!restored) {
                     keepBackup = true
-                    Log.e(TAG, "Could not verify restoration; recovery copy kept at ${original.absolutePath}")
+                    com.yasinjahantigh.logarhythm.data.analytics.AppLog.e(TAG, "Could not verify restoration; recovery copy kept at ${original.absolutePath}")
                 }
             }
             runCatching { staged.delete() }

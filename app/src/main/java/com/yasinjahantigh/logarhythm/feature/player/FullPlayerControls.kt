@@ -70,8 +70,8 @@ fun FullPlayerControls(
     compact: Boolean = false
 ) {
     val scheme = MaterialTheme.colorScheme
-    val playSize = if (compact) 68.dp else 84.dp
-    val skipSize = if (compact) 52.dp else 58.dp
+    val playSize = if (compact) 62.dp else 72.dp
+    val skipSize = if (compact) 46.dp else 52.dp
 
     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
         Box(
@@ -81,7 +81,7 @@ fun FullPlayerControls(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .widthIn(max = 400.dp),
+                    .widthIn(max = 380.dp),
                 horizontalArrangement = Arrangement.SpaceEvenly,
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -112,7 +112,7 @@ fun FullPlayerControls(
                 label = "play_button_press"
             )
             val corner by animateDpAsState(
-                targetValue = if (isPlaying) 28.dp else playSize / 2,
+                targetValue = if (isPlaying) 24.dp else playSize / 2,
                 animationSpec = spring(dampingRatio = 0.62f, stiffness = 260f),
                 label = "play_button_morph"
             )
@@ -145,7 +145,7 @@ fun FullPlayerControls(
                     Icon(
                         imageVector = if (playing) Icons.Default.Pause else Icons.Default.PlayArrow,
                         contentDescription = stringResource(if (playing) R.string.cd_pause else R.string.cd_play),
-                        modifier = Modifier.size(if (compact) 36.dp else 44.dp)
+                        modifier = Modifier.size(if (compact) 32.dp else 36.dp)
                     )
                 }
             }
@@ -180,22 +180,18 @@ private fun SkipKey(
 ) {
     val scheme = MaterialTheme.colorScheme
     val haptic = LocalHapticFeedback.current
-    FilledIconButton(
+    IconButton(
         onClick = {
             haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
             onClick()
         },
-        shape = CircleShape,
-        modifier = modifier.size(size),
-        colors = IconButtonDefaults.filledIconButtonColors(
-            containerColor = scheme.surfaceContainerHighest.copy(alpha = 0.7f),
-            contentColor = scheme.onSurface
-        )
+        modifier = modifier.size(size)
     ) {
         Icon(
             imageVector = icon,
             contentDescription = contentDescription,
-            modifier = Modifier.size(30.dp)
+            tint = scheme.onSurface,
+            modifier = Modifier.size(34.dp)
         )
     }
 }
@@ -211,7 +207,7 @@ private fun ModeToggle(
     val scheme = MaterialTheme.colorScheme
     val haptic = LocalHapticFeedback.current
     val container by animateColorAsState(
-        targetValue = if (active) scheme.primaryContainer else scheme.primaryContainer.copy(alpha = 0f),
+        targetValue = if (active) scheme.primary.copy(alpha = 0.16f) else scheme.primary.copy(alpha = 0f),
         label = "mode_toggle_container"
     )
     IconButton(
@@ -220,14 +216,14 @@ private fun ModeToggle(
             onClick()
         },
         modifier = modifier
-            .size(48.dp)
+            .size(42.dp)
             .background(container, CircleShape)
     ) {
         Icon(
             imageVector = icon,
             contentDescription = contentDescription,
-            tint = if (active) scheme.onPrimaryContainer else scheme.onSurfaceVariant,
-            modifier = Modifier.size(22.dp)
+            tint = if (active) scheme.primary else scheme.onSurface.copy(alpha = 0.58f),
+            modifier = Modifier.size(21.dp)
         )
     }
 }

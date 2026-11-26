@@ -1,5 +1,6 @@
 package com.yasinjahantigh.logarhythm.data.download.saavn
 
+import com.yasinjahantigh.logarhythm.data.analytics.AppLog
 import com.yasinjahantigh.logarhythm.domain.download.DownloadPipelineException
 import com.yasinjahantigh.logarhythm.domain.model.DownloadErrorKind
 import com.yasinjahantigh.logarhythm.domain.model.DownloadSearchResult
@@ -139,10 +140,15 @@ class SaavnClient @Inject constructor(
 
         return try {
             client.newCall(request).execute().use { response ->
-                if (!response.isSuccessful) null
-                else response.body?.string()?.let { runCatching { JSONObject(it) }.getOrNull() }
+                if (!response.isSuccessful) {
+                    AppLog.w("Saavn", "HTTP ${response.code} ${url.host}")
+                    null
+                } else {
+                    response.body?.string()?.let { runCatching { JSONObject(it) }.getOrNull() }
+                }
             }
-        } catch (_: Exception) {
+        } catch (err: Exception) {
+            AppLog.w("Saavn", "Search failed ${url.host}: ${err.message}")
             null
         }
     }

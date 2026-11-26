@@ -1,6 +1,7 @@
 package com.yasinjahantigh.logarhythm.data.download.musicman
 
 import android.os.SystemClock
+import com.yasinjahantigh.logarhythm.data.analytics.AppLog
 import com.yasinjahantigh.logarhythm.data.download.AudioFileProbe
 import com.yasinjahantigh.logarhythm.domain.download.DownloadPipelineException
 import com.yasinjahantigh.logarhythm.domain.download.DownloadTitleParser
@@ -62,16 +63,35 @@ class MusicManDownloader @Inject constructor(
                         val proxied = api.proxied(audio.url)
                         if (proxied != primary) add(proxied)
                     }
+                    audio.fallbackUrls.forEach { fb ->
+                        val resolved = if (fb.startsWith("http://", ignoreCase = true) ||
+                            fb.contains("telegram.org", ignoreCase = true) ||
+                            fb.contains("t.me", ignoreCase = true)
+                        ) {
+                            api.proxied(fb)
+                        } else {
+                            fb
+                        }
+                        if (resolved.startsWith("https://", ignoreCase = true) && resolved !in this) {
+                            add(resolved)
+                        }
+                        val proxiedFb = api.proxied(fb)
+                        if (proxiedFb.startsWith("https://", ignoreCase = true) && proxiedFb !in this) {
+                            add(proxiedFb)
+                        }
+                    }
                 }
                 for (url in urlsToTry) {
                     target.delete()
                     try {
                         downloadWithRetry(target, url, downloadId, onProgress)
                         if (AudioFileProbe.isUsable(target)) {
+                            AppLog.i("MusicMan", "Downloaded id=$trackId q=${audio.quality} bytes=${target.length()}")
                             chosenAudio = audio
                             lastError = null
                             break
                         }
+                        AppLog.w("MusicMan", "Unusable audio id=$trackId q=${audio.quality} bytes=${target.length()}")
                         lastError = DownloadPipelineException(
                             DownloadErrorKind.CONTENT,
                             "MusicMan returned a file that is not playable audio."
@@ -79,6 +99,7 @@ class MusicManDownloader @Inject constructor(
                     } catch (cancelled: CancellationException) {
                         throw cancelled
                     } catch (pipeline: DownloadPipelineException) {
+                        AppLog.w("MusicMan", "Mirror failed id=$trackId q=${audio.quality}: ${pipeline.message}")
                         lastError = pipeline
                     }
                 }

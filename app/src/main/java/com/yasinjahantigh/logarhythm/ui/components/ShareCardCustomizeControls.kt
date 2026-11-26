@@ -60,13 +60,21 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.yasinjahantigh.logarhythm.R
 import com.yasinjahantigh.logarhythm.core.utils.ShareCardAspect
 import com.yasinjahantigh.logarhythm.core.utils.ShareCardGenerator
 import com.yasinjahantigh.logarhythm.core.utils.ShareCardOptions
 import com.yasinjahantigh.logarhythm.core.utils.ShareCardStyle
 import com.yasinjahantigh.logarhythm.core.utils.TimeUtils
+import com.yasinjahantigh.logarhythm.data.datastore.PreferencesManager
 import com.yasinjahantigh.logarhythm.domain.model.Track
+import com.yasinjahantigh.logarhythm.ui.theme.APP_FONT_PRESETS
+import com.yasinjahantigh.logarhythm.ui.theme.normalizeFontKey
+import dagger.hilt.EntryPoint
+import dagger.hilt.InstallIn
+import dagger.hilt.android.EntryPointAccessors
+import dagger.hilt.components.SingletonComponent
 import kotlinx.coroutines.launch
 
 private val SHARE_ACCENT_SWATCHES = listOf(
@@ -79,6 +87,29 @@ private val SHARE_ACCENT_SWATCHES = listOf(
     0xFFEF6C57.toInt(),
     0xFFD9C67A.toInt()
 )
+
+@EntryPoint
+@InstallIn(SingletonComponent::class)
+interface ShareCardPrefsEntryPoint {
+    fun preferencesManager(): PreferencesManager
+}
+
+@Composable
+fun rememberShareDefaultFont(): Pair<String, String?> {
+    val context = LocalContext.current
+    val prefs = remember(context) {
+        runCatching {
+            EntryPointAccessors.fromApplication(
+                context.applicationContext,
+                ShareCardPrefsEntryPoint::class.java
+            ).preferencesManager()
+        }.getOrNull()
+    }
+    if (prefs == null) return "vazirmatn" to null
+    val appFont by prefs.appFont.collectAsStateWithLifecycle(initialValue = "vazirmatn")
+    val customFontPath by prefs.customFontPath.collectAsStateWithLifecycle(initialValue = null)
+    return normalizeFontKey(appFont) to customFontPath
+}
 
 @Composable
 fun ShareCardLivePreviewBox(
@@ -146,7 +177,10 @@ fun ShareCardCustomizePanel(
     options: ShareCardOptions,
     onOptionsChange: (ShareCardOptions) -> Unit,
     defaultAccentColor: Int,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    showLineSpacing: Boolean = false,
+    showAlignment: Boolean = false,
+    customFontPath: String? = null
 ) {
     val swatches = remember(defaultAccentColor) {
         (listOf(defaultAccentColor) + SHARE_ACCENT_SWATCHES).distinct()
@@ -252,6 +286,43 @@ fun ShareCardCustomizePanel(
             }
         }
 
+        // Font Family
+        val activeFontKey = normalizeFontKey(options.fontKey)
+        val effectiveCustomPath = customFontPath ?: options.customFontPath
+        Text(
+            text = stringResource(R.string.share_card_font_label),
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.primary
+        )
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            if (!effectiveCustomPath.isNullOrBlank()) {
+                FilterChip(
+                    selected = activeFontKey == "custom",
+                    onClick = {
+                        onOptionsChange(options.copy(fontKey = "custom", customFontPath = effectiveCustomPath))
+                    },
+                    label = { Text(stringResource(R.string.theme_font_custom_use), maxLines = 1) },
+                    modifier = Modifier.testTag("share_font_custom")
+                )
+            }
+            APP_FONT_PRESETS.forEach { preset ->
+                FilterChip(
+                    selected = activeFontKey == preset.key,
+                    onClick = {
+                        onOptionsChange(options.copy(fontKey = preset.key, customFontPath = null))
+                    },
+                    label = { Text(stringResource(preset.labelRes), maxLines = 1) },
+                    modifier = Modifier.testTag("share_font_${preset.key}")
+                )
+            }
+        }
+
         // Text Scale Slider
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -273,10 +344,63 @@ fun ShareCardCustomizePanel(
         Slider(
             value = options.textScale,
             onValueChange = { onOptionsChange(options.copy(textScale = it)) },
-            valueRange = 0.8f..1.3f,
-            steps = 4,
-            modifier = Modifier.fillMaxWidth()
+            valueRange = 0.75f..1.8f,
+            steps = 20,
+            modifier = Modifier.fillMaxWidth().testTag("share_text_scale_slider")
         )
+
+        if (showLineSpacing) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(
+                    text = stringResource(R.string.share_card_line_spacing_label),
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Text(
+                    text = "${(options.lineSpacing * 100).toInt()}%",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Slider(
+                value = options.lineSpacing,
+                onValueChange = { onOptionsChange(options.copy(lineSpacing = it)) },
+                valueRange = 0.6f..2.0f,
+                steps = 13,
+                modifier = Modifier.fillMaxWidth().testTag("share_line_spacing_slider")
+            )
+        }
+
+        if (showAlignment) {
+            Text(
+                text = stringResource(R.string.share_card_align_label),
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.primary
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                FilterChip(
+                    selected = !options.centerLyrics,
+                    onClick = { onOptionsChange(options.copy(centerLyrics = false)) },
+                    label = { Text(stringResource(R.string.share_card_align_auto)) },
+                    modifier = Modifier.testTag("share_align_auto")
+                )
+                FilterChip(
+                    selected = options.centerLyrics,
+                    onClick = { onOptionsChange(options.copy(centerLyrics = true)) },
+                    label = { Text(stringResource(R.string.share_card_align_center)) },
+                    modifier = Modifier.testTag("share_align_center")
+                )
+            }
+        }
     }
 }
 
@@ -290,8 +414,21 @@ fun SongShareStudioSheet(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val (defaultFontKey, defaultCustomPath) = rememberShareDefaultFont()
+    var userPickedFont by remember(track.id) { mutableStateOf(false) }
     var options by remember(track.id, defaultAccentColor) {
-        mutableStateOf(ShareCardOptions(accentColor = defaultAccentColor))
+        mutableStateOf(
+            ShareCardOptions(
+                accentColor = defaultAccentColor,
+                fontKey = defaultFontKey,
+                customFontPath = defaultCustomPath
+            )
+        )
+    }
+    LaunchedEffect(defaultFontKey, defaultCustomPath) {
+        if (!userPickedFont) {
+            options = options.copy(fontKey = defaultFontKey, customFontPath = defaultCustomPath)
+        }
     }
     var previewBitmap by remember { mutableStateOf<Bitmap?>(null) }
     var rendering by remember { mutableStateOf(false) }
@@ -344,8 +481,14 @@ fun SongShareStudioSheet(
 
             ShareCardCustomizePanel(
                 options = options,
-                onOptionsChange = { options = it },
-                defaultAccentColor = defaultAccentColor
+                onOptionsChange = { next ->
+                    if (next.fontKey != options.fontKey || next.customFontPath != options.customFontPath) {
+                        userPickedFont = true
+                    }
+                    options = next
+                },
+                defaultAccentColor = defaultAccentColor,
+                customFontPath = defaultCustomPath
             )
 
             Row(

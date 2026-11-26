@@ -1,5 +1,6 @@
 package com.yasinjahantigh.logarhythm.data.download.musicman
 
+import com.yasinjahantigh.logarhythm.data.analytics.AppLog
 import com.yasinjahantigh.logarhythm.domain.download.DownloadPipelineException
 import com.yasinjahantigh.logarhythm.domain.model.DownloadErrorKind
 import com.yasinjahantigh.logarhythm.domain.model.DownloadQuality
@@ -38,7 +39,8 @@ class MusicManClient @Inject constructor(
         val filename: String?,
         val isBale: Boolean = false,
         val baleMessageId: String? = null,
-        val isCached: Boolean = false
+        val isCached: Boolean = false,
+        val fallbackUrls: List<String> = emptyList()
     )
 
     data class CollectionDetail(
@@ -256,14 +258,25 @@ class MusicManClient @Inject constructor(
         onStatus: (Int, String) -> Unit = { _, _ -> }
     ): List<Audio> {
         val clean = cleanId(trackId)
-        audiosFromLookup(clean, preferredQuality).takeIf { it.isNotEmpty() }?.let { return it }
+        audiosFromLookup(clean, preferredQuality).takeIf { it.isNotEmpty() }?.let {
+            AppLog.i("MusicMan", "Lookup hit id=$clean candidates=${it.size}")
+            return it
+        }
 
         val existing = downloadStatus(clean, preferredQuality)
         existing?.let { download ->
-            audiosOf(download, preferredQuality).takeIf { it.isNotEmpty() }?.let { return it }
-            terminalFailure(download)?.let { throw it }
+            audiosOf(download, preferredQuality).takeIf { it.isNotEmpty() }?.let {
+                AppLog.i("MusicMan", "Status hit id=$clean candidates=${it.size}")
+                return it
+            }
+            terminalFailure(download)?.let { failure ->
+                // Some tracks finish crawling into /lookup slightly before /download/status reflects attachments.
+                audiosFromLookup(clean, preferredQuality).takeIf { it.isNotEmpty() }?.let { return it }
+                throw failure
+            }
         }
         if (existing == null) {
+            AppLog.i("MusicMan", "Queueing server crawl id=$clean quality=${preferredQuality.prefValue}")
             requestDownload(clean, preferredQuality)
             onStatus(0, "musicman_queued")
         }
@@ -273,14 +286,22 @@ class MusicManClient @Inject constructor(
         while (System.currentTimeMillis() < deadline) {
             delay(pollIntervalMs)
             val download = downloadStatus(clean, preferredQuality) ?: continue
-            audiosOf(download, preferredQuality).takeIf { it.isNotEmpty() }?.let { return it }
-            terminalFailure(download)?.let { throw it }
+            audiosOf(download, preferredQuality).takeIf { it.isNotEmpty() }?.let {
+                AppLog.i("MusicMan", "Crawl ready id=$clean candidates=${it.size}")
+                return it
+            }
+            terminalFailure(download)?.let { failure ->
+                audiosFromLookup(clean, preferredQuality).takeIf { it.isNotEmpty() }?.let { return it }
+                throw failure
+            }
             val percent = download.optInt("percent", 0).coerceIn(0, 99)
             if (percent != lastPercent) {
                 lastPercent = percent
                 onStatus(percent, "musicman_preparing")
             }
         }
+        audiosFromLookup(clean, preferredQuality).takeIf { it.isNotEmpty() }?.let { return it }
+        AppLog.w("MusicMan", "Crawl timed out id=$clean")
         throw DownloadPipelineException(
             DownloadErrorKind.CONTENT,
             "MusicMan is still preparing this track. Try again later."
@@ -502,14 +523,25 @@ class MusicManClient @Inject constructor(
             effectiveUrl.startsWith("http://", ignoreCase = true)
         if (!isBale && !isHttp) return null
 
+        val primaryUrl = if (isBale && !baleId.isNullOrBlank()) "bale://message/$baleId" else effectiveUrl
+        val fallbacks = listOf(baleFileUrl, rawUrl)
+            .filter { candidate ->
+                candidate.isNotBlank() &&
+                    candidate != primaryUrl &&
+                    (candidate.startsWith("https://", ignoreCase = true) ||
+                        candidate.startsWith("http://", ignoreCase = true))
+            }
+            .distinct()
+
         return Audio(
             quality = opt("quality")?.toString()?.toIntOrNull() ?: 0,
-            url = if (isBale && !baleId.isNullOrBlank()) "bale://message/$baleId" else effectiveUrl,
+            url = primaryUrl,
             filename = optString("telegramFilename").takeIf { it.isNotBlank() }
                 ?: optString("filename").takeIf { it.isNotBlank() },
             isBale = isBale,
             baleMessageId = baleId,
-            isCached = source == "cache"
+            isCached = source == "cache",
+            fallbackUrls = fallbacks
         )
     }
 
@@ -549,8 +581,9 @@ class MusicManClient @Inject constructor(
         trackId: String,
         preferredQuality: DownloadQuality = DownloadQuality.BEST
     ): List<Audio> {
+        val clean = cleanId(trackId)
         val url = requestUrl("$apiBase/lookup") {
-            addQueryParameter("id", trackId)
+            addQueryParameter("id", clean)
             addQueryParameter("entity", "song")
             addQueryParameter("limit", "1")
         }
@@ -558,7 +591,8 @@ class MusicManClient @Inject constructor(
         val results = body.optJSONArray("results") ?: return emptyList()
         for (index in 0 until results.length()) {
             val item = results.optJSONObject(index) ?: continue
-            if (item.trackId() != trackId) continue
+            val itemId = item.trackId()?.let(::cleanId) ?: continue
+            if (itemId != clean) continue
             return item.rankedAudios(preferredQuality)
         }
         return emptyList()
@@ -642,6 +676,7 @@ class MusicManClient @Inject constructor(
                     } else {
                         DownloadErrorKind.CONTENT
                     }
+                    AppLog.w("MusicMan", "HTTP ${response.code} ${request.url.encodedPath}")
                     throw DownloadPipelineException(
                         kind,
                         "MusicMan request failed (HTTP ${response.code})."
@@ -654,6 +689,7 @@ class MusicManClient @Inject constructor(
         } catch (pipeline: DownloadPipelineException) {
             throw pipeline
         } catch (error: IOException) {
+            AppLog.w("MusicMan", "Network error ${request.url.encodedPath}: ${error.message}")
             throw DownloadPipelineException(
                 DownloadErrorKind.NETWORK,
                 error.message ?: "MusicMan is unreachable.",

@@ -1,5 +1,6 @@
 package com.yasinjahantigh.logarhythm.data.download
 
+import com.yasinjahantigh.logarhythm.data.analytics.AppLog
 import com.yasinjahantigh.logarhythm.domain.download.DownloadCommand
 import com.yasinjahantigh.logarhythm.domain.download.DownloadErrorClassifier
 import com.yasinjahantigh.logarhythm.domain.download.DownloadPipelineException
@@ -81,14 +82,19 @@ class YtDlpSearchService @Inject constructor(
                     }
                 }
             }
-            SourceOutcome(SearchJsonParser.parse(source, response.out), null)
+            val parsed = SearchJsonParser.parse(source, response.out)
+            AppLog.i("YtDlpSearch", "${source.raw} '$expression' -> ${parsed.size}")
+            SourceOutcome(parsed, null)
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (pipeline: DownloadPipelineException) {
+            AppLog.w("YtDlpSearch", "${source.raw} pipeline err=${pipeline.kind.raw}: ${pipeline.message}")
             SourceOutcome(emptyList(), pipeline.kind)
         } catch (error: YoutubeDLException) {
+            AppLog.w("YtDlpSearch", "${source.raw} yt-dlp err: ${error.message}")
             SourceOutcome(emptyList(), DownloadErrorClassifier.classify(error.message, error))
         } catch (error: Exception) {
+            AppLog.w("YtDlpSearch", "${source.raw} err: ${error.message}")
             SourceOutcome(emptyList(), DownloadErrorClassifier.classify(error.message, error))
         }
     }

@@ -5,11 +5,14 @@ import androidx.annotation.StringRes
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.yasinjahantigh.logarhythm.data.datastore.PreferencesManager
+import com.yasinjahantigh.logarhythm.data.datastore.UiVisibilityPreferences
+import com.yasinjahantigh.logarhythm.data.datastore.UiVisibilityToggle
 import com.yasinjahantigh.logarhythm.BuildConfig
 import com.yasinjahantigh.logarhythm.R
 import com.yasinjahantigh.logarhythm.data.ai.AiProvider
 import com.yasinjahantigh.logarhythm.data.ai.AiSettings
 import com.yasinjahantigh.logarhythm.data.analytics.AppLogBuffer
+import com.yasinjahantigh.logarhythm.data.analytics.DiagnosticSnapshotCollector
 import com.yasinjahantigh.logarhythm.data.analytics.InstallReporter
 import com.yasinjahantigh.logarhythm.data.backup.BackupManager
 import com.yasinjahantigh.logarhythm.data.backup.PlaylistFileService
@@ -53,7 +56,8 @@ class SettingsViewModel @Inject constructor(
     private val playlistFileService: PlaylistFileService,
     private val updateManager: UpdateManager,
     private val installReporter: InstallReporter,
-    private val appLogBuffer: AppLogBuffer
+    private val appLogBuffer: AppLogBuffer,
+    private val diagnosticSnapshotCollector: DiagnosticSnapshotCollector
 ) : ViewModel() {
 
     /** One-shot result text for a toast; the screen calls [consumeMessage] after showing it. */
@@ -88,6 +92,21 @@ class SettingsViewModel @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ArtistSplitter.DEFAULT_SEPARATORS)
     val artistNeverSplit: StateFlow<Set<String>> = preferencesManager.artistNeverSplit
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptySet())
+
+    val uiVisibility: StateFlow<UiVisibilityPreferences> = preferencesManager.uiVisibility
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), UiVisibilityPreferences())
+
+    fun setUiVisibility(toggle: UiVisibilityToggle, enabled: Boolean) {
+        viewModelScope.launch {
+            preferencesManager.setUiVisibility(toggle, enabled)
+        }
+    }
+
+    fun resetUiVisibilityDefaults() {
+        viewModelScope.launch {
+            preferencesManager.resetUiVisibilityDefaults()
+        }
+    }
 
     /** Songs whose lyrics are hidden, so the user can bring them back from one place. */
     val hiddenLyricsTracks: StateFlow<List<Track>> =
@@ -126,17 +145,32 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch { preferencesManager.setWeeklyStatsEnabled(enabled) }
     }
     fun recentLogLineCount(): Int = appLogBuffer.lineCount()
+    fun diagnosticLogSizeBytes(): Long = appLogBuffer.totalLogSizeBytes()
+    suspend fun buildDiagnosticReport(): String = diagnosticSnapshotCollector.buildFullDiagnosticReport()
+    suspend fun shareDiagnosticLogFile(chooserTitle: String) =
+        diagnosticSnapshotCollector.shareFullDiagnosticLogFile(chooserTitle)
+    fun clearDiagnosticLogs() = appLogBuffer.clearLogs()
+
     suspend fun sendBugReport(
         category: String,
         description: String,
         contact: String?,
         includeLogs: Boolean
-    ): Result<Unit> = installReporter.sendUserReport(
-        category = category,
-        description = description,
-        contact = contact,
-        recentLogs = if (includeLogs) appLogBuffer.snapshot() else ""
-    )
+    ): Result<Unit> {
+        val stateSnapshot = if (includeLogs) {
+            runCatching { diagnosticSnapshotCollector.collectStateSnapshot() }.getOrDefault("")
+        } else ""
+        val payloadLogs = if (includeLogs) {
+            diagnosticSnapshotCollector.buildReportLogsPayload(includeLogs = true)
+        } else ""
+        return installReporter.sendUserReport(
+            category = category,
+            description = description,
+            contact = contact,
+            recentLogs = payloadLogs,
+            deviceSnapshot = stateSnapshot
+        )
+    }
     suspend fun sendSuggestion(
         category: String,
         text: String,

@@ -1,5 +1,6 @@
 package com.yasinjahantigh.logarhythm.data.download
 
+import com.yasinjahantigh.logarhythm.data.analytics.AppLog
 import com.yasinjahantigh.logarhythm.domain.download.DownloadCommand
 import com.yasinjahantigh.logarhythm.domain.download.DownloadPipelineException
 import com.yasinjahantigh.logarhythm.domain.download.DownloadTitleParser
@@ -42,11 +43,16 @@ class YtDlpDownloader @Inject constructor(
                 }
             }
         }
-        return findUsableFile(workspace)
-            ?: throw DownloadPipelineException(
+        AppLog.i("YtDlpDL", "Executing id=$downloadId vid=$videoId abr=$qualityAbrKbps")
+        val usable = findUsableFile(workspace)
+        if (usable == null) {
+            AppLog.w("YtDlpDL", "No usable audio file produced id=$downloadId")
+            throw DownloadPipelineException(
                 DownloadErrorKind.CONTENT,
                 "Download finished without an audio file."
             )
+        }
+        return usable
     }
 
     /** Keeps a complete file even when yt-dlp reports an error after writing it. */

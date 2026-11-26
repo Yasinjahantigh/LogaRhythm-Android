@@ -102,6 +102,11 @@ class LyricsRepositoryImpl @Inject constructor(
                 cacheLyrics(track.id, online.lyrics, online.providerId)
                 return@withContext online.lyrics.copy(source = online.providerId)
             }
+        } else {
+            com.yasinjahantigh.logarhythm.data.analytics.AppLog.d(
+                "LyricsRepo",
+                "No online lyrics match for title=${track.title.take(40)} dur=${track.durationMs}"
+            )
         }
 
         // Fall back to local embedded plain lyrics or stale cached lyrics

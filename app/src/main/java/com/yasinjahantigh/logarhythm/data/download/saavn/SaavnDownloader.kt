@@ -1,6 +1,7 @@
 package com.yasinjahantigh.logarhythm.data.download.saavn
 
 import android.os.SystemClock
+import com.yasinjahantigh.logarhythm.data.analytics.AppLog
 import com.yasinjahantigh.logarhythm.data.download.AudioFileProbe
 import com.yasinjahantigh.logarhythm.domain.download.DownloadPipelineException
 import com.yasinjahantigh.logarhythm.domain.download.DownloadTitleParser
@@ -98,7 +99,9 @@ class SaavnDownloader @Inject constructor(
                     throw DownloadPipelineException(
                         kind,
                         "Download failed (HTTP ${response.code})."
-                    )
+                    ).also {
+                        AppLog.w("Saavn", "Download HTTP ${response.code} songId=$downloadId")
+                    }
                 }
                 val body = response.body
                     ?: throw DownloadPipelineException(

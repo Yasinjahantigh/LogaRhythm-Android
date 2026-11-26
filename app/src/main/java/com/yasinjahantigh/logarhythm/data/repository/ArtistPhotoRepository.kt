@@ -2,6 +2,7 @@ package com.yasinjahantigh.logarhythm.data.repository
 
 import android.content.Context
 import android.net.Uri
+import com.yasinjahantigh.logarhythm.data.analytics.AppLog
 import com.yasinjahantigh.logarhythm.data.download.metadata.DeezerClient
 import com.yasinjahantigh.logarhythm.data.download.metadata.ItunesClient
 import com.yasinjahantigh.logarhythm.data.download.musicman.MusicManClient
@@ -13,6 +14,8 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -20,6 +23,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import okhttp3.OkHttpClient
 import org.json.JSONObject
 import java.io.File
 import java.security.MessageDigest
@@ -49,7 +53,8 @@ class ArtistPhotoRepository @Inject constructor(
     @param:ApplicationContext private val context: Context,
     private val deezerClient: DeezerClient,
     private val musicManClient: MusicManClient,
-    private val itunesClient: ItunesClient
+    private val itunesClient: ItunesClient,
+    private val okHttpClient: OkHttpClient
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val storeMutex = Mutex()
@@ -146,55 +151,85 @@ class ArtistPhotoRepository @Inject constructor(
     suspend fun searchPhotoCandidates(query: String): List<ArtistPhotoCandidate> = withContext(Dispatchers.IO) {
         val term = query.trim()
         if (term.isBlank()) return@withContext emptyList()
-        val results = mutableListOf<ArtistPhotoCandidate>()
 
-        // 1. Deezer real artist portraits
-        runCatching { deezerClient.searchArtists(term, limit = 10) }
-            .getOrDefault(emptyList())
-            .forEach { hit ->
-                val art = hit.thumbnailUrl
-                if (isUsableImageUrl(art)) {
-                    results += ArtistPhotoCandidate(
-                        url = art!!,
-                        label = hit.title.ifBlank { term },
-                        source = "Deezer"
-                    )
-                }
-            }
-
-        // 2. MusicMan artist portraits (Iran-accessible without VPN)
-        runCatching {
-            musicManClient.search(term = term, category = DownloadSearchCategory.ALL, limit = 12)
-        }.getOrDefault(emptyList())
-            .filter { it.kind == DownloadResultKind.ARTIST }
-            .forEach { hit ->
-                val art = hit.thumbnailUrl
-                if (isUsableImageUrl(art)) {
-                    results += ArtistPhotoCandidate(
-                        url = art!!,
-                        label = hit.title.ifBlank { term },
-                        source = "MusicMan"
-                    )
-                }
-            }
-
-        // 3. Fallback artwork candidates from iTunes / Deezer if few artist portraits came back
-        if (results.size < 4) {
-            runCatching { itunesClient.searchCandidates("", term) }
-                .getOrDefault(emptyList())
-                .take(6)
-                .forEach { hit ->
-                    if (isUsableImageUrl(hit.url)) {
-                        results += ArtistPhotoCandidate(
-                            url = hit.url,
-                            label = hit.artist.ifBlank { hit.title },
-                            source = "iTunes"
-                        )
+        coroutineScope {
+            val deezerDeferred = async {
+                runCatching { deezerClient.searchArtists(term, limit = 8) }
+                    .getOrDefault(emptyList())
+                    .mapNotNull { hit ->
+                        val art = hit.thumbnailUrl?.let(::normalizeHttpsUrl)
+                        if (isUsableImageUrl(art)) {
+                            ArtistPhotoCandidate(url = art!!, label = hit.title.ifBlank { term }, source = "Deezer")
+                        } else null
                     }
-                }
-        }
+            }
+            val musicManDeferred = async {
+                runCatching {
+                    musicManClient.search(term = term, category = DownloadSearchCategory.ALL, limit = 10)
+                }.getOrDefault(emptyList())
+                    .filter { it.kind == DownloadResultKind.ARTIST }
+                    .mapNotNull { hit ->
+                        val art = hit.thumbnailUrl?.let(::normalizeHttpsUrl)
+                        if (isUsableImageUrl(art)) {
+                            ArtistPhotoCandidate(url = art!!, label = hit.title.ifBlank { term }, source = "MusicMan")
+                        } else null
+                    }
+            }
+            val wikiDeferred = async {
+                ArtistInternetPhotoSearch.searchWikipediaPhotos(okHttpClient, term)
+            }
+            val commonsDeferred = async {
+                ArtistInternetPhotoSearch.searchWikimediaCommons(okHttpClient, term, limit = 6)
+            }
+            val webDeferred = async {
+                ArtistInternetPhotoSearch.searchWebImages(okHttpClient, term, limit = 16)
+            }
 
-        results.distinctBy { it.url }.take(15)
+            val deezerHits = deezerDeferred.await()
+            val mmHits = musicManDeferred.await()
+            val wikiHits = wikiDeferred.await()
+            val commonsHits = commonsDeferred.await()
+            val webHits = webDeferred.await()
+
+            val musicianWiki = wikiHits
+                .filter { it.isMusician }
+                .map { ArtistPhotoCandidate(url = it.url, label = it.title.ifBlank { term }, source = "Wikipedia") }
+            val otherWiki = wikiHits
+                .filterNot { it.isMusician }
+                .map { ArtistPhotoCandidate(url = it.url, label = it.title.ifBlank { term }, source = "Wikipedia") }
+
+            val results = mutableListOf<ArtistPhotoCandidate>()
+            results += mmHits
+            results += deezerHits
+            results += musicianWiki
+            results += webHits
+            results += commonsHits
+            results += otherWiki
+
+            // Fallback artwork candidates from iTunes only if internet & catalog yielded very few photos
+            if (results.size < 4) {
+                runCatching { itunesClient.searchCandidates("", term) }
+                    .getOrDefault(emptyList())
+                    .take(6)
+                    .forEach { hit ->
+                        val art = normalizeHttpsUrl(hit.url)
+                        if (isUsableImageUrl(art)) {
+                            results += ArtistPhotoCandidate(
+                                url = art,
+                                label = hit.artist.ifBlank { hit.title },
+                                source = "iTunes"
+                            )
+                        }
+                    }
+            }
+
+            val deduped = results.distinctBy { it.url }.take(24)
+            AppLog.i(
+                "ArtistPhoto",
+                "Search '$term' -> ${deduped.size} photos (mm=${mmHits.size}, dz=${deezerHits.size}, wiki=${wikiHits.size}, web=${webHits.size}, commons=${commonsHits.size})"
+            )
+            deduped
+        }
     }
 
     suspend fun setCustomPhotoBytes(artistName: String, jpegBytes: ByteArray): String? = withContext(Dispatchers.IO) {
@@ -271,6 +306,13 @@ class ArtistPhotoRepository @Inject constructor(
                     ReleaseRadarService.isArtistMatch(it.title, artistName)
             }?.thumbnailUrl?.let(::normalizeHttpsUrl)
         if (!mmMatch.isNullOrBlank()) return@withContext mmMatch
+
+        // 3. Wikipedia musician portrait fallback (open internet, works without VPN)
+        val wikiMatch = ArtistInternetPhotoSearch.searchWikipediaPhotos(okHttpClient, artistName)
+            .firstOrNull { wiki ->
+                wiki.isMusician && ReleaseRadarService.isArtistMatch(wiki.title, artistName)
+            }?.url
+        if (!wikiMatch.isNullOrBlank()) return@withContext wikiMatch
 
         null
     }

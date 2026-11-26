@@ -1,6 +1,12 @@
 package com.yasinjahantigh.logarhythm.feature.home
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -14,6 +20,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -37,14 +45,17 @@ import com.yasinjahantigh.logarhythm.ui.components.ArtworkImage
 import com.yasinjahantigh.logarhythm.ui.designsystem.bounceOnPress
 
 /**
- * Spotify-style compact 2-column grid of up to 6 quick-launch tiles at the top of Home
- * (Favorites, pinned favorite playlists, top Daily Mix, and top artist).
+ * Spotify-style compact 2-column grid of up to 6 quick-launch tiles
+ * (Favorites, pinned favorite playlists, top Daily Mix, and top artist),
+ * collapsible via tapping its header.
  */
 @Composable
 fun QuickPicksGrid(
     items: List<QuickPickItem>,
     onItemClick: (QuickPickItem) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    minimized: Boolean = false,
+    onToggleMinimized: () -> Unit = {}
 ) {
     if (items.isEmpty()) return
     val rows = remember(items) { items.take(6).chunked(2) }
@@ -55,27 +66,53 @@ fun QuickPicksGrid(
             .testTag("home_quick_picks_grid"),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        Text(
-            text = stringResource(R.string.home_quick_picks_title),
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onSurface,
-            modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
-        )
-        rows.forEach { pair ->
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                pair.forEach { item ->
-                    QuickPickTile(
-                        item = item,
-                        onClick = { onItemClick(item) },
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-                if (pair.size == 1) {
-                    Spacer(modifier = Modifier.weight(1f))
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(12.dp))
+                .clickable(onClick = onToggleMinimized)
+                .padding(horizontal = 4.dp, vertical = 4.dp)
+                .testTag("home_quick_picks_header"),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text(
+                text = stringResource(R.string.home_quick_picks_title),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Icon(
+                imageVector = if (minimized) Icons.Filled.ExpandMore else Icons.Filled.ExpandLess,
+                contentDescription = stringResource(
+                    if (minimized) R.string.quick_picks_expand_cd else R.string.quick_picks_collapse_cd
+                ),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(22.dp)
+            )
+        }
+        AnimatedVisibility(
+            visible = !minimized,
+            enter = expandVertically() + fadeIn(),
+            exit = shrinkVertically() + fadeOut()
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                rows.forEach { pair ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        pair.forEach { item ->
+                            QuickPickTile(
+                                item = item,
+                                onClick = { onItemClick(item) },
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                        if (pair.size == 1) {
+                            Spacer(modifier = Modifier.weight(1f))
+                        }
+                    }
                 }
             }
         }

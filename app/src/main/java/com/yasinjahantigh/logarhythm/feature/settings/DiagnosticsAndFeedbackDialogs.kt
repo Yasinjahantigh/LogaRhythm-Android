@@ -22,9 +22,13 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.DeleteOutline
+import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Feedback
 import androidx.compose.material.icons.filled.Gavel
 import androidx.compose.material.icons.filled.Send
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -34,6 +38,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
@@ -66,7 +71,8 @@ import kotlinx.coroutines.withContext
 fun ShakeBugReportSheet(
     recentLogsCount: Int,
     onSubmit: suspend (category: String, description: String, contact: String?, includeLogs: Boolean) -> Result<Unit>,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    onOpenLogViewer: (() -> Unit)? = null
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -179,6 +185,20 @@ fun ShakeBugReportSheet(
                         )
                     }
                     Switch(checked = includeLogs, onCheckedChange = { includeLogs = it })
+                }
+            }
+
+            if (onOpenLogViewer != null) {
+                OutlinedButton(
+                    onClick = onOpenLogViewer,
+                    shape = RoundedCornerShape(14.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("bug_report_view_logs_button")
+                ) {
+                    Icon(Icons.Filled.Description, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(stringResource(R.string.diagnostic_logs_view_export_btn))
                 }
             }
 
@@ -408,6 +428,167 @@ fun OpenSourceLicensesSheet(onDismiss: () -> Unit) {
                             modifier = Modifier
                                 .fillMaxSize()
                                 .verticalScroll(rememberScrollState())
+                                .padding(14.dp)
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun DiagnosticLogViewerSheet(
+    lineCountProvider: () -> Int,
+    sizeBytesProvider: () -> Long,
+    reportLoader: suspend () -> String,
+    onShareFile: suspend (chooserTitle: String) -> Unit,
+    onClearLogs: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    val context = LocalContext.current
+    val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
+    val scope = rememberCoroutineScope()
+    var reportText by remember { mutableStateOf<String?>(null) }
+    var lineCount by remember { mutableIntStateOf(lineCountProvider()) }
+    var sizeBytes by remember { mutableStateOf(sizeBytesProvider()) }
+    var reloadKey by remember { mutableIntStateOf(0) }
+
+    LaunchedEffect(reloadKey) {
+        reportText = null
+        reportText = withContext(Dispatchers.IO) { reportLoader() }
+        lineCount = lineCountProvider()
+        sizeBytes = sizeBytesProvider()
+    }
+
+    val sizeLabel = remember(sizeBytes) {
+        if (sizeBytes < 1024L) "$sizeBytes B"
+        else String.format(java.util.Locale.US, "%.1f KB", sizeBytes / 1024.0)
+    }
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .fillMaxHeight(0.88f)
+                .padding(horizontal = 20.dp)
+                .navigationBarsPadding()
+                .testTag("diagnostic_log_viewer_sheet")
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = Icons.Filled.Description,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary
+                )
+                Spacer(modifier = Modifier.width(10.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = stringResource(R.string.diagnostic_logs_title),
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = stringResource(R.string.diagnostic_logs_stats_fmt, lineCount, sizeLabel),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                IconButton(onClick = onDismiss) {
+                    Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.btn_close))
+                }
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Button(
+                    onClick = {
+                        scope.launch {
+                            runCatching {
+                                withContext(Dispatchers.IO) {
+                                    onShareFile(context.getString(R.string.diagnostic_logs_title))
+                                }
+                            }.onFailure {
+                                Toast.makeText(
+                                    context,
+                                    context.getString(R.string.diagnostic_logs_export_failed),
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                            }
+                        }
+                    },
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.weight(1f).testTag("diagnostic_logs_share_button")
+                ) {
+                    Icon(Icons.Filled.Share, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(stringResource(R.string.diagnostic_logs_share_file))
+                }
+
+                OutlinedButton(
+                    onClick = {
+                        val txt = reportText ?: return@OutlinedButton
+                        clipboard.setText(androidx.compose.ui.text.AnnotatedString(txt))
+                        Toast.makeText(context, context.getString(R.string.diagnostic_logs_copied_toast), Toast.LENGTH_SHORT).show()
+                    },
+                    enabled = reportText != null,
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Icon(Icons.Filled.ContentCopy, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(stringResource(R.string.diagnostic_logs_copy))
+                }
+
+                IconButton(
+                    onClick = {
+                        onClearLogs()
+                        reloadKey++
+                        Toast.makeText(context, context.getString(R.string.diagnostic_logs_cleared_toast), Toast.LENGTH_SHORT).show()
+                    }
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.DeleteOutline,
+                        contentDescription = stringResource(R.string.diagnostic_logs_clear),
+                        tint = MaterialTheme.colorScheme.error
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            Surface(
+                shape = RoundedCornerShape(14.dp),
+                color = MaterialTheme.colorScheme.surfaceContainerLow,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+                    .padding(bottom = 14.dp)
+            ) {
+                val text = reportText
+                if (text == null) {
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator(modifier = Modifier.size(26.dp))
+                    }
+                } else {
+                    val scrollState = rememberScrollState()
+                    LaunchedEffect(text) {
+                        scrollState.scrollTo(scrollState.maxValue)
+                    }
+                    SelectionContainer {
+                        Text(
+                            text = text,
+                            style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .verticalScroll(scrollState)
                                 .padding(14.dp)
                         )
                     }

@@ -49,11 +49,16 @@ class LogaRhythmApp : Application(), ImageLoaderFactory, Configuration.Provider 
 
     override fun onCreate() {
         super.onCreate()
+        appLogBuffer.initPersistence(this)
         CrashReportHandler.install(this, appLogBuffer, installReporter.get())
         // Move notification channels, WorkManager initialization, and install ping off the main thread
         // so cold startup reaches the first Compose frame without stalling on disk or binder I/O.
         appInitScope.launch {
-            appLogBuffer.log("App", "Started v${BuildConfig.VERSION_NAME} (${BuildConfig.DISTRIBUTION_CHANNEL})")
+            appLogBuffer.log(
+                "App",
+                "Started v${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE}, ${BuildConfig.DISTRIBUTION_CHANNEL}) " +
+                    "on ${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL} Android ${android.os.Build.VERSION.RELEASE} (SDK ${android.os.Build.VERSION.SDK_INT})"
+            )
             DownloadNotifications.createChannel(this@LogaRhythmApp)
             ReleaseRadarNotifications.createChannel(this@LogaRhythmApp)
             ReleaseRadarWorker.schedule(this@LogaRhythmApp)

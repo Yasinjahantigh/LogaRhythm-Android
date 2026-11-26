@@ -90,7 +90,9 @@ fun PlaybackTimeline(
     onSeek: (Long) -> Unit,
     onRewind10: () -> Unit,
     onForward10: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    showSeekButtons: Boolean = true,
+    useWaveform: Boolean = true
 ) {
     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
         val duration = durationMs.coerceAtLeast(1L)
@@ -118,75 +120,94 @@ fun PlaybackTimeline(
         val description = stringResource(R.string.cd_seek_bar)
 
         Column(modifier = modifier.fillMaxWidth()) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(52.dp)
-                    .testTag("player_seek_bar")
-                    .semantics {
-                        contentDescription = description
-                        progressBarRangeInfo = ProgressBarRangeInfo(progressForSemantics, 0f..1f)
-                        setProgress { target ->
-                            currentOnSeek((target.coerceIn(0f, 1f) * duration).toLong())
-                            true
-                        }
-                    }
-                    .pointerInput(duration) {
-                        detectTapGestures { offset ->
-                            val f = (offset.x / size.width.coerceAtLeast(1)).coerceIn(0f, 1f)
-                            currentOnSeek((f * duration).toLong())
-                        }
-                    }
-                    .pointerInput(duration) {
-                        detectHorizontalDragGestures(
-                            onDragStart = { offset ->
-                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                dragFraction = (offset.x / size.width.coerceAtLeast(1)).coerceIn(0f, 1f)
-                            },
-                            onDragEnd = {
-                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                dragFraction?.let { currentOnSeek((it * duration).toLong()) }
-                                dragFraction = null
-                            },
-                            onDragCancel = { dragFraction = null },
-                            onHorizontalDrag = { change, _ ->
-                                change.consume()
-                                dragFraction = (change.position.x / size.width.coerceAtLeast(1)).coerceIn(0f, 1f)
+            if (useWaveform) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(44.dp)
+                        .testTag("player_seek_bar")
+                        .semantics {
+                            contentDescription = description
+                            progressBarRangeInfo = ProgressBarRangeInfo(progressForSemantics, 0f..1f)
+                            setProgress { target ->
+                                currentOnSeek((target.coerceIn(0f, 1f) * duration).toLong())
+                                true
                             }
+                        }
+                        .pointerInput(duration) {
+                            detectTapGestures { offset ->
+                                val f = (offset.x / size.width.coerceAtLeast(1)).coerceIn(0f, 1f)
+                                currentOnSeek((f * duration).toLong())
+                            }
+                        }
+                        .pointerInput(duration) {
+                            detectHorizontalDragGestures(
+                                onDragStart = { offset ->
+                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                    dragFraction = (offset.x / size.width.coerceAtLeast(1)).coerceIn(0f, 1f)
+                                },
+                                onDragEnd = {
+                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                    dragFraction?.let { currentOnSeek((it * duration).toLong()) }
+                                    dragFraction = null
+                                },
+                                onDragCancel = { dragFraction = null },
+                                onHorizontalDrag = { change, _ ->
+                                    change.consume()
+                                    dragFraction = (change.position.x / size.width.coerceAtLeast(1)).coerceIn(0f, 1f)
+                                }
+                            )
+                        }
+                ) {
+                    Canvas(modifier = Modifier.fillMaxSize()) {
+                        val fraction = dragFraction ?: (positionState.value.toFloat() / duration).coerceIn(0f, 1f)
+                        val barWidth = 3.dp.toPx()
+                        val slot = 6.dp.toPx()
+                        val bars = (size.width / slot).toInt().coerceAtLeast(8)
+                        val step = size.width / bars
+                        val cy = size.height / 2f
+                        val maxBar = size.height * 0.86f
+                        val playX = size.width * fraction
+                        for (i in 0 until bars) {
+                            val x = step * i + step / 2f
+                            val amp = amplitudes[(i * amplitudes.size / bars).coerceIn(0, amplitudes.size - 1)]
+                            // Bars near the playhead rise a little while scrubbing.
+                            val near = 1f - (kotlin.math.abs(x - playX) / (size.width * 0.12f)).coerceIn(0f, 1f)
+                            val h = (maxBar * amp * (1f + 0.18f * swell * near)).coerceAtMost(size.height)
+                            drawRoundRect(
+                                color = if (x <= playX) active else idle,
+                                topLeft = Offset(x - barWidth / 2f, cy - h / 2f),
+                                size = Size(barWidth, h),
+                                cornerRadius = CornerRadius(barWidth / 2f, barWidth / 2f)
+                            )
+                        }
+                        val headHalf = (size.height / 2f) - 1.dp.toPx()
+                        drawLine(
+                            color = active,
+                            start = Offset(playX, cy - headHalf),
+                            end = Offset(playX, cy + headHalf),
+                            strokeWidth = 2.5.dp.toPx() + 1.5.dp.toPx() * swell,
+                            cap = StrokeCap.Round
                         )
                     }
-            ) {
-                Canvas(modifier = Modifier.fillMaxSize()) {
-                    val fraction = dragFraction ?: (positionState.value.toFloat() / duration).coerceIn(0f, 1f)
-                    val barWidth = 3.dp.toPx()
-                    val slot = 6.dp.toPx()
-                    val bars = (size.width / slot).toInt().coerceAtLeast(8)
-                    val step = size.width / bars
-                    val cy = size.height / 2f
-                    val maxBar = size.height * 0.86f
-                    val playX = size.width * fraction
-                    for (i in 0 until bars) {
-                        val x = step * i + step / 2f
-                        val amp = amplitudes[(i * amplitudes.size / bars).coerceIn(0, amplitudes.size - 1)]
-                        // Bars near the playhead rise a little while scrubbing.
-                        val near = 1f - (kotlin.math.abs(x - playX) / (size.width * 0.12f)).coerceIn(0f, 1f)
-                        val h = (maxBar * amp * (1f + 0.18f * swell * near)).coerceAtMost(size.height)
-                        drawRoundRect(
-                            color = if (x <= playX) active else idle,
-                            topLeft = Offset(x - barWidth / 2f, cy - h / 2f),
-                            size = Size(barWidth, h),
-                            cornerRadius = CornerRadius(barWidth / 2f, barWidth / 2f)
-                        )
-                    }
-                    val headHalf = (size.height / 2f) - 1.dp.toPx()
-                    drawLine(
-                        color = active,
-                        start = Offset(playX, cy - headHalf),
-                        end = Offset(playX, cy + headHalf),
-                        strokeWidth = 2.5.dp.toPx() + 1.5.dp.toPx() * swell,
-                        cap = StrokeCap.Round
-                    )
                 }
+            } else {
+                androidx.compose.material3.Slider(
+                    value = progressForSemantics,
+                    onValueChange = { dragFraction = it },
+                    onValueChangeFinished = {
+                        dragFraction?.let { currentOnSeek((it * duration).toLong()) }
+                        dragFraction = null
+                    },
+                    colors = androidx.compose.material3.SliderDefaults.colors(
+                        thumbColor = active,
+                        activeTrackColor = active,
+                        inactiveTrackColor = idle
+                    ),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("player_seek_bar")
+                )
             }
 
             Row(
@@ -201,31 +222,33 @@ fun PlaybackTimeline(
                     fontWeight = if (dragging) FontWeight.Bold else FontWeight.Medium,
                     modifier = Modifier.padding(start = 2.dp)
                 )
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    IconButton(
-                        onClick = onRewind10,
-                        modifier = Modifier.size(48.dp).testTag("player_rewind_10_button")
+                if (showSeekButtons) {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.Replay10,
-                            contentDescription = stringResource(R.string.cd_rewind_10),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(22.dp)
-                        )
-                    }
-                    IconButton(
-                        onClick = onForward10,
-                        modifier = Modifier.size(48.dp).testTag("player_forward_10_button")
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Forward10,
-                            contentDescription = stringResource(R.string.cd_forward_10),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(22.dp)
-                        )
+                        IconButton(
+                            onClick = onRewind10,
+                            modifier = Modifier.size(36.dp).testTag("player_rewind_10_button")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Replay10,
+                                contentDescription = stringResource(R.string.cd_rewind_10),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.65f),
+                                modifier = Modifier.size(19.dp)
+                            )
+                        }
+                        IconButton(
+                            onClick = onForward10,
+                            modifier = Modifier.size(36.dp).testTag("player_forward_10_button")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Forward10,
+                                contentDescription = stringResource(R.string.cd_forward_10),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.65f),
+                                modifier = Modifier.size(19.dp)
+                            )
+                        }
                     }
                 }
                 Text(

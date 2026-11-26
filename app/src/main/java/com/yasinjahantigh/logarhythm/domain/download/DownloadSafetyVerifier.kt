@@ -68,7 +68,9 @@ object DownloadSafetyVerifier {
 
         // 3. Normalized Artist Check (if expected artist is known)
         val normExpectedArtist = normalize(expectedArtist)
-        val normCandidateArtist = normalize(candidateArtist)
+        val isStreamingUploader = candidateSource == DownloadSource.YOUTUBE ||
+            candidateSource == DownloadSource.SOUNDCLOUD
+        val normCandidateArtist = cleanChannelName(normalize(candidateArtist), isStreamingUploader)
         val hasKnownExpectedArtist = normExpectedArtist.isNotBlank() &&
             !DownloadMetadataMerge.isPlaceholder(expectedArtist)
         val hasKnownCandidateArtist = normCandidateArtist.isNotBlank() &&
@@ -77,6 +79,14 @@ object DownloadSafetyVerifier {
         var artistSim = 1.0
         if (hasKnownExpectedArtist && hasKnownCandidateArtist) {
             artistSim = artistSimilarity(normExpectedArtist, normCandidateArtist)
+            // YouTube/SoundCloud uploaders are often record labels or music channels (e.g. "Avang Music")
+            // while the track artist appears in the video/track title ("Shadmehr - Taghdir").
+            if (artistSim < MIN_ARTIST_SIMILARITY && isStreamingUploader) {
+                val artistInTitleSim = artistSimilarity(normExpectedArtist, normCandidateTitle)
+                if (artistInTitleSim >= 0.65) {
+                    artistSim = artistInTitleSim
+                }
+            }
             // If the artists are completely different, reject!
             if (artistSim < MIN_ARTIST_SIMILARITY) {
                 return false
@@ -253,7 +263,15 @@ object DownloadSafetyVerifier {
         return maxOf(jaccard, containment * 0.9)
     }
 
+    private fun cleanChannelName(normArtist: String, isStreamingUploader: Boolean): String {
+        if (!isStreamingUploader || normArtist.isBlank()) return normArtist
+        val tokens = normArtist.split(' ')
+            .filter { it.isNotBlank() && it !in CHANNEL_NOISE_TOKENS }
+        return if (tokens.isEmpty()) normArtist else tokens.joinToString(" ")
+    }
+
     private val COLLABORATION_TOKENS = setOf("feat", "ft", "featuring", "with", "and", "x", "vs", "و")
+    private val CHANNEL_NOISE_TOKENS = setOf("topic", "vevo", "official", "channel", "music", "records")
 
     private fun levenshteinSimilarity(s1: String, s2: String): Double {
         val maxLen = maxOf(s1.length, s2.length)
